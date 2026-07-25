@@ -22,7 +22,6 @@ fn toggle_main_window(app: &tauri::AppHandle) {
 
 pub fn run() {
     let shortcut = Shortcut::new(Some(Modifiers::ALT), Code::F1);
-    let sc_for_handler = shortcut.clone();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -31,18 +30,12 @@ pub fn run() {
             MacosLauncher::LaunchAgent,
             Some(vec![]),
         ))
-        .plugin(
-            tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(move |app, sc, _event| {
-                    if sc == &sc_for_handler {
-                        toggle_main_window(app);
-                    }
-                })
-                .build(),
-        )
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(move |app| {
             // 全局快捷键：注册失败（如被系统占用）仅警告，不影响启动
-            if let Err(e) = app.global_shortcut().register(shortcut.clone()) {
+            if let Err(e) = app.global_shortcut().on_shortcut(shortcut, move |app, _sc, _event| {
+                toggle_main_window(app);
+            }) {
                 eprintln!("警告：全局快捷键注册失败（可能被系统占用）：{e}");
             }
 

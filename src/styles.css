@@ -96,6 +96,12 @@ body {
   overflow: hidden;
 }
 
+.app.dragging .grid {
+  outline: 2px dashed var(--accent);
+  outline-offset: -10px;
+  background: rgba(var(--panel-rgb), calc(var(--opacity) + 0.06));
+}
+
 .groups {
   width: 170px;
   padding: 12px;

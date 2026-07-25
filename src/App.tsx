@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import * as api from "./api";
@@ -14,6 +15,7 @@ export default function App() {
   const [activeId, setActiveId] = useState("");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [dragging, setDragging] = useState(false);
 
   const applyTheme = useCallback((theme: string, opacity: number) => {
     const root = document.documentElement;
@@ -41,10 +43,36 @@ export default function App() {
     api.search(query).then((r) => {
       if (!cancelled) setResults(r);
     });
+  return () => {
+              cancelled = true;
+            };
+          }, [query]);
+
+  // 从资源管理器拖拽文件/快捷方式到窗口 -> 加入当前分组
+  useEffect(() => {
+    const unsubs: Array<() => void> = [];
+    const onEnter = () => setDragging(true);
+    const onLeave = () => setDragging(false);
+    listen("drag-enter", onEnter).then((u) => unsubs.push(u));
+    listen("drag-over", onEnter).then((u) => unsubs.push(u));
+    listen("drag-leave", onLeave).then((u) => unsubs.push(u));
+    listen<{ paths?: string[] }>("drag-drop", (e) => {
+      setDragging(false);
+      const paths = e.payload.paths;
+      if (!paths || paths.length === 0) return;
+      (async () => {
+        let cfg: AppConfig | null = null;
+        for (const p of paths) {
+          const name = p.split(/[\\/]/).pop() ?? p;
+          cfg = await api.addItem(activeId, name, p);
+        }
+        if (cfg) setConfig(cfg);
+      })();
+    }).then((u) => unsubs.push(u));
     return () => {
-      cancelled = true;
+      unsubs.forEach((u) => u());
     };
-  }, [query]);
+  }, [activeId]);
 
   const handleAddGroup = async () => {
     const name = window.prompt("分组名称", "新分组");
@@ -114,11 +142,11 @@ export default function App() {
   const activeGroup = config.groups.find((g) => g.id === activeId);
 
   return (
-    <div className="app">
+    <div className={"app" + (dragging ? " dragging" : "")}>
       <header className="toolbar">
         <input
           className="search-input"
-          placeholder="搜索应用…（Alt+Space 呼出）"
+          placeholder="搜索应用…（Alt+F1 呼出）"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
