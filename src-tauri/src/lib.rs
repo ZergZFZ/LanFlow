@@ -7,7 +7,7 @@ use tauri::{
     Manager, WindowEvent,
 };
 use tauri_plugin_autostart::MacosLauncher;
-use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
 
 fn toggle_main_window(app: &tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
@@ -21,7 +21,7 @@ fn toggle_main_window(app: &tauri::AppHandle) {
 }
 
 pub fn run() {
-    let shortcut = Shortcut::new(Some(Modifiers::ALT), Code::Space);
+    let shortcut = Shortcut::new(Some(Modifiers::ALT), Code::F1);
     let sc_for_handler = shortcut.clone();
 
     tauri::Builder::default()
@@ -33,8 +33,6 @@ pub fn run() {
         ))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_shortcuts([shortcut])
-                .expect("global-shortcut with_shortcuts")
                 .with_handler(move |app, sc, _event| {
                     if sc == &sc_for_handler {
                         toggle_main_window(app);
@@ -42,7 +40,12 @@ pub fn run() {
                 })
                 .build(),
         )
-        .setup(|app| {
+        .setup(move |app| {
+            // 全局快捷键：注册失败（如被系统占用）仅警告，不影响启动
+            if let Err(e) = app.global_shortcut().register(shortcut.clone()) {
+                eprintln!("警告：全局快捷键注册失败（可能被系统占用）：{e}");
+            }
+
             // 系统托盘
             if let Some(icon) = app.default_window_icon() {
                 let show =
