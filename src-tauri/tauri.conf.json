@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "LanFlow",
         "width": 900,
         "height": 600,
@@ -20,7 +21,8 @@
         "resizable": true,
         "fullscreen": false,
         "decorations": true,
-        "center": true
+        "center": true,
+        "transparent": true
       }
     ],
     "security": {
