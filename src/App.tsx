@@ -16,6 +16,12 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  const showStatus = useCallback((msg: string) => {
+    setStatus(msg);
+    setTimeout(() => setStatus(null), 4000);
+  }, []);
 
   const applyTheme = useCallback((theme: string, opacity: number) => {
     const root = document.documentElement;
@@ -59,16 +65,28 @@ export default function App() {
     listen<{ paths?: string[] }>(TauriEvent.DRAG_DROP, (e) => {
       setDragging(false);
       const paths = e.payload.paths;
-      if (!paths || paths.length === 0) return;
+      console.log("[DRAG_DROP] payload:", JSON.stringify(e.payload));
+      if (!paths || paths.length === 0) {
+        showStatus("拖放事件未携带路径（payload 见控制台）");
+        return;
+      }
       const targetGroup = activeId || config.groups[0]?.id;
-      if (!targetGroup) return;
+      if (!targetGroup) {
+        showStatus("请先创建并选中一个分组");
+        return;
+      }
       (async () => {
-        let cfg: AppConfig | null = null;
-        for (const p of paths) {
-          const name = p.split(/[\\/]/).pop() ?? p;
-          cfg = await api.addItem(targetGroup, name, p);
+        try {
+          let cfg: AppConfig | null = null;
+          for (const p of paths) {
+            const name = p.split(/[\\/]/).pop() ?? p;
+            cfg = await api.addItem(targetGroup, name, p);
+          }
+          if (cfg) setConfig(cfg);
+          showStatus(`已添加 ${paths.length} 个快捷方式`);
+        } catch (err) {
+          showStatus("添加失败：" + String(err));
         }
-        if (cfg) setConfig(cfg);
       })();
     }).then((u) => unsubs.push(u));
     return () => {
@@ -144,7 +162,11 @@ export default function App() {
   const activeGroup = config.groups.find((g) => g.id === activeId);
 
   return (
-    <div className={"app" + (dragging ? " dragging" : "")}>
+    <div
+      className={"app" + (dragging ? " dragging" : "")}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => e.preventDefault()}
+    >
       <header className="toolbar">
         <input
           className="search-input"
@@ -244,6 +266,7 @@ export default function App() {
           </main>
         </div>
       )}
+      {status && <div className="toast">{status}</div>}
     </div>
   );
 }

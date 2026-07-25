@@ -102,6 +102,20 @@ body {
   background: rgba(var(--panel-rgb), calc(var(--opacity) + 0.06));
 }
 
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  z-index: 999;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
 .groups {
   width: 170px;
   padding: 12px;
