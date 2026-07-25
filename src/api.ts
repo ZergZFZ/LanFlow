@@ -10,16 +10,16 @@ export const addGroup = (name: string) =>
   invoke<AppConfig>("add_group", { name });
 
 export const removeGroup = (groupId: string) =>
-  invoke<AppConfig>("remove_group", { group_id: groupId });
+  invoke<AppConfig>("remove_group", { groupId });
 
 export const renameGroup = (groupId: string, name: string) =>
-  invoke<AppConfig>("rename_group", { group_id: groupId, name });
+  invoke<AppConfig>("rename_group", { groupId, name });
 
 export const addItem = (groupId: string, name: string, path: string) =>
-  invoke<AppConfig>("add_item", { group_id: groupId, name, path });
+  invoke<AppConfig>("add_item", { groupId, name, path });
 
 export const removeItem = (groupId: string, itemId: string) =>
-  invoke<AppConfig>("remove_item", { group_id: groupId, item_id: itemId });
+  invoke<AppConfig>("remove_item", { groupId, itemId });
 
 export const updateSettings = (settings: Settings) =>
   invoke<AppConfig>("update_settings", { settings });
