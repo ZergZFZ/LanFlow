@@ -22,7 +22,8 @@
         "fullscreen": false,
         "decorations": true,
         "center": true,
-        "transparent": true
+        "transparent": true,
+        "dragDropEnabled": true
       }
     ],
     "security": {

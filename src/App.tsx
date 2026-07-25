@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
+import { listen, TauriEvent } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import * as api from "./api";
@@ -53,18 +53,20 @@ export default function App() {
     const unsubs: Array<() => void> = [];
     const onEnter = () => setDragging(true);
     const onLeave = () => setDragging(false);
-    listen("drag-enter", onEnter).then((u) => unsubs.push(u));
-    listen("drag-over", onEnter).then((u) => unsubs.push(u));
-    listen("drag-leave", onLeave).then((u) => unsubs.push(u));
-    listen<{ paths?: string[] }>("drag-drop", (e) => {
+    listen(TauriEvent.DRAG_ENTER, onEnter).then((u) => unsubs.push(u));
+    listen(TauriEvent.DRAG_OVER, onEnter).then((u) => unsubs.push(u));
+    listen(TauriEvent.DRAG_LEAVE, onLeave).then((u) => unsubs.push(u));
+    listen<{ paths?: string[] }>(TauriEvent.DRAG_DROP, (e) => {
       setDragging(false);
       const paths = e.payload.paths;
       if (!paths || paths.length === 0) return;
+      const targetGroup = activeId || config.groups[0]?.id;
+      if (!targetGroup) return;
       (async () => {
         let cfg: AppConfig | null = null;
         for (const p of paths) {
           const name = p.split(/[\\/]/).pop() ?? p;
-          cfg = await api.addItem(activeId, name, p);
+          cfg = await api.addItem(targetGroup, name, p);
         }
         if (cfg) setConfig(cfg);
       })();
@@ -72,7 +74,7 @@ export default function App() {
     return () => {
       unsubs.forEach((u) => u());
     };
-  }, [activeId]);
+  }, [activeId, config]);
 
   const handleAddGroup = async () => {
     const name = window.prompt("分组名称", "新分组");
