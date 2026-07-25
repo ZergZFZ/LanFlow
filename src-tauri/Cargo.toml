@@ -1,0 +1,20 @@
+[package]
+name = "lanflow"
+version = "0.1.0"
+description = "LanFlow - 开源免费的 Windows 启动器"
+authors = ["ZergZFZ"]
+edition = "2021"
+
+# 预编译的二进制体积更小；开发时使用 `cargo run`
+[lib]
+name = "lanflow_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri-plugin-shell = "2"
