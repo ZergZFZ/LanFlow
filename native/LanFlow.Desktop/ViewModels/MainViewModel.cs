@@ -20,19 +20,15 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     public AppConfig Config { get; }
-
     public IEnumerable<Group> Groups => Config.Groups;
+    public Settings Settings => Config.Settings;
 
     public Group? SelectedGroup
     {
         get => _selectedGroup;
         set
         {
-            if (_selectedGroup == value)
-            {
-                return;
-            }
-
+            if (_selectedGroup == value) return;
             _selectedGroup = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(VisibleItems));
@@ -47,11 +43,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         get => _searchText;
         set
         {
-            if (_searchText == value)
-            {
-                return;
-            }
-
+            if (_searchText == value) return;
             _searchText = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(VisibleItems));
@@ -63,44 +55,21 @@ public sealed class MainViewModel : INotifyPropertyChanged
         get => _statusText;
         set
         {
-            if (_statusText == value)
-            {
-                return;
-            }
-
+            if (_statusText == value) return;
             _statusText = value;
             OnPropertyChanged();
         }
     }
 
-    public IEnumerable<LauncherItem> VisibleItems
-    {
-        get
-        {
-            if (string.IsNullOrWhiteSpace(SearchText))
-            {
-                return OrderItems(SelectedGroup);
-            }
+    public IEnumerable<LauncherItem> VisibleItems => string.IsNullOrWhiteSpace(SearchText)
+        ? OrderItems(SelectedGroup)
+        : Config.Groups.SelectMany(OrderItems).Where(item =>
+            item.Name.Contains(SearchText, StringComparison.CurrentCultureIgnoreCase) ||
+            item.Path.Contains(SearchText, StringComparison.CurrentCultureIgnoreCase));
 
-            return Config.Groups
-                .SelectMany(OrderItems)
-                .Where(item =>
-                    item.Name.Contains(SearchText, StringComparison.CurrentCultureIgnoreCase) ||
-                    item.Path.Contains(SearchText, StringComparison.CurrentCultureIgnoreCase));
-        }
-    }
-
-    private static IEnumerable<LauncherItem> OrderItems(Group? group)
-    {
-        if (group is null)
-        {
-            return [];
-        }
-
-        return group.SortMode == "frequency"
-            ? group.Items.OrderByDescending(item => item.UseCount)
-            : group.Items;
-    }
+    private static IEnumerable<LauncherItem> OrderItems(Group? group) => group is null
+        ? []
+        : group.SortMode == "frequency" ? group.Items.OrderByDescending(item => item.UseCount) : group.Items;
 
     public void RefreshGroups()
     {
@@ -111,57 +80,33 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public void RefreshVisibleItems() => OnPropertyChanged(nameof(VisibleItems));
 
-    public Settings Settings => Config.Settings;
-
-    public bool ShowShortcutBadge
+    public void ApplyAppearance(Settings source, bool persist)
     {
-        get => Config.Settings.ShowShortcutBadge;
-        set
-        {
-            if (Config.Settings.ShowShortcutBadge == value) return;
-            Config.Settings.ShowShortcutBadge = value;
-            OnPropertyChanged();
-            Save();
-        }
-    }
-
-    public bool ShowFullItemName
-    {
-        get => Config.Settings.ShowFullItemName;
-        set
-        {
-            if (Config.Settings.ShowFullItemName == value) return;
-            Config.Settings.ShowFullItemName = value;
-            OnPropertyChanged();
-            Save();
-        }
-    }
-
-    public string GroupLayout
-    {
-        get => Config.Settings.GroupLayout;
-        set
-        {
-            var normalizedValue = value == "top" ? "top" : "left";
-            if (Config.Settings.GroupLayout == normalizedValue) return;
-            Config.Settings.GroupLayout = normalizedValue;
-            OnPropertyChanged();
-            Save();
-        }
-    }
-
-    public void UpdateAppearance(string theme, double opacity, bool showShortcutBadge, bool showFullItemName, string groupLayout)
-    {
-        Config.Settings.Theme = theme == "dark" ? "dark" : "light";
-        Config.Settings.Opacity = Math.Clamp(opacity, 0.55, 1.0);
-        Config.Settings.ShowShortcutBadge = showShortcutBadge;
-        Config.Settings.ShowFullItemName = showFullItemName;
-        Config.Settings.GroupLayout = groupLayout == "top" ? "top" : "left";
-
-        OnPropertyChanged(nameof(ShowShortcutBadge));
-        OnPropertyChanged(nameof(ShowFullItemName));
-        OnPropertyChanged(nameof(GroupLayout));
-        Save();
+        var settings = Config.Settings;
+        settings.Theme = source.Theme == "light" ? "light" : "dark";
+        settings.ThemeProfile = source.ThemeProfile;
+        settings.ThemeColors = source.ThemeColors;
+        settings.CustomThemes = source.CustomThemes;
+        settings.Opacity = Math.Clamp(source.Opacity, 0.55, 1.0);
+        settings.LayoutMode = source.LayoutMode == "card" ? "card" : "tile";
+        settings.IconSize = Math.Clamp(source.IconSize, 24, 72);
+        settings.CardWidth = Math.Clamp(source.CardWidth, 48, 320);
+        settings.CardHeight = Math.Clamp(source.CardHeight, 48, 240);
+        settings.CardSize = Math.Clamp(source.CardSize, 76, 160);
+        settings.TextSize = Math.Clamp(source.TextSize, 10, 18);
+        settings.ItemSpacing = Math.Clamp(source.ItemSpacing, 0, 64);
+        settings.RowSpacing = Math.Clamp(source.RowSpacing, 0, 80);
+        settings.ContentPadding = Math.Clamp(source.ContentPadding, 6, 40);
+        settings.ShowShortcutBadge = source.ShowShortcutBadge;
+        settings.ShowFullItemName = source.ShowFullItemName;
+        settings.ShowItemTitle = source.ShowItemTitle;
+        settings.GroupLayout = source.GroupLayout == "top" ? "top" : "left";
+        settings.Hotkey = source.Hotkey;
+        settings.StartWithWindows = source.StartWithWindows;
+        settings.OpenItemsOnSingleClick = source.OpenItemsOnSingleClick;
+        OnPropertyChanged(nameof(Settings));
+        OnPropertyChanged(nameof(VisibleItems));
+        if (persist) Save();
     }
 
     public void Save()
@@ -171,7 +116,6 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
-
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 }

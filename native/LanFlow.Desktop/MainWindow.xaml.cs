@@ -18,8 +18,10 @@ public partial class MainWindow : System.Windows.Window
     private readonly MainViewModel _viewModel;
     private readonly LauncherService _launcherService = new();
     private readonly HotkeyService _hotkeyService = new();
+    private readonly StartupService _startupService = new();
     private readonly ShellIconService _shellIconService = new();
     private readonly ShortcutService _shortcutService = new();
+    private Settings? _settingsBeforePreview;
     private bool _isEditMode;
 
     public static readonly DependencyProperty IsEditModeProperty =
@@ -51,6 +53,13 @@ public partial class MainWindow : System.Windows.Window
         _viewModel = new MainViewModel(new ConfigStore());
         DataContext = _viewModel;
         ApplySettings();
+        ItemList.ItemContainerGenerator.StatusChanged += (_, _) =>
+        {
+            if (ItemList.ItemContainerGenerator.Status == GeneratorStatus.ContainersGenerated)
+            {
+                Dispatcher.BeginInvoke(DispatcherPriority.Render, ApplyItemMetrics);
+            }
+        };
         LoadIcons();
         RefreshGroupTabs();
         RefreshEmptyState();
@@ -62,9 +71,9 @@ public partial class MainWindow : System.Windows.Window
                 hwndSource.AddHook(WndProc);
             }
 
-            if (!_hotkeyService.Register(this, ShowFromHotkey))
+            if (!_hotkeyService.Register(this, ShowFromHotkey, _viewModel.Settings.Hotkey))
             {
-                _viewModel.StatusText = "全局快捷键 Alt+Space 注册失败";
+                _viewModel.StatusText = $"全局快捷键 {_viewModel.Settings.Hotkey} 注册失败";
             }
         };
         Closed += (_, _) => _hotkeyService.Dispose();
@@ -233,43 +242,64 @@ public partial class MainWindow : System.Windows.Window
 
     private void OpenSettings_Click(object sender, RoutedEventArgs e)
     {
+        _settingsBeforePreview = CloneSettings(_viewModel.Settings);
+        var wasEditMode = _isEditMode;
+        SetEditMode(true, "设置中：可同时查看和管理启动项");
         var settingsWindow = new SettingsWindow(_viewModel.Settings) { Owner = this };
-        if (settingsWindow.ShowDialog() != true)
+        settingsWindow.PreviewChanged += settings => { _viewModel.ApplyAppearance(settings, persist: false); ApplySettings(); RefreshGroupTabs(); };
+
+        if (settingsWindow.ShowDialog() == true)
         {
-            return;
+            var result = settingsWindow.Result;
+            if (!_hotkeyService.TryRegister(result.Hotkey))
+            {
+                result.Hotkey = _settingsBeforePreview.Hotkey;
+                _viewModel.StatusText = "快捷键被其他程序占用，已保留原组合键";
+            }
+            result.StartWithWindows = _startupService.SetEnabled(result.StartWithWindows) && _startupService.IsEnabled();
+            if (result.StartWithWindows != settingsWindow.Result.StartWithWindows) _viewModel.StatusText = "开机启动设置失败，请检查当前用户注册表权限";
+            _viewModel.ApplyAppearance(result, persist: true);
+        }
+        else if (_settingsBeforePreview is not null)
+        {
+            _startupService.SetEnabled(_settingsBeforePreview.StartWithWindows);
+            _viewModel.ApplyAppearance(_settingsBeforePreview, persist: false);
         }
 
-        _viewModel.UpdateAppearance(
-            settingsWindow.Theme,
-            settingsWindow.PanelOpacity,
-            settingsWindow.ShowShortcutBadge,
-            settingsWindow.ShowFullItemName,
-            settingsWindow.GroupLayout);
         ApplySettings();
         RefreshGroupTabs();
+        SetEditMode(settingsWindow.DialogResult == true ? false : wasEditMode, settingsWindow.DialogResult == true ? "设置已保存" : null);
+        _settingsBeforePreview = null;
     }
 
     private void ApplySettings()
     {
-        var isLightTheme = _viewModel.Settings.Theme == "light";
-        SetBrush("PanelBrush", isLightTheme ? "#F6F7FB" : "#171B28");
-        SetBrush("PanelBorderBrush", isLightTheme ? "#CCD2E0" : "#343B50");
-        SetBrush("SurfaceBrush", isLightTheme ? "#FFFFFF" : "#22283A");
-        SetBrush("SurfaceBorderBrush", isLightTheme ? "#D7DCE8" : "#38425B");
-        SetBrush("FooterBrush", isLightTheme ? "#EEF1F7" : "#1D2231");
-        SetBrush("TextPrimaryBrush", isLightTheme ? "#1E2533" : "#F5F7FC");
-        SetBrush("TextSecondaryBrush", isLightTheme ? "#59657A" : "#ADB5C7");
-        SetBrush("AccentBrush", isLightTheme ? "#DCE7FA" : "#35405E");
-        SetBrush("SelectedTileBrush", isLightTheme ? "#6600B7C3" : "#35405E");
-        SetBrush("HoverBrush", isLightTheme ? "#E9EDF5" : "#2B3247");
-        SetBrush("IconSurfaceBrush", isLightTheme ? "#E2E6ED" : "#2A3040");
-        Opacity = Math.Clamp(_viewModel.Settings.Opacity, 0.55, 1.0);
+        var settings = _viewModel.Settings;
+        var colors = settings.ThemeColors;
+        SetBrush("PanelBrush", colors.Panel);
+        SetBrush("PanelBorderBrush", colors.PanelBorder);
+        SetBrush("SurfaceBrush", colors.Surface);
+        SetBrush("SurfaceBorderBrush", colors.SurfaceBorder);
+        SetBrush("FooterBrush", colors.Footer);
+        SetBrush("TextPrimaryBrush", colors.TextPrimary);
+        SetBrush("TextSecondaryBrush", colors.TextSecondary);
+        SetBrush("AccentBrush", colors.Accent);
+        SetBrush("SelectedTileBrush", colors.Accent);
+        SetBrush("HoverBrush", colors.Hover);
+        SetBrush("IconSurfaceBrush", colors.IconSurface);
+        Opacity = Math.Clamp(settings.Opacity, 0.55, 1.0);
+        LauncherLayout.Margin = new Thickness(settings.ContentPadding, Math.Max(8, settings.ContentPadding - 4), settings.ContentPadding, Math.Max(8, settings.ContentPadding - 4));
 
-        var groupsAtTop = _viewModel.GroupLayout == "top";
+        var cardMode = settings.LayoutMode == "card";
+        ItemList.ItemContainerStyle = (Style)FindResource(cardMode ? "LauncherCard" : "LauncherTile");
+        ItemList.ItemTemplate = (DataTemplate)FindResource(cardMode ? "CardItemTemplate" : "TileItemTemplate");
+        ItemList.UpdateLayout();
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, ApplyItemMetrics);
+
+        var groupsAtTop = settings.GroupLayout == "top";
         GroupColumn.Width = groupsAtTop ? new GridLength(0) : new GridLength(132);
         GroupSeparatorColumn.Width = groupsAtTop ? new GridLength(0) : new GridLength(14);
         GroupRow.Height = groupsAtTop ? new GridLength(42) : new GridLength(0);
-
         Grid.SetRow(GroupTabsHost, groupsAtTop ? 1 : 2);
         Grid.SetColumn(GroupTabsHost, 0);
         Grid.SetColumnSpan(GroupTabsHost, groupsAtTop ? 3 : 1);
@@ -277,25 +307,78 @@ public partial class MainWindow : System.Windows.Window
         GroupTabsHost.VerticalScrollBarVisibility = ScrollBarVisibility.Hidden;
         GroupTabsHost.HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden;
         GroupTabs.Orientation = groupsAtTop ? Orientation.Horizontal : Orientation.Vertical;
-
         GroupSeparator.Visibility = Visibility.Collapsed;
         Grid.SetRow(ItemListHost, 2);
         Grid.SetColumn(ItemListHost, groupsAtTop ? 0 : 2);
         Grid.SetColumnSpan(ItemListHost, groupsAtTop ? 3 : 1);
-        ItemListHost.Margin = groupsAtTop ? new Thickness(0, 4, 0, 0) : new Thickness(0, 4, 0, 0);
+        ItemListHost.Margin = new Thickness(0, 4, 0, 0);
     }
 
     private void SetBrush(string key, string color)
     {
-        Resources[key] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color));
+        try
+        {
+            Resources[key] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color));
+        }
+        catch (FormatException)
+        {
+            // 保留最后一个有效颜色，避免编辑中的不完整色值打断实时预览。
+        }
     }
 
-    private void ToggleEditMode_Click(object sender, RoutedEventArgs e)
+    private void ApplyItemMetrics()
     {
-        _isEditMode = !_isEditMode;
-        IsEditMode = _isEditMode;
-        EditHint.Visibility = _isEditMode ? Visibility.Visible : Visibility.Collapsed;
-        _viewModel.StatusText = _isEditMode ? "编辑模式：右键管理项目和分组" : "就绪";
+        var settings = _viewModel.Settings;
+        for (var index = 0; index < ItemList.Items.Count; index++)
+        {
+            if (ItemList.ItemContainerGenerator.ContainerFromIndex(index) is not ListBoxItem container) continue;
+            container.Width = settings.CardWidth;
+            container.Height = settings.CardHeight;
+            container.Margin = new Thickness(settings.ItemSpacing / 2, settings.RowSpacing / 2, settings.ItemSpacing / 2, settings.RowSpacing / 2);
+            if (FindChild<Image>(container, "ItemIcon") is { } icon)
+            {
+                icon.Width = settings.IconSize;
+                icon.Height = settings.IconSize;
+            }
+            if (FindChild<TextBlock>(container, "ItemName") is { } name)
+            {
+                name.FontSize = settings.TextSize;
+                name.Visibility = settings.ShowItemTitle ? Visibility.Visible : Visibility.Collapsed;
+            }
+        }
+    }
+
+    private static T? FindChild<T>(DependencyObject parent, string name) where T : FrameworkElement
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, index);
+            if (child is T element && element.Name == name) return element;
+            if (FindChild<T>(child, name) is { } result) return result;
+        }
+        return null;
+    }
+
+    private static Settings CloneSettings(Settings value) => new()
+    {
+        Hotkey = value.Hotkey, Theme = value.Theme, ThemeProfile = value.ThemeProfile, Opacity = value.Opacity,
+        LayoutMode = value.LayoutMode, IconSize = value.IconSize, CardWidth = value.CardWidth, CardHeight = value.CardHeight, TextSize = value.TextSize,
+        ItemSpacing = value.ItemSpacing, RowSpacing = value.RowSpacing, ContentPadding = value.ContentPadding,
+        ShowShortcutBadge = value.ShowShortcutBadge, ShowFullItemName = value.ShowFullItemName, ShowItemTitle = value.ShowItemTitle, GroupLayout = value.GroupLayout,
+        StartWithWindows = value.StartWithWindows,
+        ThemeColors = new ThemeColors { Panel = value.ThemeColors.Panel, PanelBorder = value.ThemeColors.PanelBorder, Surface = value.ThemeColors.Surface, SurfaceBorder = value.ThemeColors.SurfaceBorder, Footer = value.ThemeColors.Footer, TextPrimary = value.ThemeColors.TextPrimary, TextSecondary = value.ThemeColors.TextSecondary, Accent = value.ThemeColors.Accent, Hover = value.ThemeColors.Hover, IconSurface = value.ThemeColors.IconSurface },
+        CustomThemes = value.CustomThemes.Select(profile => new ThemeProfile { Name = profile.Name, Colors = new ThemeColors { Panel = profile.Colors.Panel, PanelBorder = profile.Colors.PanelBorder, Surface = profile.Colors.Surface, SurfaceBorder = profile.Colors.SurfaceBorder, Footer = profile.Colors.Footer, TextPrimary = profile.Colors.TextPrimary, TextSecondary = profile.Colors.TextSecondary, Accent = profile.Colors.Accent, Hover = profile.Colors.Hover, IconSurface = profile.Colors.IconSurface } }).ToList(),
+    };
+
+
+    private void ToggleEditMode_Click(object sender, RoutedEventArgs e) => SetEditMode(!_isEditMode, null);
+
+    private void SetEditMode(bool enabled, string? statusText)
+    {
+        _isEditMode = enabled;
+        IsEditMode = enabled;
+        EditHint.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
+        _viewModel.StatusText = statusText ?? (enabled ? "编辑模式：右键管理项目和分组" : "就绪");
     }
 
     private void RefreshGroupTabs()
@@ -390,7 +473,13 @@ public partial class MainWindow : System.Windows.Window
         }
     }
 
-    private void ItemList_MouseDoubleClick(object sender, MouseButtonEventArgs e) => LaunchSelectedItem();
+    private void ItemList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (!_isEditMode && !_viewModel.Settings.OpenItemsOnSingleClick)
+        {
+            LaunchSelectedItem();
+        }
+    }
 
     private void ItemList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
@@ -434,6 +523,11 @@ public partial class MainWindow : System.Windows.Window
     {
         _isContextMenuActivationPending = true;
         Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () => _isContextMenuActivationPending = false);
+        if (sender is FrameworkElement { DataContext: LauncherItem item } fe)
+        {
+            ItemList.SelectedItem = item;
+            fe.ContextMenu = BuildItemContextMenu(item);
+        }
     }
 
     private void ItemContextMenu_Opening(object sender, ContextMenuEventArgs e)
@@ -444,6 +538,58 @@ public partial class MainWindow : System.Windows.Window
         {
             ItemList.SelectedItem = item;
         }
+    }
+
+    private ContextMenu BuildItemContextMenu(LauncherItem item)
+    {
+        var menu = new ContextMenu { Style = (Style)FindResource("LauncherContextMenu") };
+        menu.Closed += LauncherContextMenu_Closed;
+        var itemStyle = (Style)FindResource("LauncherMenuItem");
+
+        var rename = new MenuItem { Header = "编辑名称", Style = itemStyle };
+        rename.Click += RenameSelectedItem_Click;
+        var edit = new MenuItem { Header = "编辑软件", Style = itemStyle };
+        edit.Click += EditSelectedItem_Click;
+        var remove = new MenuItem { Header = "从当前分组移除", Style = itemStyle };
+        remove.Click += RemoveSelectedItem_Click;
+
+        var moveMenu = new MenuItem { Header = "移动到分组", Style = itemStyle };
+        var currentGroup = _viewModel.SelectedGroup;
+        if (currentGroup != null && _viewModel.Config?.Groups != null)
+        {
+            foreach (var group in _viewModel.Config.Groups)
+            {
+                if (group == currentGroup) continue;
+                var sub = new MenuItem { Header = group.Name, Tag = group, Style = itemStyle };
+                sub.Click += MoveItemToGroupMenu_Click;
+                moveMenu.Items.Add(sub);
+            }
+        }
+        if (moveMenu.Items.Count == 0) moveMenu.IsEnabled = false;
+
+        menu.Items.Add(rename);
+        menu.Items.Add(edit);
+        menu.Items.Add(remove);
+        menu.Items.Add(moveMenu);
+        return menu;
+    }
+
+    private void MoveItemToGroupMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: Group targetGroup } || ItemList.SelectedItem is not LauncherItem item) return;
+        var sourceGroup = _viewModel.SelectedGroup;
+        if (sourceGroup is null || sourceGroup == targetGroup) return;
+        MoveItem(item, sourceGroup, targetGroup, targetGroup.Items.Count);
+    }
+
+    private void DeleteButton_MouseEnter(object sender, MouseEventArgs e)
+    {
+        if (sender is Button button) button.Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x4D, 0x4D));
+    }
+
+    private void DeleteButton_MouseLeave(object sender, MouseEventArgs e)
+    {
+        if (sender is Button button) button.Foreground = new SolidColorBrush(Colors.White);
     }
 
     private void ResizeGrip_DragDelta(object sender, DragDeltaEventArgs e)
@@ -728,6 +874,24 @@ public partial class MainWindow : System.Windows.Window
         _viewModel.Save();
     }
 
+    private void RenameSelectedItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel.SelectedGroup is null || ItemList.SelectedItem is not LauncherItem item)
+        {
+            return;
+        }
+
+        var dialog = new Views.EditItemWindow(item.Name, item.Path, "编辑名称") { Owner = this };
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        item.Name = dialog.ItemName;
+        _viewModel.RefreshVisibleItems();
+        _viewModel.Save();
+    }
+
     private void RemoveSelectedItem_Click(object sender, RoutedEventArgs e)
     {
         if (_viewModel.SelectedGroup is null || ItemList.SelectedItem is not LauncherItem item)
@@ -859,6 +1023,13 @@ public partial class MainWindow : System.Windows.Window
         _draggedItem = null;
         _dragSourceGroup = null;
         _dragSourceIndex = -1;
+
+        if (!_isEditMode && _viewModel.Settings.OpenItemsOnSingleClick &&
+            GetParent<ListBoxItem>(e.OriginalSource as DependencyObject)?.DataContext is LauncherItem item)
+        {
+            ItemList.SelectedItem = item;
+            LaunchSelectedItem();
+        }
     }
 
     private void PreviewItemOrder(LauncherItem item, LauncherItem? targetItem)
@@ -967,7 +1138,6 @@ public partial class MainWindow : System.Windows.Window
         sourceGroup.Items.Remove(item);
         targetIndex = Math.Clamp(targetIndex, 0, targetGroup.Items.Count);
         targetGroup.Items.Insert(targetIndex, item);
-        SelectGroup(targetGroup);
         _viewModel.RefreshVisibleItems();
         _viewModel.Save();
         _viewModel.StatusText = sourceGroup == targetGroup ? "项目顺序已更新" : $"已移至“{targetGroup.Name}”";

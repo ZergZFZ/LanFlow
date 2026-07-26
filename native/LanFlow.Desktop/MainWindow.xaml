@@ -57,7 +57,7 @@
             <Setter Property="Padding" Value="0" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderBrush" Value="Transparent" />
-            <Setter Property="Foreground" Value="#AEB7C7" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
             <Setter Property="FontFamily" Value="Segoe Fluent Icons" />
             <Setter Property="FontSize" Value="16" />
             <Setter Property="Template">
@@ -79,25 +79,23 @@
         <Style x:Key="LauncherTile" TargetType="ListBoxItem">
             <Setter Property="Width" Value="92" />
             <Setter Property="Height" Value="108" />
-            <Setter Property="Margin" Value="8,8" />
+            <Setter Property="Margin" Value="8" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBoxItem">
-                        <Border x:Name="tile" Background="{TemplateBinding Background}" CornerRadius="10">
-                            <ContentPresenter />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="tile" Property="Background" Value="{DynamicResource HoverBrush}" />
-                            </Trigger>
-
-                        </ControlTemplate.Triggers>
+                        <Border x:Name="tile" Background="{TemplateBinding Background}" CornerRadius="10"><ContentPresenter /></Border>
+                        <ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="tile" Property="Background" Value="{DynamicResource HoverBrush}" /></Trigger></ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+        <Style x:Key="LauncherCard" TargetType="ListBoxItem" BasedOn="{StaticResource LauncherTile}">
+            <Setter Property="Width" Value="156" />
+            <Setter Property="Height" Value="58" />
+            <Setter Property="Margin" Value="6" />
         </Style>
         <Style x:Key="LauncherContextMenu" TargetType="ContextMenu">
             <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
@@ -133,23 +131,55 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="MenuItem">
                         <Border x:Name="ItemBorder" Background="Transparent" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter x:Name="Content"
-                                              ContentSource="Header"
-                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <ContentPresenter x:Name="HeaderHost" Grid.Column="0" ContentSource="Header" RecognizesAccessKey="True" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                                <Path x:Name="Arrow" Grid.Column="1" Data="M 0 0 L 4 4 L 0 8 Z" Fill="{DynamicResource TextSecondaryBrush}" Margin="10,0,0,0" VerticalAlignment="Center" Visibility="Collapsed" />
+                                <Popup x:Name="PART_Popup" AllowsTransparency="True" Placement="Right" HorizontalOffset="2" IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}" Focusable="False" PopupAnimation="Fade">
+                                    <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource SurfaceBorderBrush}" BorderThickness="1" CornerRadius="8" Padding="4">
+                                        <ScrollViewer CanContentScroll="False" VerticalScrollBarVisibility="Disabled" HorizontalScrollBarVisibility="Disabled">
+                                            <ItemsPresenter />
+                                        </ScrollViewer>
+                                    </Border>
+                                </Popup>
+                            </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsHighlighted" Value="True">
                                 <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource AccentBrush}" />
                             </Trigger>
+                            <Trigger Property="IsSubmenuOpen" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource AccentBrush}" />
+                            </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                            </Trigger>
+                            <Trigger Property="HasItems" Value="True">
+                                <Setter TargetName="Arrow" Property="Visibility" Value="Visible" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
+        <DataTemplate x:Key="TileItemTemplate">
+            <Grid Margin="6" PreviewMouseRightButtonDown="Item_PreviewMouseRightButtonDown" ContextMenuOpening="ItemContextMenu_Opening">
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                <Image x:Name="ItemIcon" HorizontalAlignment="Center" VerticalAlignment="Center" Source="{Binding IconImage}" Stretch="Uniform" />
+                <TextBlock x:Name="ItemName" Grid.Row="1" Margin="2,4,2,0" HorizontalAlignment="Center" VerticalAlignment="Top" Foreground="{DynamicResource TextPrimaryBrush}" Text="{Binding DisplayName}" TextAlignment="Center" TextTrimming="CharacterEllipsis" TextWrapping="Wrap" MaxHeight="32" />
+                <Button x:Name="ItemDeleteButton" Grid.Row="0" Tag="DeleteItem" Click="DeleteItem_Click" PreviewMouseDoubleClick="ItemDeleteButton_PreviewMouseDoubleClick" MouseEnter="DeleteButton_MouseEnter" MouseLeave="DeleteButton_MouseLeave" ToolTip="删除" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,2,0,0" Width="20" Height="20" FontSize="11" Foreground="White" Background="#CC1F1F1F" Content="&#xE74D;"><Button.Style><Style TargetType="Button" BasedOn="{StaticResource IconButton}"><Setter Property="Visibility" Value="Collapsed" /><Style.Triggers><DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=IsEditMode}" Value="True"><Setter Property="Visibility" Value="Visible" /></DataTrigger></Style.Triggers></Style></Button.Style></Button>
+            </Grid>
+        </DataTemplate>
+        <DataTemplate x:Key="CardItemTemplate">
+            <Grid Margin="4" PreviewMouseRightButtonDown="Item_PreviewMouseRightButtonDown" ContextMenuOpening="ItemContextMenu_Opening">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                <Image x:Name="ItemIcon" HorizontalAlignment="Left" VerticalAlignment="Center" Source="{Binding IconImage}" Stretch="Uniform" />
+                <TextBlock x:Name="ItemName" Grid.Column="1" Margin="8,0,2,0" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
+            </Grid>
+        </DataTemplate>
     </Window.Resources>
 
     <Border Margin="10" Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1" CornerRadius="14">
@@ -221,6 +251,7 @@
                              ScrollViewer.VerticalScrollBarVisibility="Hidden"
                              ItemsSource="{Binding VisibleItems}"
                              ItemContainerStyle="{StaticResource LauncherTile}"
+                             ItemTemplate="{StaticResource TileItemTemplate}"
                              AllowDrop="True"
                              DragOver="ItemList_DragOver"
                              Drop="ItemList_Drop"
@@ -233,65 +264,6 @@
                                 <WrapPanel Width="{Binding ActualWidth, ElementName=ItemList}" />
                             </ItemsPanelTemplate>
                         </ListBox.ItemsPanel>
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <Grid Margin="5,8" PreviewMouseRightButtonDown="Item_PreviewMouseRightButtonDown" ContextMenuOpening="ItemContextMenu_Opening">
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="58" />
-                                        <RowDefinition Height="*" />
-                                    </Grid.RowDefinitions>
-                                    <Border Width="56" Height="56" HorizontalAlignment="Center" Background="{DynamicResource IconSurfaceBrush}" CornerRadius="12">
-                                        <Grid>
-                                            <Image Width="44" Height="44" Source="{Binding IconImage}" Stretch="Uniform" />
-                                        </Grid>
-                                    </Border>
-                                    <TextBlock Grid.Row="1" Margin="2,8,2,0" HorizontalAlignment="Center" VerticalAlignment="Top" FontSize="12" Foreground="{DynamicResource TextPrimaryBrush}" Text="{Binding DisplayName}" TextAlignment="Center" TextTrimming="CharacterEllipsis" TextWrapping="Wrap" MaxHeight="32">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="Visibility" Value="Collapsed" />
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding DataContext.ShowFullItemName, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
-                                                        <Setter Property="Visibility" Value="Visible" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
-                                    <Button x:Name="ItemDeleteButton"
-                                            Grid.Row="0"
-                                            Tag="DeleteItem"
-                                            Click="DeleteItem_Click"
-                                            PreviewMouseDoubleClick="ItemDeleteButton_PreviewMouseDoubleClick"
-                                            ToolTip="删除"
-                                            HorizontalAlignment="Right"
-                                            VerticalAlignment="Top"
-                                            Margin="0,2,0,0"
-                                            Width="20" Height="20"
-                                            FontSize="11"
-                                            Foreground="White"
-                                            Background="#CC1F1F1F"
-                                            Content="&#xE74D;">
-                                        <Button.Style>
-                                            <Style TargetType="Button" BasedOn="{StaticResource IconButton}">
-                                                <Setter Property="Visibility" Value="Collapsed" />
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=IsEditMode}" Value="True">
-                                                        <Setter Property="Visibility" Value="Visible" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Button.Style>
-                                    </Button>
-                                    <Grid.ContextMenu>
-                                        <ContextMenu Style="{StaticResource LauncherContextMenu}" Closed="LauncherContextMenu_Closed">
-                                            <MenuItem Style="{StaticResource LauncherMenuItem}" Header="编辑软件" Click="EditSelectedItem_Click" />
-                                            <MenuItem Style="{StaticResource LauncherMenuItem}" Header="从当前分组移除" Click="RemoveSelectedItem_Click" />
-                                        </ContextMenu>
-                                    </Grid.ContextMenu>
-                                </Grid>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-
                     </ListBox>
 
                     <StackPanel x:Name="EmptyPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed">

@@ -27,22 +27,47 @@ public sealed class ConfigStore
     {
         if (!File.Exists(_configPath))
         {
-            return new AppConfig();
+            return Normalize(new AppConfig());
         }
 
         try
         {
             using var stream = File.OpenRead(_configPath);
-            return JsonSerializer.Deserialize<AppConfig>(stream, SerializerOptions) ?? new AppConfig();
+            return Normalize(JsonSerializer.Deserialize<AppConfig>(stream, SerializerOptions) ?? new AppConfig());
         }
         catch (JsonException)
         {
-            return new AppConfig();
+            return Normalize(new AppConfig());
         }
         catch (IOException)
         {
-            return new AppConfig();
+            return Normalize(new AppConfig());
         }
+    }
+
+    private static AppConfig Normalize(AppConfig config)
+    {
+        config.Settings ??= new Settings();
+        var settings = config.Settings;
+        settings.Hotkey = string.IsNullOrWhiteSpace(settings.Hotkey) ? "Alt+Space" : settings.Hotkey;
+        settings.Theme = settings.Theme == "light" ? "light" : "dark";
+        settings.ThemeProfile = string.IsNullOrWhiteSpace(settings.ThemeProfile)
+            ? (settings.Theme == "light" ? "浅色" : "深色")
+            : settings.ThemeProfile;
+        settings.ThemeColors ??= settings.Theme == "light" ? ThemeColors.Light() : ThemeColors.Dark();
+        settings.CustomThemes ??= [];
+        settings.LayoutMode = settings.LayoutMode == "card" ? "card" : "tile";
+        settings.Opacity = Math.Clamp(settings.Opacity, 0.55, 1.0);
+        settings.IconSize = Math.Clamp(settings.IconSize, 24, 72);
+        settings.CardWidth = Math.Clamp(settings.CardWidth, 48, 320);
+        settings.CardHeight = Math.Clamp(settings.CardHeight, 48, 240);
+        settings.CardSize = Math.Clamp(settings.CardSize, 76, 160);
+        settings.TextSize = Math.Clamp(settings.TextSize, 10, 18);
+        settings.ItemSpacing = Math.Clamp(settings.ItemSpacing, 0, 64);
+        settings.RowSpacing = Math.Clamp(settings.RowSpacing, 0, 80);
+        settings.ContentPadding = Math.Clamp(settings.ContentPadding, 6, 40);
+        settings.GroupLayout = settings.GroupLayout == "top" ? "top" : "left";
+        return config;
     }
 
     public void Save(AppConfig config)
