@@ -8,7 +8,6 @@
     "core:webview:default",
     "core:app:default",
     "core:event:default",
-    "shell:allow-open",
     "dialog:allow-open"
   ]
 }

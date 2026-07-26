@@ -29,5 +29,17 @@ pnpm-debug.log*
 *.sw?
 .DS_Store
 
+# .NET / WPF
+native/**/bin/
+native/**/obj/
+native/**/publish/
+release/
+
+# Local assistant workspace and TypeScript build cache
+.codebuddy/
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+
 # Keep generated icons committed so the repo builds out-of-the-box.
 # To regenerate from source: `cargo tauri icon src-tauri/icons/icon-source.png`

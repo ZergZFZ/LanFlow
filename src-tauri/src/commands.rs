@@ -43,6 +43,55 @@ fn new_id() -> String {
 }
 
 #[tauri::command]
+pub fn get_item_icon(path: String) -> Result<Option<String>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::process::Command;
+
+        if !std::path::Path::new(&path).exists() {
+            return Ok(None);
+        }
+
+        let encoded_path = {
+            const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+            let bytes = path
+                .encode_utf16()
+                .flat_map(|unit| unit.to_le_bytes())
+                .collect::<Vec<_>>();
+            let mut output = String::with_capacity((bytes.len() + 2) / 3 * 4);
+            for chunk in bytes.chunks(3) {
+                let value = (u32::from(chunk[0]) << 16)
+                    | (u32::from(*chunk.get(1).unwrap_or(&0)) << 8)
+                    | u32::from(*chunk.get(2).unwrap_or(&0));
+                output.push(TABLE[((value >> 18) & 63) as usize] as char);
+                output.push(TABLE[((value >> 12) & 63) as usize] as char);
+                output.push(if chunk.len() > 1 { TABLE[((value >> 6) & 63) as usize] as char } else { '=' });
+                output.push(if chunk.len() > 2 { TABLE[(value & 63) as usize] as char } else { '=' });
+            }
+            output
+        };
+        let script = format!(
+            "$p=[Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('{encoded_path}')); if([IO.Path]::GetExtension($p) -ieq '.lnk'){{$link=(New-Object -ComObject WScript.Shell).CreateShortcut($p); if($link.TargetPath -and (Test-Path -LiteralPath $link.TargetPath)){{$p=$link.TargetPath}}}}; Add-Type -AssemblyName System.Drawing; $i=[Drawing.Icon]::ExtractAssociatedIcon($p); if($null -ne $i){{$b=$i.ToBitmap(); $s=[IO.MemoryStream]::new(); $b.Save($s,[Drawing.Imaging.ImageFormat]::Png); [Convert]::ToBase64String($s.ToArray()); $s.Dispose(); $b.Dispose(); $i.Dispose()}}"
+        );
+        let output = Command::new("powershell.exe")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+            .output()
+            .map_err(|error| error.to_string())?;
+        if !output.status.success() {
+            return Ok(None);
+        }
+        let icon = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+        return Ok((!icon.is_empty()).then(|| format!("data:image/png;base64,{icon}")));
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = path;
+        Ok(None)
+    }
+}
+
+#[tauri::command]
 pub fn load_config(app: AppHandle) -> AppConfig {
     load(&app)
 }
@@ -50,6 +99,28 @@ pub fn load_config(app: AppHandle) -> AppConfig {
 #[tauri::command]
 pub fn save_config(app: AppHandle, config: AppConfig) -> Result<(), String> {
     save(&app, &config)
+}
+
+#[tauri::command]
+pub fn open_item(path: String) -> Result<(), String> {
+    if !std::path::Path::new(&path).exists() {
+        return Err("文件或快捷方式不存在".to_string());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer.exe")
+            .arg(&path)
+            .spawn()
+            .map_err(|error| format!("无法打开条目：{error}"))?;
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = path;
+        Err("当前平台暂不支持打开条目".to_string())
+    }
 }
 
 #[tauri::command]
@@ -96,12 +167,14 @@ pub fn add_item(
 ) -> Result<AppConfig, String> {
     let mut cfg = load(&app);
     if let Some(g) = cfg.groups.iter_mut().find(|g| g.id == group_id) {
-        g.items.push(Item {
-            id: new_id(),
-            name,
-            path,
-            icon: None,
-        });
+        if !g.items.iter().any(|item| item.path.eq_ignore_ascii_case(&path)) {
+            g.items.push(Item {
+                id: new_id(),
+                name,
+                path,
+                icon: None,
+            });
+        }
     }
     save(&app, &cfg)?;
     Ok(cfg)
@@ -117,6 +190,143 @@ pub fn remove_item(
     if let Some(g) = cfg.groups.iter_mut().find(|g| g.id == group_id) {
         g.items.retain(|i| i.id != item_id);
     }
+    save(&app, &cfg)?;
+    Ok(cfg)
+}
+
+#[tauri::command]
+pub fn update_item(
+    app: AppHandle,
+    group_id: String,
+    item_id: String,
+    name: String,
+    path: String,
+) -> Result<AppConfig, String> {
+    let name = name.trim().to_string();
+    let path = path.trim().to_string();
+    if name.is_empty() || path.is_empty() {
+        return Err("名称和路径不能为空".to_string());
+    }
+
+    let mut cfg = load(&app);
+    let group = cfg
+        .groups
+        .iter_mut()
+        .find(|group| group.id == group_id)
+        .ok_or_else(|| "找不到原分组".to_string())?;
+    let item = group
+        .items
+        .iter_mut()
+        .find(|item| item.id == item_id)
+        .ok_or_else(|| "找不到启动项".to_string())?;
+    item.name = name;
+    item.path = path;
+    item.icon = None;
+    save(&app, &cfg)?;
+    Ok(cfg)
+}
+
+#[tauri::command]
+pub fn move_item(
+    app: AppHandle,
+    from_group_id: String,
+    to_group_id: String,
+    item_id: String,
+) -> Result<AppConfig, String> {
+    if from_group_id == to_group_id {
+        return Ok(load(&app));
+    }
+
+    let mut cfg = load(&app);
+    let source_index = cfg
+        .groups
+        .iter()
+        .position(|group| group.id == from_group_id)
+        .ok_or_else(|| "找不到原分组".to_string())?;
+    let target_index = cfg
+        .groups
+        .iter()
+        .position(|group| group.id == to_group_id)
+        .ok_or_else(|| "找不到目标分组".to_string())?;
+    let item_index = cfg.groups[source_index]
+        .items
+        .iter()
+        .position(|item| item.id == item_id)
+        .ok_or_else(|| "找不到启动项".to_string())?;
+    let item = cfg.groups[source_index].items.remove(item_index);
+    cfg.groups[target_index].items.push(item);
+    save(&app, &cfg)?;
+    Ok(cfg)
+}
+
+#[tauri::command]
+pub fn reorder_group(
+    app: AppHandle,
+    group_id: String,
+    target_index: usize,
+) -> Result<AppConfig, String> {
+    let mut cfg = load(&app);
+    let source_index = cfg
+        .groups
+        .iter()
+        .position(|group| group.id == group_id)
+        .ok_or_else(|| "找不到分组".to_string())?;
+
+    let group = cfg.groups.remove(source_index);
+    let insert_index = target_index.min(cfg.groups.len());
+    cfg.groups.insert(insert_index, group);
+    save(&app, &cfg)?;
+    Ok(cfg)
+}
+
+#[tauri::command]
+pub fn reorder_item(
+    app: AppHandle,
+    group_id: String,
+    item_id: String,
+    target_index: usize,
+) -> Result<AppConfig, String> {
+    let mut cfg = load(&app);
+    let group = cfg
+        .groups
+        .iter_mut()
+        .find(|group| group.id == group_id)
+        .ok_or_else(|| "找不到目标分组".to_string())?;
+    let source_index = group
+        .items
+        .iter()
+        .position(|item| item.id == item_id)
+        .ok_or_else(|| "找不到启动项".to_string())?;
+
+    let item = group.items.remove(source_index);
+    let insert_index = target_index.min(group.items.len());
+    group.items.insert(insert_index, item);
+    save(&app, &cfg)?;
+    Ok(cfg)
+}
+
+#[tauri::command]
+pub fn hide_launcher_window(app: AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "找不到主窗口".to_string())?;
+    window.hide().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn update_hotkey(app: AppHandle, hotkey: String) -> Result<AppConfig, String> {
+    let hotkey = hotkey.trim().to_string();
+    if hotkey.is_empty() {
+        return Err("快捷键不能为空，例如 Alt+Space".to_string());
+    }
+
+    let mut cfg = load(&app);
+    if cfg.settings.hotkey.eq_ignore_ascii_case(&hotkey) {
+        return Ok(cfg);
+    }
+
+    crate::replace_toggle_shortcut(&app, &cfg.settings.hotkey, &hotkey)?;
+    cfg.settings.hotkey = hotkey;
     save(&app, &cfg)?;
     Ok(cfg)
 }
