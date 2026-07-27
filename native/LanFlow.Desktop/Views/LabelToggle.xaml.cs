@@ -21,6 +21,14 @@ public partial class LabelToggle : UserControl
         DependencyProperty.Register(nameof(State), typeof(bool), typeof(LabelToggle),
             new PropertyMetadata(false, OnStateChanged));
 
+    public static readonly DependencyProperty TrackOnColorProperty =
+        DependencyProperty.Register(nameof(TrackOnColor), typeof(Color), typeof(LabelToggle),
+            new PropertyMetadata(Color.FromRgb(0x52, 0x6F, 0xAF)));
+
+    public static readonly DependencyProperty TrackOffColorProperty =
+        DependencyProperty.Register(nameof(TrackOffColor), typeof(Color), typeof(LabelToggle),
+            new PropertyMetadata(Color.FromRgb(0x38, 0x42, 0x5B)));
+
     public static readonly RoutedEvent StateChangedEvent =
         EventManager.RegisterRoutedEvent(nameof(StateChanged), RoutingStrategy.Bubble,
             typeof(RoutedEventHandler), typeof(LabelToggle));
@@ -41,6 +49,18 @@ public partial class LabelToggle : UserControl
     {
         get => (bool)GetValue(StateProperty);
         set => SetValue(StateProperty, value);
+    }
+
+    public Color TrackOnColor
+    {
+        get => (Color)GetValue(TrackOnColorProperty);
+        set => SetValue(TrackOnColorProperty, value);
+    }
+
+    public Color TrackOffColor
+    {
+        get => (Color)GetValue(TrackOffColorProperty);
+        set => SetValue(TrackOffColorProperty, value);
     }
 
     public event RoutedEventHandler StateChanged
@@ -84,8 +104,8 @@ public partial class LabelToggle : UserControl
         LeftLabel.Foreground = State ? dim : bright;
         RightLabel.Foreground = State ? bright : dim;
         Track.Background = State
-            ? new SolidColorBrush(Color.FromRgb(0x52, 0x6F, 0xAF))
-            : new SolidColorBrush(Color.FromRgb(0x38, 0x42, 0x5B));
+            ? new SolidColorBrush(TrackOnColor)
+            : new SolidColorBrush(TrackOffColor);
 
         if (immediate)
         {

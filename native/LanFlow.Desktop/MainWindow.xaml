@@ -182,10 +182,7 @@
         </DataTemplate>
     </Window.Resources>
 
-    <Border Margin="10" Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1" CornerRadius="14">
-        <Border.Effect>
-            <DropShadowEffect BlurRadius="26" ShadowDepth="8" Opacity="0.4" Color="#000000" />
-        </Border.Effect>
+    <Border Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1" CornerRadius="14">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="*" />
@@ -313,7 +310,7 @@
             <Grid x:Name="NewGroupOverlay" Grid.RowSpan="2" Visibility="Collapsed" Background="#88000000">
                 <Border Width="360" Padding="22" HorizontalAlignment="Center" VerticalAlignment="Center" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource SurfaceBorderBrush}" BorderThickness="1" CornerRadius="12">
                     <Border.Effect>
-                        <DropShadowEffect BlurRadius="20" ShadowDepth="6" Opacity="0.35" Color="#000000" />
+                        <DropShadowEffect BlurRadius="16" ShadowDepth="0" Opacity="0.4" Color="#000000" />
                     </Border.Effect>
                     <Grid>
                         <Grid.RowDefinitions>

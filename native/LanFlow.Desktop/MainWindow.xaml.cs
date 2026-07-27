@@ -1,4 +1,5 @@
 ﻿using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -15,6 +16,36 @@ namespace LanFlow.Desktop;
 
 public partial class MainWindow : System.Windows.Window
 {
+    [DllImport("user32.dll")]
+    private static extern int GetWindowLong(IntPtr hwnd, int nIndex);
+
+    [DllImport("user32.dll")]
+    private static extern int SetWindowLong(IntPtr hwnd, int nIndex, int dwNewLong);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr hwnd, IntPtr hwndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS pMarInset);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MARGINS
+    {
+        public int cxLeftWidth;
+        public int cxRightWidth;
+        public int cyTopHeight;
+        public int cyBottomHeight;
+    }
+
+    private const int GWL_STYLE = -16;
+    private const int GWL_EXSTYLE = -20;
+    private const int WS_THICKFRAME = 0x00040000;
+    private const int WS_EX_LAYERED = 0x00080000;
+    private const int SWP_FRAMECHANGED = 0x0020;
+    private const int SWP_NOMOVE = 0x0002;
+    private const int SWP_NOSIZE = 0x0001;
+    private const int SWP_NOZORDER = 0x0004;
+
     private readonly MainViewModel _viewModel;
     private readonly LauncherService _launcherService = new();
     private readonly HotkeyService _hotkeyService = new();
@@ -71,6 +102,8 @@ public partial class MainWindow : System.Windows.Window
                 hwndSource.AddHook(WndProc);
             }
 
+            AddDwmShadow();
+
             if (!_hotkeyService.Register(this, ShowFromHotkey, _viewModel.Settings.Hotkey))
             {
                 _viewModel.StatusText = $"全局快捷键 {_viewModel.Settings.Hotkey} 注册失败";
@@ -87,9 +120,40 @@ public partial class MainWindow : System.Windows.Window
         Focus();
     }
 
+    private void AddDwmShadow()
+    {
+        var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+
+        // 恢复 WS_THICKFRAME，让 DWM 认为这是一个可调整大小的窗口，从而绘制原生阴影
+        var style = GetWindowLong(hwnd, GWL_STYLE);
+        SetWindowLong(hwnd, GWL_STYLE, style | WS_THICKFRAME);
+
+        // 让 DWM 将 frame 扩展到客户区边缘，触发原生阴影绘制
+        var margins = new MARGINS
+        {
+            cxLeftWidth = 1,
+            cxRightWidth = 1,
+            cyTopHeight = 1,
+            cyBottomHeight = 1
+        };
+        DwmExtendFrameIntoClientArea(hwnd, ref margins);
+
+        // 通知窗口 frame 已变更
+        SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
+    }
+
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
         const int wmNcHitTest = 0x0084;
+        const int wmNcCalcSize = 0x0083;
+
+        if (msg == wmNcCalcSize)
+        {
+            // 阻止 WS_THICKFRAME 带来的可调整行为，但保留 DWM 原生阴影
+            handled = true;
+            return IntPtr.Zero;
+        }
+
         if (msg != wmNcHitTest || WindowState == WindowState.Maximized)
         {
             return IntPtr.Zero;
