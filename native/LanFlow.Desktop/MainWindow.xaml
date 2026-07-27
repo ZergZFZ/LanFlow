@@ -1,0 +1,338 @@
+﻿<Window x:Class="LanFlow.Desktop.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="LanFlow"
+        Icon="Assets/LanFlow.png"
+        Width="760"
+        Height="550"
+        MinWidth="520"
+        MinHeight="380"
+        WindowStartupLocation="CenterScreen"
+        UseLayoutRounding="True"
+        Background="Transparent"
+        AllowsTransparency="True"
+        WindowStyle="None"
+        ResizeMode="NoResize">
+    <Window.Resources>
+        <SolidColorBrush x:Key="PanelBrush" Color="#171B28" />
+        <SolidColorBrush x:Key="PanelBorderBrush" Color="#343B50" />
+        <SolidColorBrush x:Key="SurfaceBrush" Color="#22283A" />
+        <SolidColorBrush x:Key="SurfaceBorderBrush" Color="#38425B" />
+        <SolidColorBrush x:Key="FooterBrush" Color="#1D2231" />
+        <SolidColorBrush x:Key="TextPrimaryBrush" Color="#F5F7FC" />
+        <SolidColorBrush x:Key="TextSecondaryBrush" Color="#ADB5C7" />
+        <SolidColorBrush x:Key="AccentBrush" Color="#35405E" />
+        <SolidColorBrush x:Key="SelectedTileBrush" Color="#5A00B7C3" />
+        <SolidColorBrush x:Key="HoverBrush" Color="#2B3247" />
+        <SolidColorBrush x:Key="IconSurfaceBrush" Color="#2A3040" />
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+        <Style x:Key="TabButton" TargetType="Button">
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="tab" Padding="{TemplateBinding Padding}" Background="{TemplateBinding Background}" CornerRadius="7">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="tab" Property="Background" Value="{DynamicResource HoverBrush}" />
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="IconButton" TargetType="Button">
+            <Setter Property="Width" Value="32" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="iconButton" Background="{TemplateBinding Background}" CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="iconButton" Property="Background" Value="{DynamicResource HoverBrush}" />
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="LauncherTile" TargetType="ListBoxItem">
+            <Setter Property="Width" Value="92" />
+            <Setter Property="Height" Value="108" />
+            <Setter Property="Margin" Value="8" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="tile" Background="{TemplateBinding Background}" CornerRadius="10"><ContentPresenter /></Border>
+                        <ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="tile" Property="Background" Value="{DynamicResource HoverBrush}" /></Trigger></ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="LauncherCard" TargetType="ListBoxItem" BasedOn="{StaticResource LauncherTile}">
+            <Setter Property="Width" Value="156" />
+            <Setter Property="Height" Value="58" />
+            <Setter Property="Margin" Value="6" />
+        </Style>
+        <Style x:Key="LauncherContextMenu" TargetType="ContextMenu">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SurfaceBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="4" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ContextMenu">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8"
+                                Padding="{TemplateBinding Padding}">
+                            <ScrollViewer CanContentScroll="False"
+                                          VerticalScrollBarVisibility="Disabled"
+                                          HorizontalScrollBarVisibility="Disabled">
+                                <ItemsPresenter />
+                            </ScrollViewer>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="LauncherMenuItem" TargetType="MenuItem">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="MenuItem">
+                        <Border x:Name="ItemBorder" Background="Transparent" Padding="{TemplateBinding Padding}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <ContentPresenter x:Name="HeaderHost" Grid.Column="0" ContentSource="Header" RecognizesAccessKey="True" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                                <Path x:Name="Arrow" Grid.Column="1" Data="M 0 0 L 4 4 L 0 8 Z" Fill="{DynamicResource TextSecondaryBrush}" Margin="10,0,0,0" VerticalAlignment="Center" Visibility="Collapsed" />
+                                <Popup x:Name="PART_Popup" AllowsTransparency="True" Placement="Right" HorizontalOffset="2" IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}" Focusable="False" PopupAnimation="Fade">
+                                    <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource SurfaceBorderBrush}" BorderThickness="1" CornerRadius="8" Padding="4">
+                                        <ScrollViewer CanContentScroll="False" VerticalScrollBarVisibility="Disabled" HorizontalScrollBarVisibility="Disabled">
+                                            <ItemsPresenter />
+                                        </ScrollViewer>
+                                    </Border>
+                                </Popup>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource AccentBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSubmenuOpen" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource AccentBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+                            </Trigger>
+                            <Trigger Property="HasItems" Value="True">
+                                <Setter TargetName="Arrow" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <DataTemplate x:Key="TileItemTemplate">
+            <Grid Margin="6" PreviewMouseRightButtonDown="Item_PreviewMouseRightButtonDown" ContextMenuOpening="ItemContextMenu_Opening">
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                <Image x:Name="ItemIcon" HorizontalAlignment="Center" VerticalAlignment="Center" Source="{Binding IconImage}" Stretch="Uniform" />
+                <TextBlock x:Name="ItemName" Grid.Row="1" Margin="2,4,2,0" HorizontalAlignment="Center" VerticalAlignment="Top" Foreground="{DynamicResource TextPrimaryBrush}" Text="{Binding DisplayName}" TextAlignment="Center" TextTrimming="CharacterEllipsis" TextWrapping="Wrap" MaxHeight="32" />
+                <Button x:Name="ItemDeleteButton" Grid.Row="0" Tag="DeleteItem" Click="DeleteItem_Click" PreviewMouseDoubleClick="ItemDeleteButton_PreviewMouseDoubleClick" MouseEnter="DeleteButton_MouseEnter" MouseLeave="DeleteButton_MouseLeave" ToolTip="删除" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,2,0,0" Width="20" Height="20" FontSize="11" Foreground="White" Background="#CC1F1F1F" Content="&#xE74D;"><Button.Style><Style TargetType="Button" BasedOn="{StaticResource IconButton}"><Setter Property="Visibility" Value="Collapsed" /><Style.Triggers><DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=IsEditMode}" Value="True"><Setter Property="Visibility" Value="Visible" /></DataTrigger></Style.Triggers></Style></Button.Style></Button>
+            </Grid>
+        </DataTemplate>
+        <DataTemplate x:Key="CardItemTemplate">
+            <Grid Margin="4" PreviewMouseRightButtonDown="Item_PreviewMouseRightButtonDown" ContextMenuOpening="ItemContextMenu_Opening">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                <Image x:Name="ItemIcon" HorizontalAlignment="Left" VerticalAlignment="Center" Source="{Binding IconImage}" Stretch="Uniform" />
+                <TextBlock x:Name="ItemName" Grid.Column="1" Margin="8,0,2,0" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
+            </Grid>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Border Margin="10" Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1" CornerRadius="14">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="26" ShadowDepth="8" Opacity="0.4" Color="#000000" />
+        </Border.Effect>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="38" />
+            </Grid.RowDefinitions>
+
+            <Grid x:Name="LauncherLayout" Grid.Row="0" Margin="24,16,24,12" PreviewMouseLeftButtonDown="LauncherLayout_PreviewMouseLeftButtonDown">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="48" />
+                    <RowDefinition x:Name="GroupRow" Height="0" />
+                    <RowDefinition x:Name="ContentRow" Height="*" />
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition x:Name="GroupColumn" Width="132" />
+                    <ColumnDefinition x:Name="GroupSeparatorColumn" Width="14" />
+                    <ColumnDefinition x:Name="ContentColumn" Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Grid Grid.Row="0" Grid.ColumnSpan="3">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="54" />
+                        <ColumnDefinition Width="8" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Width="48" Height="48" HorizontalAlignment="Left" VerticalAlignment="Center" Background="Transparent" CornerRadius="12" ToolTip="LanFlow">
+                        <Image Source="Assets/LanFlow.png" Stretch="Uniform" />
+                    </Border>
+                    <Border Grid.Column="2" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource SurfaceBorderBrush}" BorderThickness="1" CornerRadius="8">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="SearchBox" Grid.Column="0" Margin="8,0,2,0" Height="38" Background="Transparent" BorderThickness="0" Foreground="{DynamicResource TextPrimaryBrush}" CaretBrush="{DynamicResource TextPrimaryBrush}" FontSize="14" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" KeyDown="SearchBox_KeyDown" />
+                            <TextBlock Grid.Column="1" Margin="0,0,12,0" VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" Text="搜索全部软件" />
+                            <TextBlock Grid.Column="0" Margin="12,0" VerticalAlignment="Center" IsHitTestVisible="False" Foreground="{DynamicResource TextSecondaryBrush}" Text="输入以搜索全部软件…">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <ScrollViewer x:Name="GroupTabsHost" Grid.Row="2" Grid.Column="0" Margin="0,12,0,0" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Hidden">
+                    <StackPanel x:Name="GroupTabs" />
+                </ScrollViewer>
+                <Border x:Name="GroupSeparator" Grid.Row="2" Grid.Column="1" Margin="5,12,5,0" Background="{DynamicResource PanelBorderBrush}" CornerRadius="1" />
+
+                <Grid x:Name="ItemListHost" Grid.Row="2" Grid.Column="2" Margin="0,4,0,0">
+                    <ListBox x:Name="ItemList"
+                             Padding="6"
+                             BorderThickness="0"
+                             Background="Transparent"
+                             ScrollViewer.HorizontalScrollBarVisibility="Hidden"
+                             ScrollViewer.VerticalScrollBarVisibility="Hidden"
+                             ItemsSource="{Binding VisibleItems}"
+                             ItemContainerStyle="{StaticResource LauncherTile}"
+                             ItemTemplate="{StaticResource TileItemTemplate}"
+                             AllowDrop="True"
+                             DragOver="ItemList_DragOver"
+                             Drop="ItemList_Drop"
+                             PreviewMouseMove="ItemList_PreviewMouseMove"
+                             PreviewMouseLeftButtonUp="ItemList_PreviewMouseLeftButtonUp"
+                             MouseDoubleClick="ItemList_MouseDoubleClick"
+                             PreviewMouseLeftButtonDown="ItemList_PreviewMouseLeftButtonDown">
+                        <ListBox.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Width="{Binding ActualWidth, ElementName=ItemList}" />
+                            </ItemsPanelTemplate>
+                        </ListBox.ItemsPanel>
+                    </ListBox>
+                </Grid>
+            </Grid>
+
+            <Border Grid.Row="1" Background="{DynamicResource FooterBrush}" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="0,1,0,0" CornerRadius="0,0,13,13">
+                <Grid Margin="18,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock VerticalAlignment="Center" FontSize="11" Foreground="#8994AA" Text="{Binding StatusText}" />
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Orientation="Horizontal">
+                        <TextBlock x:Name="EditHint" Margin="0,0,12,0" VerticalAlignment="Center" FontSize="11" Foreground="#F1BD68" Visibility="Collapsed" Text="编辑中" />
+                        <Button Style="{StaticResource IconButton}" Click="ToggleEditMode_Click" ToolTip="编辑页面">&#xE70F;</Button>
+                        <Button Style="{StaticResource IconButton}" Click="AddGroup_Click" ToolTip="新建分组">&#xE710;</Button>
+                        <Button Style="{StaticResource IconButton}" Click="OpenSettings_Click" ToolTip="系统设置">&#xE713;</Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+            <Thumb x:Name="ResizeGrip"
+                   Grid.RowSpan="2"
+                   Width="18"
+                   Height="18"
+                   HorizontalAlignment="Right"
+                   VerticalAlignment="Bottom"
+                   Margin="0,0,6,6"
+                   Panel.ZIndex="1"
+                   Cursor="SizeNWSE"
+                   DragDelta="ResizeGrip_DragDelta"
+                   ToolTip="拖动调整窗口大小">
+                <Thumb.Template>
+                    <ControlTemplate TargetType="Thumb">
+                        <Grid Width="18" Height="18" Opacity="0.7">
+                            <Path Data="M 6,16 L 16,6 M 10,16 L 16,10 M 14,16 L 16,14"
+                                  Stroke="{DynamicResource TextSecondaryBrush}"
+                                  StrokeThickness="1.4"
+                                  StrokeStartLineCap="Round"
+                                  StrokeEndLineCap="Round" />
+                        </Grid>
+                    </ControlTemplate>
+                </Thumb.Template>
+            </Thumb>
+            <StackPanel x:Name="EmptyPanel" Grid.RowSpan="2" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False" Visibility="Collapsed">
+                <TextBlock HorizontalAlignment="Center" FontSize="34" Foreground="#57627A" Text="＋" />
+                <TextBlock Margin="0,8,0,0" HorizontalAlignment="Center" FontSize="14" Foreground="{DynamicResource TextSecondaryBrush}" Text="此分组还没有启动项目，可将文件拖放到这里添加" />
+            </StackPanel>
+            <Grid x:Name="NewGroupOverlay" Grid.RowSpan="2" Visibility="Collapsed" Background="#88000000">
+                <Border Width="360" Padding="22" HorizontalAlignment="Center" VerticalAlignment="Center" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource SurfaceBorderBrush}" BorderThickness="1" CornerRadius="12">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="20" ShadowDepth="6" Opacity="0.35" Color="#000000" />
+                    </Border.Effect>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Text="新建分组" />
+                        <StackPanel Grid.Row="1" Margin="0,16,0,0">
+                            <TextBlock Margin="0,0,0,6" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Text="分组名称" />
+                            <TextBox x:Name="NewGroupNameBox" Height="34" Padding="10,0" VerticalContentAlignment="Center" Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource SurfaceBorderBrush}" BorderThickness="1" Foreground="{DynamicResource TextPrimaryBrush}" CaretBrush="{DynamicResource TextPrimaryBrush}" KeyDown="NewGroupNameBox_KeyDown" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="2" Margin="0,20,0,0" HorizontalAlignment="Right" Orientation="Horizontal">
+                            <Button MinWidth="68" Height="30" Margin="0,0,8,0" Background="Transparent" BorderBrush="{DynamicResource SurfaceBorderBrush}" Foreground="{DynamicResource TextPrimaryBrush}" Click="CancelNewGroup_Click" Content="取消" />
+                            <Button MinWidth="68" Height="30" Background="{DynamicResource AccentBrush}" BorderBrush="{DynamicResource AccentBrush}" Foreground="{DynamicResource TextPrimaryBrush}" Click="ConfirmNewGroup_Click" Content="创建" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>
