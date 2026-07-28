@@ -173,3 +173,18 @@ chmod +x LanFlow lanflow.sh
 - **默认热键没生效**：默认 `Alt+Space` 通常被 UOS/Deepin 窗口管理器占用（窗口菜单），`XGrabKey` 被动抓取静默失败；原 `Grab()` 未检查返回值。→ ① 默认热键改为 `Ctrl+Alt+Space`（避开 WM/IME 占用，IME 只占 `Ctrl+Space`）；`ConfigStore.Normalize` 对空热键与旧默认 `Alt+Space` 做一键迁移到新默认。② `HotkeyService.Grab()` 现检查 `XGrabKey` 返回（0=成功），`Register`/`TryRegister` 失败时设置 `LastError`（区分「X11 不可用」「被占用」），`EnableHotkey` 把 `LastError` 写入状态栏提示。UI 示例文案同步改为 `Ctrl+Alt+Space`。
 - `dotnet build -c Release` 0 错误。
 
+### 10.2 仓库分支策略与共享工程抽取（2026-07-28）
+
+目标：以本地内容为基准，整理出可长期维护的 Linux 移植工程，同时保留干净的 Windows 主线路用于后续优化。
+
+- **分支结构（已落地）**
+  - `master` = 纯 WPF 版 v1.3.2（`native/LanFlow.Desktop`），专供 Windows 后续优化；领先 `origin/main` 1 个本地提交（Core 抽取，未推送）。
+  - `linux` = 从 v1.3.2 切出，含完整 Avalonia 移植（`native/LanFlow.Linux`）+ `docs/linux-port-devlog.md`。Linux 移植此前为未跟踪文件，已先提交保底再建分支，杜绝丢失风险。
+- **共享工程 `native/LanFlow.Core`（新建，net8.0 纯 C# 类库，无 UI 依赖）**
+  - 抽离 `AppConfig` / `MainViewModel` / `ConfigStore` 三个平台无关文件（git 识别为从 Desktop/Linux 重命名）。`LauncherService` 平台专属（Desktop 用 `UseShellExecute`、Linux 用 `xdg-open`/`bash`），**不进 Core**，各自保留。
+  - `AppConfig.IconImage` 改为 `object?`（UI 无关）：Desktop 仍塞 `System.Windows.Media.ImageSource`、Linux 仍塞 `Avalonia.Media.IImage`，XAML 绑定不受影响；Desktop 代码隐藏处 `new Image { Source = item.IconImage ?? ... }` 改为 `as ImageSource` 强转以匹配 `Image.Source` 类型。
+  - `ConfigStore` 构造函数接收 `defaultHotkey`：`Desktop` 传 `"Alt+Space"`、`Linux` 传 `"Ctrl+Alt+Space"`，`Normalize` 保留「空热键用默认值 + 旧 `Alt+Space` 迁移到默认值」逻辑，两平台行为均不被破坏。
+  - 统一后的 `LauncherItem` 同时包含 Windows(`.lnk`)/Linux(`.desktop`) 两端的 `Command/Kind/Hotkey/IsEnabled/IsCommand` 字段，`DisplayName` 同时去除两种后缀；`Settings.Clone()`、`ThemeColors.Clone()` 一并纳入 Core。
+- **验证**：`LanFlow.Core`、`LanFlow.Desktop`、`LanFlow.Linux` 均 `dotnet build -c Debug` 0 错误。两分支各自独立提交（master `2130190` / linux `0b6d2b7`），互不污染。
+- **维护提示**：后续在任一分支优化共享逻辑，需手动把改动同步到另一分支的 `LanFlow.Core`（Core 为物理分离副本，非 submodule）。
+
