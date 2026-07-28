@@ -81,7 +81,7 @@ public partial class MainWindow : System.Windows.Window
     public MainWindow()
     {
         InitializeComponent();
-        _viewModel = new MainViewModel(new ConfigStore());
+        _viewModel = new MainViewModel(new ConfigStore("Alt+Space"));
         DataContext = _viewModel;
         ApplySettings();
         ItemList.ItemContainerGenerator.StatusChanged += (_, _) =>
@@ -1158,7 +1158,7 @@ public partial class MainWindow : System.Windows.Window
                 {
                     Children =
                     {
-                        new Image { Source = item.IconImage ?? _shellIconService.GetIcon(item.Path), Width = 34, Height = 34, HorizontalAlignment = HorizontalAlignment.Center },
+                        new Image { Source = (item.IconImage as System.Windows.Media.ImageSource) ?? _shellIconService.GetIcon(item.Path), Width = 34, Height = 34, HorizontalAlignment = HorizontalAlignment.Center },
                         new TextBlock { Text = item.Name, MaxWidth = 66, Margin = new Thickness(0, 5, 0, 0), FontSize = 11, Foreground = Brushes.White, TextAlignment = TextAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis }
                     }
                 }

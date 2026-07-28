@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using LanFlow.Desktop.Models;
 using LanFlow.Desktop.Services;
@@ -33,6 +35,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             OnPropertyChanged();
             OnPropertyChanged(nameof(VisibleItems));
             OnPropertyChanged(nameof(SelectedGroupName));
+            OnPropertyChanged(nameof(InfoText));
         }
     }
 
@@ -61,11 +64,16 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
+    // 状态栏/调试信息，Desktop 与 Linux 共用，具体文案由各自 UI 决定如何展示。
+    public string InfoText =>
+        $"LanFlow · 主题={(Settings.Theme == "light" ? "light" : "dark")} · 分组数={Config.Groups.Count} · 当前分组={SelectedGroupName}";
+
     public IEnumerable<LauncherItem> VisibleItems => string.IsNullOrWhiteSpace(SearchText)
         ? OrderItems(SelectedGroup)
         : Config.Groups.SelectMany(OrderItems).Where(item =>
             item.Name.Contains(SearchText, StringComparison.CurrentCultureIgnoreCase) ||
-            item.Path.Contains(SearchText, StringComparison.CurrentCultureIgnoreCase));
+            item.Path.Contains(SearchText, StringComparison.CurrentCultureIgnoreCase) ||
+            item.Command.Contains(SearchText, StringComparison.CurrentCultureIgnoreCase));
 
     private static IEnumerable<LauncherItem> OrderItems(Group? group) => group is null
         ? []
@@ -76,6 +84,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(Groups));
         OnPropertyChanged(nameof(SelectedGroupName));
         OnPropertyChanged(nameof(VisibleItems));
+        OnPropertyChanged(nameof(InfoText));
     }
 
     public void RefreshVisibleItems() => OnPropertyChanged(nameof(VisibleItems));
@@ -106,6 +115,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         settings.OpenItemsOnSingleClick = source.OpenItemsOnSingleClick;
         OnPropertyChanged(nameof(Settings));
         OnPropertyChanged(nameof(VisibleItems));
+        OnPropertyChanged(nameof(InfoText));
         if (persist) Save();
     }
 

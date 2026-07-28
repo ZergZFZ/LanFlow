@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using System.Text.Json.Serialization;
-using System.Windows.Media;
 
 namespace LanFlow.Desktop.Models;
 
@@ -45,14 +44,32 @@ public sealed class LauncherItem
     [JsonPropertyName("icon")]
     public string? Icon { get; set; }
 
+    [JsonPropertyName("command")]
+    public string Command { get; set; } = string.Empty;
+
+    [JsonPropertyName("kind")]
+    public string Kind { get; set; } = "app";
+
+    [JsonPropertyName("hotkey")]
+    public string Hotkey { get; set; } = string.Empty;
+
+    [JsonPropertyName("isEnabled")]
+    public bool IsEnabled { get; set; } = true;
+
     [JsonPropertyName("useCount")]
     public long UseCount { get; set; }
 
     [JsonIgnore]
-    public string DisplayName => Name.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase) ? Name[..^4] : Name;
+    public string DisplayName => Name.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)
+        ? Name[..^4]
+        : Name.EndsWith(".desktop", StringComparison.OrdinalIgnoreCase) ? Name[..^8] : Name;
 
     [JsonIgnore]
-    public ImageSource? IconImage { get; set; }
+    public bool IsCommand => Kind == "command";
+
+    // 平台无关的图标承载：Desktop 塞 System.Windows.Media.ImageSource，Linux 塞 Avalonia.Media.IImage。
+    [JsonIgnore]
+    public object? IconImage { get; set; }
 }
 
 public sealed class Settings
@@ -119,6 +136,31 @@ public sealed class Settings
 
     [JsonPropertyName("openItemsOnSingleClick")]
     public bool OpenItemsOnSingleClick { get; set; } = true;
+
+    public Settings Clone() => new()
+    {
+        Hotkey = Hotkey,
+        Theme = Theme,
+        ThemeProfile = ThemeProfile,
+        ThemeColors = ThemeColors.Clone(),
+        CustomThemes = CustomThemes.Select(c => new ThemeProfile { Name = c.Name, Colors = c.Colors.Clone() }).ToList(),
+        Opacity = Opacity,
+        LayoutMode = LayoutMode,
+        IconSize = IconSize,
+        CardWidth = CardWidth,
+        CardHeight = CardHeight,
+        CardSize = CardSize,
+        TextSize = TextSize,
+        ItemSpacing = ItemSpacing,
+        RowSpacing = RowSpacing,
+        ContentPadding = ContentPadding,
+        ShowShortcutBadge = ShowShortcutBadge,
+        ShowFullItemName = ShowFullItemName,
+        ShowItemTitle = ShowItemTitle,
+        GroupLayout = GroupLayout,
+        StartWithWindows = StartWithWindows,
+        OpenItemsOnSingleClick = OpenItemsOnSingleClick,
+    };
 }
 
 public sealed class ThemeProfile
@@ -150,5 +192,12 @@ public sealed class ThemeColors
         Panel = "#F6F7FB", PanelBorder = "#CCD2E0", Surface = "#FFFFFF", SurfaceBorder = "#D7DCE8",
         Footer = "#EEF1F7", TextPrimary = "#1E2533", TextSecondary = "#59657A", Accent = "#DCE7FA",
         Hover = "#E9EDF5", IconSurface = "#E2E6ED",
+    };
+
+    public ThemeColors Clone() => new()
+    {
+        Panel = Panel, PanelBorder = PanelBorder, Surface = Surface, SurfaceBorder = SurfaceBorder,
+        Footer = Footer, TextPrimary = TextPrimary, TextSecondary = TextSecondary,
+        Accent = Accent, Hover = Hover, IconSurface = IconSurface,
     };
 }

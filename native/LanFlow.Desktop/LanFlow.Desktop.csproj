@@ -18,4 +18,8 @@
     <Resource Include="Assets\LanFlow.png" />
     <EmbeddedResource Include="Assets\LanFlow.ico" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LanFlow.Core\LanFlow.Core.csproj" />
+  </ItemGroup>
 </Project>
