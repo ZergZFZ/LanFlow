@@ -1,0 +1,106 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="LanFlow.Linux.App"
+             RequestedThemeVariant="Dark">
+    <Application.Resources>
+        <SolidColorBrush x:Key="PanelBrush" Color="#171B28" />
+        <SolidColorBrush x:Key="PanelBorderBrush" Color="#343B50" />
+        <SolidColorBrush x:Key="SurfaceBrush" Color="#22283A" />
+        <SolidColorBrush x:Key="SurfaceBorderBrush" Color="#38425B" />
+        <SolidColorBrush x:Key="FooterBrush" Color="#1D2231" />
+        <SolidColorBrush x:Key="TextPrimaryBrush" Color="#F5F7FC" />
+        <SolidColorBrush x:Key="TextSecondaryBrush" Color="#ADB5C7" />
+        <SolidColorBrush x:Key="AccentBrush" Color="#35405E" />
+        <SolidColorBrush x:Key="HoverBrush" Color="#2B3247" />
+        <SolidColorBrush x:Key="IconSurfaceBrush" Color="#2A3040" />
+        <SolidColorBrush x:Key="BorderBrush" Color="#343B50" />
+    </Application.Resources>
+
+    <Application.Styles>
+        <FluentTheme />
+
+        <Style Selector="Window">
+            <Setter Property="FontFamily" Value="Microsoft YaHei UI, PingFang SC, Noto Sans CJK SC, WenQuanYi Micro Hei, Source Han Sans SC, sans-serif" />
+        </Style>
+
+        <Style Selector="Button">
+            <Setter Property="Background" Value="#FFFFFF" />
+            <Setter Property="Foreground" Value="#1E2533" />
+            <Setter Property="BorderBrush" Value="#D0D6E2" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="14,0" />
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Name="PART_Border"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{TemplateBinding CornerRadius}">
+                        <ContentPresenter Name="PART_ContentPresenter"
+                                          Content="{TemplateBinding Content}"
+                                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          Foreground="{TemplateBinding Foreground}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="Button:pointerover">
+            <Setter Property="Background" Value="#F1F4FA" />
+        </Style>
+        <Style Selector="Button:pressed">
+            <Setter Property="Background" Value="#E6EAF2" />
+        </Style>
+        <Style Selector="Button:disabled">
+            <Setter Property="Opacity" Value="0.5" />
+        </Style>
+
+        <Style Selector="TextBox">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SurfaceBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="Height" Value="34" />
+            <Setter Property="CaretBrush" Value="{DynamicResource TextPrimaryBrush}" />
+            <Setter Property="SelectionBrush" Value="{DynamicResource AccentBrush}" />
+        </Style>
+        <Style Selector="TextBox:focus">
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+        </Style>
+
+        <Style Selector="ToggleButton">
+            <Setter Property="Width" Value="44" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="{DynamicResource SurfaceBorderBrush}" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Grid>
+                        <Border Width="44" Height="24" CornerRadius="12"
+                                Background="{TemplateBinding Background}" />
+                        <Ellipse Width="18" Height="18" Fill="White" Margin="3,0,0,0"
+                                 HorizontalAlignment="Left" VerticalAlignment="Center" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="ToggleButton:checked">
+            <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+        </Style>
+
+        <Style Selector="ComboBox">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SurfaceBorderBrush}" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Height" Value="34" />
+        </Style>
+    </Application.Styles>
+</Application>

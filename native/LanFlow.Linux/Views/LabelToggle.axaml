@@ -1,0 +1,28 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:LanFlow.Desktop.Views"
+             x:Class="LanFlow.Desktop.Views.LabelToggle"
+             x:Name="Root">
+    <Border Background="{DynamicResource SurfaceBrush}"
+            BorderBrush="{DynamicResource SurfaceBorderBrush}"
+            BorderThickness="1"
+            CornerRadius="8"
+            Padding="12,10">
+        <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                <TextBlock Text="{Binding Title, ElementName=Root}"
+                           Foreground="{DynamicResource TextPrimaryBrush}"
+                           FontSize="13" />
+                <TextBlock Text="{Binding Description, ElementName=Root}"
+                           Foreground="{DynamicResource TextSecondaryBrush}"
+                           FontSize="11"
+                           Margin="0,3,0,0"
+                           TextWrapping="Wrap" />
+            </StackPanel>
+            <ToggleButton Grid.Column="1"
+                          IsChecked="{Binding IsChecked, ElementName=Root, Mode=TwoWay}"
+                          VerticalAlignment="Center"
+                          Margin="12,0,0,0" />
+        </Grid>
+    </Border>
+</UserControl>

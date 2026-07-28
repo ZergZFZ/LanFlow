@@ -1,0 +1,97 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:LanFlow.Desktop.Views"
+        x:Class="LanFlow.Desktop.Views.SettingsWindow"
+        Title="设置"
+        Width="540" Height="600"
+        CanResize="True"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource PanelBrush}">
+    <Grid RowDefinitions="*,Auto">
+        <ScrollViewer Grid.Row="0" Padding="18">
+            <StackPanel Spacing="16">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="主题" Foreground="{DynamicResource TextSecondaryBrush}" FontWeight="Bold" />
+                    <ComboBox x:Name="ProfileBox" Width="200" SelectionChanged="OnProfileChanged" />
+                </StackPanel>
+
+                <StackPanel Spacing="8">
+                    <TextBlock Text="外观" Foreground="{DynamicResource TextSecondaryBrush}" FontWeight="Bold" />
+                    <Grid ColumnDefinitions="*,200">
+                        <TextBlock Grid.Column="0" Text="窗口不透明度" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
+                        <Slider Grid.Column="1" x:Name="OpacityBox" Minimum="0.55" Maximum="1" Value="1" />
+                    </Grid>
+                    <Grid ColumnDefinitions="*,200">
+                        <TextBlock Grid.Column="0" Text="布局模式" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
+                        <ComboBox Grid.Column="1" x:Name="LayoutBox">
+                            <ComboBoxItem Content="平铺" />
+                            <ComboBoxItem Content="卡片" />
+                        </ComboBox>
+                    </Grid>
+                    <Grid ColumnDefinitions="*,200">
+                        <TextBlock Grid.Column="0" Text="分组栏位置" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
+                        <ComboBox Grid.Column="1" x:Name="GroupBoxLayoutBox">
+                            <ComboBoxItem Content="左侧" />
+                            <ComboBoxItem Content="顶部" />
+                        </ComboBox>
+                    </Grid>
+                    <Grid ColumnDefinitions="*,200">
+                        <TextBlock Grid.Column="0" Text="图标尺寸" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
+                        <NumericUpDown Grid.Column="1" x:Name="IconSizeBox" Minimum="24" Maximum="72" />
+                    </Grid>
+                    <Grid ColumnDefinitions="*,200">
+                        <TextBlock Grid.Column="0" Text="文字尺寸" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
+                        <NumericUpDown Grid.Column="1" x:Name="TextSizeBox" Minimum="10" Maximum="18" />
+                    </Grid>
+                    <Grid ColumnDefinitions="*,200" x:Name="CardSizeRow">
+                        <TextBlock Grid.Column="0" Text="卡片尺寸" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
+                        <NumericUpDown Grid.Column="1" x:Name="CardSizeBox" Minimum="76" Maximum="160" />
+                    </Grid>
+                    <Grid ColumnDefinitions="*,200">
+                        <TextBlock Grid.Column="0" Text="项目间距" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
+                        <NumericUpDown Grid.Column="1" x:Name="ItemSpacingBox" Minimum="0" Maximum="64" />
+                    </Grid>
+                    <Grid ColumnDefinitions="*,200">
+                        <TextBlock Grid.Column="0" Text="行间距" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
+                        <NumericUpDown Grid.Column="1" x:Name="RowSpacingBox" Minimum="0" Maximum="80" />
+                    </Grid>
+                    <Grid ColumnDefinitions="*,200">
+                        <TextBlock Grid.Column="0" Text="内容边距" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
+                        <NumericUpDown Grid.Column="1" x:Name="ContentPaddingBox" Minimum="6" Maximum="40" />
+                    </Grid>
+                </StackPanel>
+
+                <StackPanel Spacing="8">
+                    <TextBlock Text="行为" Foreground="{DynamicResource TextSecondaryBrush}" FontWeight="Bold" />
+                    <views:LabelToggle x:Name="OpenSingleClickToggle" Title="单击打开项目" Description="关闭则需双击打开" />
+                    <views:LabelToggle x:Name="ShowBadgeToggle" Title="显示快捷键角标" Description="在图标右上角显示快捷键" />
+                    <views:LabelToggle x:Name="ShowFullToggle" Title="显示完整名称" Description="不截断过长名称" />
+                    <views:LabelToggle x:Name="ShowTitleToggle" Title="显示项目标题" Description="在图标下方显示名称" />
+                    <views:LabelToggle x:Name="StartupToggle" Title="开机自启动" Description="登录系统后自动启动 LanFlow" />
+                </StackPanel>
+
+                <StackPanel Spacing="8">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <TextBlock Text="颜色" Foreground="{DynamicResource TextSecondaryBrush}" FontWeight="Bold" VerticalAlignment="Center" />
+                        <Button Content="保存为风格" FontSize="11" Height="26" Click="OnSaveTheme" />
+                    </StackPanel>
+                    <StackPanel x:Name="ColorPanel" Spacing="6" />
+                </StackPanel>
+
+                <StackPanel Spacing="8">
+                    <TextBlock Text="快捷键" Foreground="{DynamicResource TextSecondaryBrush}" FontWeight="Bold" />
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBox Grid.Column="0" x:Name="HotkeyBox" Watermark="例如 Ctrl+Alt+Space" />
+                        <Button Grid.Column="1" Content="应用" Margin="8,0,0,0" Click="OnApplyHotkey" />
+                    </Grid>
+                    <TextBlock x:Name="HotkeyHint" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" />
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10" Margin="18">
+            <Button Content="确定" Width="80" Click="OnConfirm" />
+            <Button Content="取消" Width="80" Click="OnCancel" />
+        </StackPanel>
+    </Grid>
+</Window>

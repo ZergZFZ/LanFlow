@@ -1,0 +1,48 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:LanFlow.Desktop.Views"
+        x:Class="LanFlow.Desktop.Views.EditItemWindow"
+        x:Name="Root"
+        Title="编辑项目"
+        Width="460" Height="380"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource PanelBrush}">
+    <Grid Margin="16" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnDefinitions="*">
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10" Margin="0,0,0,10">
+            <TextBlock Text="类型" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" />
+            <ComboBox x:Name="TypeBox" Width="140" SelectionChanged="OnTypeChanged">
+                <ComboBoxItem Content="应用程序" />
+                <ComboBoxItem Content="命令" />
+            </ComboBox>
+        </StackPanel>
+
+        <StackPanel Grid.Row="1" Margin="0,0,0,10">
+            <TextBlock Text="名称" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,4" />
+            <TextBox x:Name="NameBox" Watermark="显示名称" />
+        </StackPanel>
+
+        <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="0,0,0,10" x:Name="PathRow">
+            <TextBox x:Name="PathBox" Grid.Column="0" Watermark="程序路径或 .desktop 文件" />
+            <Button Grid.Column="1" Content="浏览" Margin="8,0,0,0" Click="OnBrowsePath" />
+        </Grid>
+
+        <TextBox Grid.Row="3" x:Name="CommandBox" Watermark="要执行的命令，例如：gedit ~/note.txt" Margin="0,0,0,10" IsVisible="False" />
+
+        <Grid Grid.Row="4" ColumnDefinitions="*,Auto" Margin="0,0,0,10" x:Name="IconRow">
+            <TextBox x:Name="IconBox" Grid.Column="0" Watermark="自定义图标路径（可选）" />
+            <Button Grid.Column="1" Content="图标" Margin="8,0,0,0" Click="OnBrowseIcon" />
+        </Grid>
+
+        <StackPanel Grid.Row="5" Orientation="Horizontal" Spacing="10" Margin="0,0,0,10">
+            <TextBlock Text="快捷键" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" />
+            <TextBox x:Name="HotkeyBox" Width="160" Watermark="例如 Alt+Space" />
+        </StackPanel>
+
+        <CheckBox Grid.Row="6" x:Name="EnabledBox" Content="启用该项目" Margin="0,0,0,10" />
+
+        <StackPanel Grid.Row="7" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+            <Button Content="确定" Width="80" Click="OnConfirm" />
+            <Button Content="取消" Width="80" Click="OnCancel" />
+        </StackPanel>
+    </Grid>
+</Window>
