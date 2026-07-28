@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Interop;
 using System.Windows.Threading;
 using Forms = System.Windows.Forms;
 
@@ -14,8 +16,14 @@ public partial class App : Application
 
     internal bool IsExiting { get; private set; }
 
+    // 被系统开机拉起（带 --silent 参数）时为 true：仅驻留托盘，不显示主窗口。
+    public static bool IsSilentStart { get; private set; }
+
     public App()
     {
+        // 托盘类应用：仅在显式退出时关闭进程，避免静默启动时因无可见窗口而直接退出。
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
         // 兜底：任何线程上的未处理异常都先写日志再提示，避免“快速异常检测失败 / 进程立即终止”的静默崩溃。
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
         {
@@ -48,6 +56,23 @@ public partial class App : Application
         {
             base.OnStartup(e);
             CreateTrayIcon();
+
+            IsSilentStart = e.Args.Any(a =>
+                string.Equals(a, "--silent", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(a, "/silent", StringComparison.OrdinalIgnoreCase));
+
+            var mainWindow = new MainWindow();
+            MainWindow = mainWindow;
+            if (IsSilentStart)
+            {
+                // 静默启动：仅创建窗口句柄（用于注册全局热键、DWM 阴影挂钩与托盘交互），
+                // 不调用 Show()，避免开机后主窗口弹出占据屏幕。
+                new WindowInteropHelper(mainWindow).EnsureHandle();
+            }
+            else
+            {
+                mainWindow.Show();
+            }
         }
         catch (Exception ex)
         {
@@ -147,6 +172,11 @@ public partial class App : Application
         if (MainWindow is null)
         {
             return;
+        }
+
+        if (MainWindow is MainWindow mw)
+        {
+            mw.EnsureIconsLoaded();
         }
 
         MainWindow.Show();

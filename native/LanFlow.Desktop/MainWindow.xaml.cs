@@ -54,6 +54,7 @@ public partial class MainWindow : System.Windows.Window
     private readonly ShortcutService _shortcutService = new();
     private Settings? _settingsBeforePreview;
     private bool _isEditMode;
+    private bool _iconsLoaded;
 
     public static readonly DependencyProperty IsEditModeProperty =
         DependencyProperty.Register(
@@ -91,7 +92,8 @@ public partial class MainWindow : System.Windows.Window
                 Dispatcher.BeginInvoke(DispatcherPriority.Render, ApplyItemMetrics);
             }
         };
-        LoadIcons();
+        // 静默启动时不立即取图标，等窗口真正显示时再加载，加快开机驻留速度。
+        EnsureIconsLoaded();
         RefreshGroupTabs();
         RefreshEmptyState();
 
@@ -535,6 +537,14 @@ public partial class MainWindow : System.Windows.Window
         {
             item.IconImage = _shellIconService.GetIcon(item.Path);
         }
+    }
+
+    // 仅在首次需要显示时加载图标：静默启动可跳过，缩短开机驻留时间。
+    public void EnsureIconsLoaded()
+    {
+        if (_iconsLoaded) return;
+        _iconsLoaded = true;
+        LoadIcons();
     }
 
     private void ItemList_MouseDoubleClick(object sender, MouseButtonEventArgs e)

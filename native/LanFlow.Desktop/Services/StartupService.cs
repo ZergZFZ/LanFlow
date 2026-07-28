@@ -24,7 +24,7 @@ public sealed class StartupService
             {
                 var executable = Environment.ProcessPath;
                 if (string.IsNullOrWhiteSpace(executable)) return false;
-                key.SetValue(ValueName, $"\"{executable}\"");
+                key.SetValue(ValueName, $"\"{executable}\" --silent");
             }
             else
             {
