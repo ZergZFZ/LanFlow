@@ -14,9 +14,11 @@ public sealed class ConfigStore
 
     private readonly string _configDirectory;
     private readonly string _configPath;
+    private readonly string _defaultHotkey;
 
-    public ConfigStore()
+    public ConfigStore(string defaultHotkey = "Ctrl+Alt+Space")
     {
+        _defaultHotkey = defaultHotkey;
         _configDirectory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "LanFlow");
@@ -45,19 +47,19 @@ public sealed class ConfigStore
         }
     }
 
-    private static AppConfig Normalize(AppConfig config)
+    private AppConfig Normalize(AppConfig config)
     {
         config.Settings ??= new Settings();
         var settings = config.Settings;
-        // 空热键用新默认值；若仍是旧默认 Alt+Space（常被 Deepin/UOS 窗口管理器占用），
-        // 一键迁移到 Ctrl+Alt+Space，避免全局热键静默失效。
+        // 空热键用平台默认值；若仍是旧默认 Alt+Space（常被窗口管理器占用），
+        // 一键迁移到平台默认，避免全局热键静默失效。
         if (string.IsNullOrWhiteSpace(settings.Hotkey))
         {
-            settings.Hotkey = "Ctrl+Alt+Space";
+            settings.Hotkey = _defaultHotkey;
         }
         else if (settings.Hotkey.Equals("Alt+Space", StringComparison.OrdinalIgnoreCase))
         {
-            settings.Hotkey = "Ctrl+Alt+Space";
+            settings.Hotkey = _defaultHotkey;
         }
         settings.Theme = settings.Theme == "light" ? "light" : "dark";
         settings.ThemeProfile = string.IsNullOrWhiteSpace(settings.ThemeProfile)

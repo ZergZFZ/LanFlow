@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using LanFlow.Desktop.Models;
 using LanFlow.Desktop.Services;
@@ -62,8 +64,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
+    // 状态栏/调试信息，Desktop 与 Linux 共用，具体文案由各自 UI 决定如何展示。
     public string InfoText =>
-        $"LanFlow · Linux · 主题={(Settings.Theme == "light" ? "light" : "dark")} · 分组数={Config.Groups.Count} · 当前分组={SelectedGroupName}";
+        $"LanFlow · 主题={(Settings.Theme == "light" ? "light" : "dark")} · 分组数={Config.Groups.Count} · 当前分组={SelectedGroupName}";
 
     public IEnumerable<LauncherItem> VisibleItems => string.IsNullOrWhiteSpace(SearchText)
         ? OrderItems(SelectedGroup)

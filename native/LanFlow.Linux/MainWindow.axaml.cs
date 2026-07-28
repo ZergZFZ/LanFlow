@@ -31,7 +31,7 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        _viewModel = new MainViewModel(new ConfigStore());
+        _viewModel = new MainViewModel(new ConfigStore("Ctrl+Alt+Space"));
         DataContext = _viewModel;
 
         // 关键：让窗口以 32 位 ARGB 视觉创建，运行时调整 Opacity 才不会触发 X11 窗口重建而卡死

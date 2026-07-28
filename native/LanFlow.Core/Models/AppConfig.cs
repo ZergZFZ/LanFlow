@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using System.Text.Json.Serialization;
-using Avalonia.Media;
 
 namespace LanFlow.Desktop.Models;
 
@@ -61,38 +60,82 @@ public sealed class LauncherItem
     public long UseCount { get; set; }
 
     [JsonIgnore]
-    public string DisplayName => Name.EndsWith(".desktop", StringComparison.OrdinalIgnoreCase) ? Name[..^8] : Name;
+    public string DisplayName => Name.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase)
+        ? Name[..^4]
+        : Name.EndsWith(".desktop", StringComparison.OrdinalIgnoreCase) ? Name[..^8] : Name;
 
     [JsonIgnore]
     public bool IsCommand => Kind == "command";
 
+    // 平台无关的图标承载：Desktop 塞 System.Windows.Media.ImageSource，Linux 塞 Avalonia.Media.IImage。
     [JsonIgnore]
-    public IImage? IconImage { get; set; }
+    public object? IconImage { get; set; }
 }
 
 public sealed class Settings
 {
-    [JsonPropertyName("hotkey")] public string Hotkey { get; set; } = "Ctrl+Alt+Space";
-    [JsonPropertyName("theme")] public string Theme { get; set; } = "dark";
-    [JsonPropertyName("themeProfile")] public string ThemeProfile { get; set; } = "深色";
-    [JsonPropertyName("themeColors")] public ThemeColors ThemeColors { get; set; } = ThemeColors.Dark();
-    [JsonPropertyName("customThemes")] public List<ThemeProfile> CustomThemes { get; set; } = [];
-    [JsonPropertyName("opacity")] public double Opacity { get; set; } = 1.0;
-    [JsonPropertyName("layoutMode")] public string LayoutMode { get; set; } = "tile";
-    [JsonPropertyName("iconSize")] public double IconSize { get; set; } = 44;
-    [JsonPropertyName("cardWidth")] public double CardWidth { get; set; } = 108;
-    [JsonPropertyName("cardHeight")] public double CardHeight { get; set; } = 96;
-    [JsonPropertyName("cardSize")] public double CardSize { get; set; } = 108;
-    [JsonPropertyName("textSize")] public double TextSize { get; set; } = 12;
-    [JsonPropertyName("itemSpacing")] public double ItemSpacing { get; set; } = 8;
-    [JsonPropertyName("rowSpacing")] public double RowSpacing { get; set; } = 8;
-    [JsonPropertyName("contentPadding")] public double ContentPadding { get; set; } = 16;
-    [JsonPropertyName("showShortcutBadge")] public bool ShowShortcutBadge { get; set; }
-    [JsonPropertyName("showFullItemName")] public bool ShowFullItemName { get; set; }
-    [JsonPropertyName("showItemTitle")] public bool ShowItemTitle { get; set; } = true;
-    [JsonPropertyName("groupLayout")] public string GroupLayout { get; set; } = "left";
-    [JsonPropertyName("startWithWindows")] public bool StartWithWindows { get; set; }
-    [JsonPropertyName("openItemsOnSingleClick")] public bool OpenItemsOnSingleClick { get; set; } = true;
+    [JsonPropertyName("hotkey")]
+    public string Hotkey { get; set; } = "Alt+Space";
+
+    [JsonPropertyName("theme")]
+    public string Theme { get; set; } = "dark";
+
+    [JsonPropertyName("themeProfile")]
+    public string ThemeProfile { get; set; } = "深色";
+
+    [JsonPropertyName("themeColors")]
+    public ThemeColors ThemeColors { get; set; } = ThemeColors.Dark();
+
+    [JsonPropertyName("customThemes")]
+    public List<ThemeProfile> CustomThemes { get; set; } = [];
+
+    [JsonPropertyName("opacity")]
+    public double Opacity { get; set; } = 1.0;
+
+    [JsonPropertyName("layoutMode")]
+    public string LayoutMode { get; set; } = "tile";
+
+    [JsonPropertyName("iconSize")]
+    public double IconSize { get; set; } = 44;
+
+    [JsonPropertyName("cardWidth")]
+    public double CardWidth { get; set; } = 108;
+
+    [JsonPropertyName("cardHeight")]
+    public double CardHeight { get; set; } = 96;
+
+    [JsonPropertyName("cardSize")]
+    public double CardSize { get; set; } = 108;
+
+    [JsonPropertyName("textSize")]
+    public double TextSize { get; set; } = 12;
+
+    [JsonPropertyName("itemSpacing")]
+    public double ItemSpacing { get; set; } = 8;
+
+    [JsonPropertyName("rowSpacing")]
+    public double RowSpacing { get; set; } = 8;
+
+    [JsonPropertyName("contentPadding")]
+    public double ContentPadding { get; set; } = 16;
+
+    [JsonPropertyName("showShortcutBadge")]
+    public bool ShowShortcutBadge { get; set; }
+
+    [JsonPropertyName("showFullItemName")]
+    public bool ShowFullItemName { get; set; }
+
+    [JsonPropertyName("showItemTitle")]
+    public bool ShowItemTitle { get; set; } = true;
+
+    [JsonPropertyName("groupLayout")]
+    public string GroupLayout { get; set; } = "left";
+
+    [JsonPropertyName("startWithWindows")]
+    public bool StartWithWindows { get; set; }
+
+    [JsonPropertyName("openItemsOnSingleClick")]
+    public bool OpenItemsOnSingleClick { get; set; } = true;
 
     public Settings Clone() => new()
     {
