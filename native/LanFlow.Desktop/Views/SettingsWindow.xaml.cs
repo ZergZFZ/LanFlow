@@ -1,6 +1,8 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -13,6 +15,7 @@ public partial class SettingsWindow : Window
 {
     private readonly Settings _working;
     private bool _isLoading = true;
+    private readonly UpdateService _updateService = new();
 
     public SettingsWindow(Settings settings)
     {
@@ -118,8 +121,8 @@ public partial class SettingsWindow : Window
     {
         if (_isLoading) return;
         var c = _working.ThemeColors;
-        c.Panel = PanelColorBox.Text; c.PanelBorder = PanelBorderColorBox.Text; c.Surface = SurfaceColorBox.Text;
-        c.SurfaceBorder = SurfaceBorderColorBox.Text; c.Footer = FooterColorBox.Text;
+        c.Panel = PanelColorBox.Text; c.PanelBorder = PanelBorderColorBox.Text;
+        c.Surface = SurfaceColorBox.Text; c.SurfaceBorder = SurfaceBorderColorBox.Text; c.Footer = FooterColorBox.Text;
         c.TextPrimary = PrimaryTextColorBox.Text; c.TextSecondary = SecondaryTextColorBox.Text; c.Accent = AccentColorBox.Text;
         c.Hover = HoverColorBox.Text; c.IconSurface = IconSurfaceColorBox.Text;
         _working.Theme = "custom";
@@ -169,6 +172,43 @@ public partial class SettingsWindow : Window
             // 忽略无法打开浏览器的情况
         }
         e.Handled = true;
+    }
+
+    private async void CheckUpdate_Click(object sender, RoutedEventArgs e)
+    {
+        CheckUpdateButton.IsEnabled = false;
+        CheckUpdateButton.Content = "检查更新";
+        UpdateStatusText.Text = "正在检查更新…";
+        try
+        {
+            var info = await _updateService.CheckAsync();
+            if (!info.HasUpdate)
+            {
+                CheckUpdateButton.IsEnabled = true;
+                UpdateStatusText.Text = string.IsNullOrEmpty(info.LatestVersion)
+                    ? "暂时无法获取更新信息，请稍后重试。"
+                    : $"已是最新版本 v{info.CurrentVersion}";
+                return;
+            }
+
+            if (info.DownloadUrl is null || info.AssetName is null)
+            {
+                CheckUpdateButton.IsEnabled = true;
+                UpdateStatusText.Text = $"发现新版本 v{info.LatestVersion}，但未找到匹配（{UpdateService.CurrentChannel}）的下载文件，请前往开源地址手动下载。";
+                return;
+            }
+
+            UpdateStatusText.Text = $"发现新版本 v{info.LatestVersion}，正在下载并更新…";
+            var progress = new Progress<double>(p => UpdateStatusText.Text = $"正在下载更新… {p:P0}");
+            await _updateService.DownloadAndApplyAsync(info.DownloadUrl, info.AssetName, progress, CancellationToken.None);
+            // 不会返回：DownloadAndApplyAsync 内部会结束当前进程并重启。
+        }
+        catch (Exception ex)
+        {
+            CheckUpdateButton.IsEnabled = true;
+            CheckUpdateButton.Content = "检查更新";
+            UpdateStatusText.Text = "更新失败：" + ex.Message + "（可前往开源地址手动下载）";
+        }
     }
 
     private static IEnumerable<T> FindVisualChildren<T>(DependencyObject parent) where T : DependencyObject
