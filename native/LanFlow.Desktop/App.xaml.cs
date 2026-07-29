@@ -71,7 +71,10 @@ public partial class App : Application
             }
             else
             {
-                mainWindow.Show();
+                // 延迟到 Dispatcher 消息循环启动后再 Show。
+                // 规避极少数情况下（尤其由更新脚本 start 拉起时）在 OnStartup 内直接 Show()
+                // 触发的 “VisualTarget 的根 Visual 不能具有父级” 异常（WPF 视觉树时序竞争）。
+                Dispatcher.BeginInvoke(DispatcherPriority.Loaded, (Action)(() => ShowMainWindowSafe(mainWindow)));
             }
         }
         catch (Exception ex)
@@ -84,6 +87,8 @@ public partial class App : Application
                 "LanFlow 启动失败",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
+            // 启动已失败，主动退出，避免残留为无主窗口的托盘僵尸进程。
+            Shutdown();
         }
     }
 
@@ -184,4 +189,52 @@ public partial class App : Application
         MainWindow.Activate();
         MainWindow.Focus();
     }
+
+    // 首次显示主窗口：规避 “根 Visual 不能具有父级” 的偶发时序竞争。
+    // 若 Show 失败，重建窗口重试一次；仍失败则记录日志并退出，避免僵尸进程。
+    private void ShowMainWindowSafe(MainWindow mainWindow)
+    {
+        try
+        {
+            mainWindow.Show();
+            return;
+        }
+        catch (Exception ex) when (IsRootVisualParentError(ex))
+        {
+            WriteCrashLog("OnStartup.Show", ex);
+        }
+        catch (Exception ex)
+        {
+            WriteCrashLog("OnStartup.Show", ex);
+            MessageBox.Show(
+                "LanFlow 启动失败：" + ex.Message + "\n\n详细信息已写入：" + CrashLogPath,
+                "LanFlow 启动失败",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            Shutdown();
+            return;
+        }
+
+        // 罕见：根 Visual 已被误挂载，重建窗口重试一次。
+        try
+        {
+            var fresh = new MainWindow();
+            MainWindow = fresh;
+            fresh.Show();
+        }
+        catch (Exception ex)
+        {
+            WriteCrashLog("OnStartup.ShowRetry", ex);
+            MessageBox.Show(
+                "LanFlow 启动失败：" + ex.Message + "\n\n详细信息已写入：" + CrashLogPath,
+                "LanFlow 启动失败",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            Shutdown();
+        }
+    }
+
+    private static bool IsRootVisualParentError(Exception ex) =>
+        ex is ArgumentException &&
+        (ex.Message.Contains("父级") || ex.Message.Contains("parent", StringComparison.OrdinalIgnoreCase));
 }
