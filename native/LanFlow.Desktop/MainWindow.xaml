@@ -175,9 +175,40 @@
         </DataTemplate>
         <DataTemplate x:Key="CardItemTemplate">
             <Grid Margin="4" PreviewMouseRightButtonDown="Item_PreviewMouseRightButtonDown" ContextMenuOpening="ItemContextMenu_Opening">
-                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
                 <Image x:Name="ItemIcon" HorizontalAlignment="Left" VerticalAlignment="Center" Source="{Binding IconImage}" Stretch="Uniform" />
-                <TextBlock x:Name="ItemName" Grid.Column="1" Margin="8,0,2,0" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
+                <TextBlock x:Name="ItemName" Grid.Column="1" Margin="8,0,6,0" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
+                <Button x:Name="ItemDeleteButton"
+                        Grid.Column="2"
+                        Tag="DeleteItem"
+                        Width="20"
+                        Height="20"
+                        FontSize="11"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Foreground="White"
+                        Background="#CC1F1F1F"
+                        Content="&#xE74D;"
+                        ToolTip="删除"
+                        Click="DeleteItem_Click"
+                        PreviewMouseDoubleClick="ItemDeleteButton_PreviewMouseDoubleClick"
+                        MouseEnter="DeleteButton_MouseEnter"
+                        MouseLeave="DeleteButton_MouseLeave">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource IconButton}">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=IsEditMode}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
             </Grid>
         </DataTemplate>
     </Window.Resources>

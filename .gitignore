@@ -46,3 +46,6 @@ vite.config.d.ts
 
 # Vite cache (web version removed)
 /.vite/
+
+# Local build and release artifacts
+/artifacts/

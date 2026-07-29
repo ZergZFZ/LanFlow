@@ -197,7 +197,7 @@ public sealed class ImportManifestServiceTests : IDisposable
     }
 
     [Fact]
-    public void LoadPreview_ClassifiesExistingDuplicatesInvalidPathsAndCrossGroupReuse()
+    public void LoadPreview_ClassifiesExistingDuplicatesInvalidPathsAndCrossGroupDuplicates()
     {
         var existingFile = CreateFile("Existing Tool.exe");
         var newFile = CreateFile("新 工具.exe");
@@ -238,7 +238,7 @@ public sealed class ImportManifestServiceTests : IDisposable
             {
               "name": "另一个场景",
               "items": [
-                { "name": "允许复用", "path": {{Json(existingFile)}} }
+                { "name": "跨组重复", "path": {{Json(existingFile)}} }
               ]
             }
           ]
@@ -258,14 +258,119 @@ public sealed class ImportManifestServiceTests : IDisposable
         Assert.Equal(ImportItemStatus.InvalidPath, tools.Items[4].Status);
         Assert.Equal(ImportItemStatus.InvalidPath, tools.Items[5].Status);
         Assert.Equal(ImportItemStatus.ManifestDuplicate, tools.Items[6].Status);
-        Assert.Equal(ImportItemStatus.NewItem, Assert.Single(preview.Groups[1].Items).Status);
-        Assert.Equal(3, preview.SelectedItemCount);
-        Assert.Equal(3, preview.DuplicateItemCount);
+        Assert.Equal(ImportItemStatus.ManifestDuplicate, Assert.Single(preview.Groups[1].Items).Status);
+        Assert.Equal(2, preview.SelectedItemCount);
+        Assert.Equal(4, preview.DuplicateItemCount);
         Assert.Equal(2, preview.InvalidItemCount);
         Assert.Single(config.Groups);
         Assert.Single(config.Groups[0].Items);
     }
 
+    [Fact]
+    public void LoadPreview_WhenShortcutResolvesToPathInAnotherGroup_MarksItExisting()
+    {
+        var executable = CreateFile("shortcut-target.exe");
+        var shortcut = CreateFile("shortcut-source.lnk");
+        var config = new AppConfig
+        {
+            Groups =
+            [
+                new Group
+                {
+                    Name = "AI",
+                    Items = [new LauncherItem { Name = "真实目标", Path = executable }],
+                },
+            ],
+        };
+        var manifestPath = WriteManifest($$"""
+        { "schemaVersion": "1.0", "groups": [
+          { "name": "桌面快捷方式（测试）", "items": [
+            { "name": "桌面快捷方式", "path": {{Json(shortcut)}} }
+          ] }
+        ] }
+        """);
+        var service = new ImportManifestService(new FakeShortcutResolver(shortcut, executable));
+
+        var preview = service.LoadPreview(manifestPath, config);
+
+        var item = Assert.Single(Assert.Single(preview.Groups).Items);
+        Assert.Equal(Path.GetFullPath(executable), item.ResolvedPath);
+        Assert.Equal(ImportItemStatus.Existing, item.Status);
+        Assert.False(item.CanSelect);
+    }
+    [Fact]
+    public void LoadPreview_WhenPathAlreadyExistsInAnotherGroup_MarksItExistingAndDoesNotCreateDuplicateGroup()
+    {
+        var existingFile = CreateFile("global-existing.exe");
+        var config = new AppConfig
+        {
+            Groups =
+            [
+                new Group
+                {
+                    Name = "AI",
+                    Items = [new LauncherItem { Name = "已有项目", Path = existingFile }],
+                },
+            ],
+        };
+        var manifestPath = WriteManifest($$"""
+        { "schemaVersion": "1.0", "groups": [
+          { "name": "桌面快捷方式（测试）", "items": [
+            { "name": "同一程序的桌面快捷方式", "path": {{Json(existingFile)}} }
+          ] }
+        ] }
+        """);
+
+        var service = new ImportManifestService();
+        var preview = service.LoadPreview(manifestPath, config);
+        var item = Assert.Single(Assert.Single(preview.Groups).Items);
+
+        Assert.Equal(ImportGroupStatus.NewGroup, preview.Groups[0].Status);
+        Assert.Equal(ImportItemStatus.Existing, item.Status);
+        Assert.False(item.CanSelect);
+
+        var result = service.BuildMerge(config, preview);
+
+        Assert.Equal(0, result.ImportedItemCount);
+        Assert.Equal(0, result.ImportedGroupCount);
+        Assert.Equal(1, result.SkippedItemCount);
+        Assert.Single(result.Config.Groups);
+        Assert.Single(result.Config.Groups[0].Items);
+    }
+
+    [Fact]
+    public void BuildMerge_WhenPathWasAddedToAnotherGroupAfterPreview_SkipsItGlobally()
+    {
+        var executable = CreateFile("global-race.exe");
+        var manifestPath = WriteManifest($$"""
+        { "schemaVersion": "1.0", "groups": [
+          { "name": "桌面快捷方式（测试）", "items": [
+            { "name": "新项目", "path": {{Json(executable)}} }
+          ] }
+        ] }
+        """);
+        var service = new ImportManifestService();
+        var preview = service.LoadPreview(manifestPath, new AppConfig());
+        var currentConfig = new AppConfig
+        {
+            Groups =
+            [
+                new Group
+                {
+                    Name = "开发工具",
+                    Items = [new LauncherItem { Name = "已在别处分组", Path = executable }],
+                },
+            ],
+        };
+
+        var result = service.BuildMerge(currentConfig, preview);
+
+        Assert.Equal(0, result.ImportedItemCount);
+        Assert.Equal(0, result.ImportedGroupCount);
+        Assert.Equal(1, result.SkippedItemCount);
+        Assert.Single(result.Config.Groups);
+        Assert.Single(result.Config.Groups[0].Items);
+    }
     [Fact]
     public void LoadPreview_WithMissingUncPath_ClassifiesItAsInvalidPath()
     {

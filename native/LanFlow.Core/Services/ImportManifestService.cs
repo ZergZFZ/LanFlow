@@ -43,6 +43,12 @@ public sealed class ImportManifestService
         var merged = CloneConfig(currentConfig);
         var importedGroups = 0;
         var importedItems = 0;
+        // 一个可启动目标在配置中只保留一份；导入目标分组只决定放置位置，不能绕过全局去重。
+        var existingPathKeys = merged.Groups
+            .SelectMany(group => group.Items)
+            .Select(item => NormalizeExistingPath(item.Path))
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .ToHashSet(PathComparer);
 
         foreach (var previewGroup in preview.Groups)
         {
@@ -83,16 +89,13 @@ public sealed class ImportManifestService
                 createdGroup = true;
             }
 
-            var targetPathKeys = targetGroup.Items
-                .Select(item => NormalizeExistingPath(item.Path))
-                .ToHashSet(PathComparer);
             foreach (var item in selectedItems)
             {
                 string normalizedPath;
                 try
                 {
                     normalizedPath = NormalizePath(item.ResolvedPath);
-                    if ((!File.Exists(normalizedPath) && !Directory.Exists(normalizedPath)) || !targetPathKeys.Add(normalizedPath))
+                    if ((!File.Exists(normalizedPath) && !Directory.Exists(normalizedPath)) || !existingPathKeys.Add(normalizedPath))
                     {
                         continue;
                     }
@@ -295,7 +298,12 @@ public sealed class ImportManifestService
             .GroupBy(group => group.Name.Trim(), NameComparer)
             .ToDictionary(group => group.Key, group => group.ToList(), NameComparer);
         var previewGroups = new Dictionary<string, ImportGroupPreview>(NameComparer);
-        var manifestPathsByGroup = new Dictionary<string, HashSet<string>>(NameComparer);
+        var manifestPathKeys = new HashSet<string>(PathComparer);
+        var existingPathKeys = currentConfig.Groups
+            .SelectMany(group => group.Items)
+            .Select(item => NormalizeExistingPath(item.Path))
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .ToHashSet(PathComparer);
 
         foreach (var manifestGroup in manifest.Groups)
         {
@@ -314,7 +322,6 @@ public sealed class ImportManifestService
                     ExistingGroupId = existingGroup?.Id,
                 };
                 previewGroups.Add(manifestGroup.Name, previewGroup);
-                manifestPathsByGroup.Add(manifestGroup.Name, new HashSet<string>(PathComparer));
                 preview.AttachGroup(previewGroup);
             }
             else
@@ -322,14 +329,6 @@ public sealed class ImportManifestService
                 previewGroup.ManifestOccurrenceCount++;
                 previewGroup.NotifyOccurrenceChanged();
             }
-
-            var existingPathKeys = previewGroup.ExistingGroupId is null
-                ? new HashSet<string>(PathComparer)
-                : currentConfig.Groups
-                    .First(group => string.Equals(group.Id, previewGroup.ExistingGroupId, StringComparison.Ordinal))
-                    .Items.Select(item => NormalizeExistingPath(item.Path))
-                    .ToHashSet(PathComparer);
-            var manifestPathKeys = manifestPathsByGroup[manifestGroup.Name];
 
             foreach (var manifestItem in manifestGroup.Items)
             {
@@ -373,7 +372,7 @@ public sealed class ImportManifestService
                 OriginalPath = manifestItem.Path,
                 ResolvedPath = normalizedPath,
                 Status = ImportItemStatus.ManifestDuplicate,
-                ErrorMessage = "同一目标分组中已出现相同路径。",
+                ErrorMessage = "导入清单中已出现相同路径。",
             };
         }
 
@@ -385,7 +384,7 @@ public sealed class ImportManifestService
                 OriginalPath = manifestItem.Path,
                 ResolvedPath = normalizedPath,
                 Status = ImportItemStatus.Existing,
-                ErrorMessage = "当前分组中已存在相同路径。",
+                ErrorMessage = "现有配置中已存在相同路径。",
             };
         }
 
