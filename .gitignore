@@ -49,3 +49,13 @@ vite.config.d.ts
 
 # Local build and release artifacts
 /artifacts/
+
+# Local runtime configuration and credentials
+.env
+.env.*
+config.json
+config.json.tmp
+launcher.json
+appsettings.json
+appsettings.*.json
+secrets.json
