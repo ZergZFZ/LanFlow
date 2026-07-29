@@ -1,10 +1,17 @@
 using System.IO;
+using System.Text;
 using System.Text.Json;
 using LanFlow.Desktop.Models;
 
 namespace LanFlow.Desktop.Services;
 
-public sealed class ConfigStore
+public interface IConfigStore
+{
+    AppConfig Load();
+    void Save(AppConfig config);
+}
+
+public sealed class ConfigStore : IConfigStore
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -16,14 +23,16 @@ public sealed class ConfigStore
     private readonly string _configPath;
     private readonly string _defaultHotkey;
 
-    public ConfigStore(string defaultHotkey = "Ctrl+Alt+Space")
+    public ConfigStore(string defaultHotkey = "Ctrl+Alt+Space", string? configDirectory = null)
     {
         _defaultHotkey = defaultHotkey;
-        _configDirectory = Path.Combine(
+        _configDirectory = configDirectory ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "LanFlow");
         _configPath = Path.Combine(_configDirectory, "config.json");
     }
+
+    public string ConfigPath => _configPath;
 
     public AppConfig Load()
     {
@@ -83,11 +92,27 @@ public sealed class ConfigStore
 
     public void Save(AppConfig config)
     {
+        ArgumentNullException.ThrowIfNull(config);
         Directory.CreateDirectory(_configDirectory);
         var temporaryPath = _configPath + ".tmp";
         var json = JsonSerializer.Serialize(config, SerializerOptions);
 
-        File.WriteAllText(temporaryPath, json);
-        File.Move(temporaryPath, _configPath, true);
+        try
+        {
+            File.WriteAllText(temporaryPath, json, new UTF8Encoding(false));
+            File.Move(temporaryPath, _configPath, true);
+        }
+        catch
+        {
+            try
+            {
+                if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
+            }
+            catch
+            {
+                // 清理失败不覆盖原始保存异常。
+            }
+            throw;
+        }
     }
 }

@@ -1,4 +1,4 @@
-﻿<Window x:Class="LanFlow.Desktop.MainWindow"
+<Window x:Class="LanFlow.Desktop.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="LanFlow"
@@ -275,6 +275,7 @@
                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Orientation="Horizontal">
                         <TextBlock x:Name="EditHint" Margin="0,0,12,0" VerticalAlignment="Center" FontSize="11" Foreground="#F1BD68" Visibility="Collapsed" Text="编辑中" />
                         <Button Style="{StaticResource IconButton}" Click="ToggleEditMode_Click" ToolTip="编辑页面">&#xE70F;</Button>
+                        <Button Style="{StaticResource IconButton}" Click="ImportManifest_Click" ToolTip="导入清单">&#xE8B5;</Button>
                         <Button Style="{StaticResource IconButton}" Click="AddGroup_Click" ToolTip="新建分组">&#xE710;</Button>
                         <Button Style="{StaticResource IconButton}" Click="OpenSettings_Click" ToolTip="系统设置">&#xE713;</Button>
                     </StackPanel>

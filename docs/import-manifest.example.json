@@ -1,0 +1,28 @@
+{
+  "$schema": "https://raw.githubusercontent.com/ZergZFZ/LanFlow/main/docs/import-manifest.schema.json",
+  "schemaVersion": "1.0",
+  "groups": [
+    {
+      "name": "开发工具",
+      "items": [
+        {
+          "name": "Visual Studio Code",
+          "path": "C:\\Users\\Example\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe"
+        },
+        {
+          "name": "Windows Terminal",
+          "path": "C:\\Program Files\\WindowsApps\\Microsoft.WindowsTerminal.exe"
+        }
+      ]
+    },
+    {
+      "name": "设计工具",
+      "items": [
+        {
+          "name": "Figma",
+          "path": "C:\\Users\\Example\\AppData\\Local\\Figma\\Figma.exe"
+        }
+      ]
+    }
+  ]
+}
