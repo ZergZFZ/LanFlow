@@ -7,6 +7,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
+using System.Threading.Tasks;
 using LanFlow.Desktop.Views;
 using LanFlow.Desktop.Models;
 using LanFlow.Desktop.Services;
@@ -674,24 +675,29 @@ public partial class MainWindow : System.Windows.Window
 
     private void LaunchSelectedItem_Click(object sender, RoutedEventArgs e) => LaunchSelectedItem();
 
-    private void LaunchSelectedItem()
+    // 启动目标程序走 Windows Shell（UseShellExecute=true）。部分目标（Store 应用、需 COM
+    // 激活、文件关联触发慢处理器的程序）会让 ShellExecuteEx 在调用线程上阻塞 2-3 秒。若直接跑在
+    // UI 线程会导致面板卡死，因此先立即隐藏面板，再把实际启动放到后台线程，UI 全程不阻塞。
+    private async void LaunchSelectedItem()
     {
         if (ItemList.SelectedItem is not LauncherItem item)
         {
             return;
         }
 
+        // 先隐藏面板，避免 ShellExecute 阻塞期间界面卡顿。
+        if (!_isEditMode)
+        {
+            Hide();
+        }
+
         try
         {
-            _launcherService.Open(item.Path);
+            await Task.Run(() => _launcherService.Open(item.Path));
             item.UseCount++;
             _viewModel.RefreshVisibleItems();
             _viewModel.Save();
             _viewModel.StatusText = $"已启动：{item.Name}";
-            if (!_isEditMode)
-            {
-                Hide();
-            }
         }
         catch (Exception exception)
         {
