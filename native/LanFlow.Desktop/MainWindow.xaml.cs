@@ -127,7 +127,6 @@ public partial class MainWindow : System.Windows.Window
                 _iconCoordinator.CancelPending();
             }
         };
-        RefreshGroupTabs();
         RefreshEmptyState();
 
         SourceInitialized += (_, _) =>
@@ -405,7 +404,6 @@ public partial class MainWindow : System.Windows.Window
                     // 提交已完成；后续仅同步界面，不再把刷新异常误报为保存失败或允许重复提交。
                     _viewModel.RefreshGroups();
                     _viewModel.RefreshVisibleItems();
-                    RefreshGroupTabs();
                     RefreshEmptyState();
                 }
                 catch (Exception ex)
@@ -437,7 +435,7 @@ public partial class MainWindow : System.Windows.Window
         var wasEditMode = _isEditMode;
         SetEditMode(true, "设置中：可同时查看和管理启动项");
         var settingsWindow = new SettingsWindow(_viewModel.Settings) { Owner = this };
-        settingsWindow.PreviewChanged += settings => { _viewModel.ApplyAppearance(settings, persist: false); ApplySettings(); RefreshGroupTabs(); };
+        settingsWindow.PreviewChanged += settings => { _viewModel.ApplyAppearance(settings, persist: false); ApplySettings(); };
 
         if (settingsWindow.ShowDialog() == true)
         {
@@ -458,7 +456,6 @@ public partial class MainWindow : System.Windows.Window
         }
 
         ApplySettings();
-        RefreshGroupTabs();
         SetEditMode(settingsWindow.DialogResult == true ? false : wasEditMode, settingsWindow.DialogResult == true ? "设置已保存" : null);
         _settingsBeforePreview = null;
     }
@@ -511,17 +508,15 @@ public partial class MainWindow : System.Windows.Window
             _ = LoadVisibleIconsAsync();
         });
 
-        var groupsAtTop = settings.GroupLayout == "top";
-        GroupColumn.Width = groupsAtTop ? new GridLength(0) : new GridLength(132);
+        var groupsAtTop = settings.GroupLayout == SettingsOptionValues.GroupTop;
+        GroupColumn.Width = groupsAtTop ? new GridLength(0) : new GridLength(settings.GroupNavigationWidth);
         GroupSeparatorColumn.Width = groupsAtTop ? new GridLength(0) : new GridLength(14);
-        GroupRow.Height = groupsAtTop ? new GridLength(42) : new GridLength(0);
-        Grid.SetRow(GroupTabsHost, groupsAtTop ? 1 : 2);
-        Grid.SetColumn(GroupTabsHost, 0);
-        Grid.SetColumnSpan(GroupTabsHost, groupsAtTop ? 3 : 1);
-        GroupTabsHost.Margin = groupsAtTop ? new Thickness(0, 8, 0, 0) : new Thickness(0, 12, 0, 0);
-        GroupTabsHost.VerticalScrollBarVisibility = ScrollBarVisibility.Hidden;
-        GroupTabsHost.HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden;
-        GroupTabs.Orientation = groupsAtTop ? Orientation.Horizontal : Orientation.Vertical;
+        GroupRow.Height = groupsAtTop ? new GridLength(settings.GroupLabelSize + 8) : new GridLength(0);
+        Grid.SetRow(GroupNavigation, groupsAtTop ? 1 : 2);
+        Grid.SetColumn(GroupNavigation, 0);
+        Grid.SetColumnSpan(GroupNavigation, groupsAtTop ? 3 : 1);
+        GroupNavigation.Width = groupsAtTop ? double.NaN : settings.GroupNavigationWidth;
+        GroupNavigation.Margin = groupsAtTop ? new Thickness(0, 8, 0, 0) : new Thickness(0, 12, 0, 0);
         GroupSeparator.Visibility = Visibility.Collapsed;
         Grid.SetRow(ItemListHost, 2);
         Grid.SetColumn(ItemListHost, groupsAtTop ? 0 : 2);
@@ -835,75 +830,58 @@ public partial class MainWindow : System.Windows.Window
         _viewModel.StatusText = statusText ?? (enabled ? "编辑模式：右键管理项目和分组" : "就绪");
     }
 
-    private void RefreshGroupTabs()
+    private void GroupNavigation_GroupInvoked(object sender, GroupNavigationEventArgs e) =>
+        SelectGroup(e.Group);
+
+    private void GroupNavigation_GroupHovered(object sender, GroupNavigationEventArgs e)
     {
-        GroupTabs.Children.Clear();
-        foreach (var group in _viewModel.Config.Groups)
+        if (!_isEditMode && e.Group != _viewModel.SelectedGroup)
         {
-            var button = new Button
-            {
-                Content = group.Name,
-                Style = (Style)FindResource("TabButton"),
-                Tag = group,
-                FontWeight = group == _viewModel.SelectedGroup ? FontWeights.SemiBold : FontWeights.Normal,
-                Foreground = group == _viewModel.SelectedGroup
-                    ? (System.Windows.Media.Brush)FindResource("TextPrimaryBrush")
-                    : (System.Windows.Media.Brush)FindResource("TextSecondaryBrush"),
-                Background = group == _viewModel.SelectedGroup
-                    ? (System.Windows.Media.Brush)FindResource("AccentBrush")
-                    : System.Windows.Media.Brushes.Transparent,
-            };
-            button.Click += GroupTab_Click;
-            button.MouseEnter += GroupTab_MouseEnter;
-            button.AllowDrop = true;
-            button.DragOver += GroupTab_DragOver;
-            button.Drop += GroupTab_Drop;
-            button.ContextMenu = BuildGroupContextMenu(group);
-            button.PreviewMouseRightButtonDown += Item_PreviewMouseRightButtonDown;
-            button.ContextMenuOpening += (_, _) =>
-            {
-                _isContextMenuActivationPending = false;
-                _openContextMenus++;
-            };
-            GroupTabs.Children.Add(button);
+            SelectGroup(e.Group);
         }
     }
 
-    private void GroupTab_Click(object sender, RoutedEventArgs e)
+    private void GroupNavigation_GroupDragHovered(object sender, GroupNavigationEventArgs e)
     {
-        if (sender is Button { Tag: Group group })
+        if (_isEditMode && e.Group != _viewModel.SelectedGroup)
         {
-            SelectGroup(group);
+            SelectGroup(e.Group);
         }
     }
 
-    private void GroupTab_MouseEnter(object sender, MouseEventArgs e)
+    private void GroupNavigation_GroupDropped(object sender, GroupNavigationEventArgs e)
     {
-        if (sender is Button { Tag: Group group } && !_isEditMode && group != _viewModel.SelectedGroup)
-        {
-            SelectGroup(group);
-        }
-    }
-
-    private void GroupTab_DragOver(object sender, DragEventArgs e)
-    {
-        e.Effects = _isEditMode && e.Data.GetDataPresent(typeof(LauncherItem))
-            ? DragDropEffects.Move
-            : DragDropEffects.None;
-        e.Handled = true;
-    }
-
-    private void GroupTab_Drop(object sender, DragEventArgs e)
-    {
-        if (!_isEditMode || sender is not Button { Tag: Group targetGroup } ||
-            e.Data.GetData(typeof(LauncherItem)) is not LauncherItem item || _dragSourceGroup is null)
+        if (!_isEditMode || _draggedItem is null || _dragSourceGroup is null)
         {
             return;
         }
 
-        MoveItem(item, _dragSourceGroup, targetGroup, targetGroup.Items.Count);
+        MoveItem(_draggedItem, _dragSourceGroup, e.Group, e.Group.Items.Count);
         _draggedItem = null;
         _dragSourceGroup = null;
+    }
+
+    private void GroupNavigation_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _isContextMenuActivationPending = true;
+        Dispatcher.BeginInvoke(
+            DispatcherPriority.ApplicationIdle,
+            () => _isContextMenuActivationPending = false);
+
+        if (FindAncestor<ListBoxItem>(e.OriginalSource as DependencyObject) is not { DataContext: Group group } container)
+        {
+            return;
+        }
+
+        var contextMenu = BuildGroupContextMenu(group);
+        contextMenu.Opened += GroupContextMenu_Opened;
+        container.ContextMenu = contextMenu;
+    }
+
+    private void GroupContextMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        _isContextMenuActivationPending = false;
+        _openContextMenus++;
     }
 
     private void SelectGroup(Group group)
@@ -919,7 +897,6 @@ public partial class MainWindow : System.Windows.Window
 
         _viewModel.SelectedGroup = group;
         _viewModel.SearchText = string.Empty;
-        RefreshGroupTabs();
         _uiPerformanceTrace.SelectionAcknowledged(group.Id);
         RefreshEmptyState();
 
@@ -1253,7 +1230,6 @@ public partial class MainWindow : System.Windows.Window
         _viewModel.Config.Groups.Add(group);
         _viewModel.SelectedGroup = group;
         _viewModel.Save();
-        RefreshGroupTabs();
         RefreshEmptyState();
         CloseNewGroupOverlay();
     }
@@ -1283,7 +1259,6 @@ public partial class MainWindow : System.Windows.Window
         group.Name = dialog.GroupName;
         _viewModel.RefreshGroups();
         _viewModel.Save();
-        RefreshGroupTabs();
     }
 
     private void DeleteSelectedGroup_Click(object sender, RoutedEventArgs e)
@@ -1306,7 +1281,6 @@ public partial class MainWindow : System.Windows.Window
         _viewModel.SelectedGroup = _viewModel.Config.Groups.ElementAtOrDefault(Math.Min(index, _viewModel.Config.Groups.Count - 1));
         _viewModel.RefreshGroups();
         _viewModel.Save();
-        RefreshGroupTabs();
         RefreshEmptyState();
     }
 

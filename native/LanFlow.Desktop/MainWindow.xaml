@@ -333,9 +333,22 @@
                     </Border>
                 </Grid>
 
-                <ScrollViewer x:Name="GroupTabsHost" Grid.Row="2" Grid.Column="0" Margin="0,12,0,0" VerticalScrollBarVisibility="Hidden" HorizontalScrollBarVisibility="Hidden">
-                    <StackPanel x:Name="GroupTabs" />
-                </ScrollViewer>
+                <controls:GroupNavigationControl
+                    x:Name="GroupNavigation"
+                    Grid.Row="2"
+                    Grid.Column="0"
+                    Margin="0,12,0,0"
+                    ItemsSource="{Binding Groups}"
+                    SelectedItem="{Binding SelectedGroup, Mode=TwoWay}"
+                    GroupLayout="{Binding Settings.GroupLayout}"
+                    GroupLabelSize="{Binding Settings.GroupLabelSize}"
+                    GroupLabelFontSize="{Binding Settings.GroupLabelFontSize}"
+                    GroupNavigationWidth="{Binding Settings.GroupNavigationWidth}"
+                    GroupInvoked="GroupNavigation_GroupInvoked"
+                    GroupHovered="GroupNavigation_GroupHovered"
+                    GroupDragHovered="GroupNavigation_GroupDragHovered"
+                    GroupDropped="GroupNavigation_GroupDropped"
+                    PreviewMouseRightButtonDown="GroupNavigation_PreviewMouseRightButtonDown" />
                 <Border x:Name="GroupSeparator" Grid.Row="2" Grid.Column="1" Margin="5,12,5,0" Background="{DynamicResource PanelBorderBrush}" CornerRadius="1" />
 
                 <Grid x:Name="ItemListHost" Grid.Row="2" Grid.Column="2" Margin="0,4,0,0">
