@@ -1,6 +1,7 @@
 using System.Collections.Specialized;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -63,6 +64,8 @@ public partial class MainWindow : System.Windows.Window
     private readonly UiPerformanceTrace _uiPerformanceTrace = new();
     private readonly ThemeResourceUpdater _themeResourceUpdater = new();
     private readonly WindowAppearanceController _windowAppearanceController = new();
+    private readonly AnimationPreferenceService _animationPreferenceService = new();
+    private readonly ContentTransitionController _contentTransitionController = new();
     private readonly ShortcutService _shortcutService = new();
     private readonly ImportManifestService _importManifestService;
     private Settings? _settingsBeforePreview;
@@ -73,6 +76,7 @@ public partial class MainWindow : System.Windows.Window
     private VirtualizingWrapPanel? _wrapPanel;
     private ScrollViewer? _itemScrollViewer;
     private bool _isClosed;
+    private CancellationTokenSource? _contentTransitionCancellation;
     private string _activeLayoutMode = "tile";
     private string? _lastSelectedItemId;
 
@@ -116,6 +120,7 @@ public partial class MainWindow : System.Windows.Window
             TimeSpan.FromMilliseconds(200));
         _groupSwitchCoordinator.SelectedGroupId = _viewModel.SelectedGroup?.Id;
         _groupSwitchCoordinator.SwitchRequested += GroupSwitchCoordinator_SwitchRequested;
+        _animationPreferenceService.PreferenceChanged += AnimationPreferenceService_PreferenceChanged;
         DataContext = _viewModel;
         ((INotifyCollectionChanged)_viewModel.VisibleItems).CollectionChanged += VisibleItems_CollectionChanged;
         _activeLayoutMode = NormalizeLayoutMode(_viewModel.Settings.LayoutMode);
@@ -163,6 +168,10 @@ public partial class MainWindow : System.Windows.Window
         ItemList.SizeChanged -= ItemList_SizeChanged;
         DetachVirtualizingPanel();
         _groupSwitchCoordinator.SwitchRequested -= GroupSwitchCoordinator_SwitchRequested;
+        _animationPreferenceService.PreferenceChanged -= AnimationPreferenceService_PreferenceChanged;
+        _contentTransitionCancellation?.Cancel();
+        _contentTransitionCancellation?.Dispose();
+        _animationPreferenceService.Dispose();
         _groupSwitchCoordinator.Dispose();
         _iconCoordinator.Dispose();
         _hotkeyService.Dispose();
@@ -929,6 +938,8 @@ public partial class MainWindow : System.Windows.Window
             return;
         }
 
+        bool cacheHit = _viewStateSnapshots.ContainsKey((group.Id, _activeLayoutMode));
+        _contentTransitionCancellation?.Cancel();
         SaveCurrentViewState(_activeLayoutMode);
         _uiPerformanceTrace.GroupSwitchStarted(group.Id);
 
@@ -938,20 +949,58 @@ public partial class MainWindow : System.Windows.Window
         _uiPerformanceTrace.SelectionAcknowledged(group.Id);
         RefreshEmptyState();
 
-        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+        Dispatcher.BeginInvoke(
+            DispatcherPriority.Loaded,
+            () => _ = CompleteGroupSwitchAsync(group, generation, cacheHit));
+    }
+
+    private async Task CompleteGroupSwitchAsync(Group group, long generation, bool cacheHit)
+    {
+        if (generation != _latestGroupSwitchGeneration ||
+            !string.Equals(_viewModel.SelectedGroup?.Id, group.Id, StringComparison.Ordinal))
         {
-            if (generation != _latestGroupSwitchGeneration ||
-                !string.Equals(_viewModel.SelectedGroup?.Id, group.Id, StringComparison.Ordinal))
+            return;
+        }
+
+        AttachVirtualizingPanel();
+        RestoreViewState(reuseOffset: true);
+        _uiPerformanceTrace.ContentStable(
+            group.Id,
+            _wrapPanel?.RealizedIndices.Count ?? ItemList.Items.Count);
+
+        _contentTransitionCancellation?.Dispose();
+        var cancellation = new CancellationTokenSource();
+        _contentTransitionCancellation = cancellation;
+        bool animate = ContentTransitionController.ShouldAnimate(
+            _viewModel.Settings.AnimationMode,
+            _animationPreferenceService.AreAnimationsEnabled,
+            cacheHit);
+
+        try
+        {
+            await _contentTransitionController.PlayAsync(ItemListHost, animate, cancellation.Token);
+        }
+        finally
+        {
+            if (ReferenceEquals(_contentTransitionCancellation, cancellation))
             {
-                return;
+                _contentTransitionCancellation = null;
             }
 
-            AttachVirtualizingPanel();
-            RestoreViewState(reuseOffset: true);
-            _uiPerformanceTrace.ContentStable(
-                group.Id,
-                _wrapPanel?.RealizedIndices.Count ?? ItemList.Items.Count);
-        });
+            cancellation.Dispose();
+        }
+    }
+
+    private void AnimationPreferenceService_PreferenceChanged(object? sender, EventArgs e)
+    {
+        if (string.Equals(
+                _viewModel.Settings.AnimationMode,
+                SettingsOptionValues.AnimationSystem,
+                StringComparison.Ordinal) &&
+            !_animationPreferenceService.AreAnimationsEnabled)
+        {
+            _contentTransitionCancellation?.Cancel();
+        }
     }
 
     private void RefreshEmptyState()

@@ -372,6 +372,9 @@
                 <Border x:Name="GroupSeparator" Grid.Row="2" Grid.Column="1" Margin="5,12,5,0" Background="{DynamicResource WindowBorderBrush}" CornerRadius="1" />
 
                 <Grid x:Name="ItemListHost" Grid.Row="2" Grid.Column="2" Margin="0,4,0,0">
+                    <Grid.RenderTransform>
+                        <TranslateTransform />
+                    </Grid.RenderTransform>
                     <ListBox x:Name="ItemList"
                              Padding="6"
                              BorderThickness="0"
