@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using LanFlow.Desktop.Models;
 
@@ -50,6 +50,49 @@ public sealed class SettingsWindowViewModel : INotifyPropertyChanged
         ArgumentNullException.ThrowIfNull(mutation);
         Session.Update(mutation);
         NotifySettingsStateChanged();
+    }
+
+    public void UpdateContinuousSetting(string settingKey, double value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(settingKey);
+        Update(settings =>
+        {
+            switch (settingKey)
+            {
+                case "iconSize": settings.IconSize = value; break;
+                case "cardWidth": settings.CardWidth = value; break;
+                case "cardHeight": settings.CardHeight = value; break;
+                case "textSize": settings.TextSize = value; break;
+                case "itemSpacing": settings.ItemSpacing = value; break;
+                case "rowSpacing": settings.RowSpacing = value; break;
+                case "contentPadding": settings.ContentPadding = value; break;
+                case "groupLabelSize": settings.GroupLabelSize = value; break;
+                case "groupLabelFontSize": settings.GroupLabelFontSize = value; break;
+                case "groupNavigationWidth": settings.GroupNavigationWidth = value; break;
+                default: throw new ArgumentOutOfRangeException(nameof(settingKey), settingKey, null);
+            }
+        });
+    }
+
+    public void UpdateCurrentOpacity(double opacity)
+    {
+        var normalized = Math.Clamp(opacity, 0.55, 1.0);
+        Update(settings =>
+        {
+            if (string.Equals(
+                    settings.TransparencyMode,
+                    SettingsOptionValues.TransparencyWholeWindow,
+                    StringComparison.Ordinal))
+            {
+                settings.WholeWindowOpacity = normalized;
+            }
+            else
+            {
+                settings.LayeredOpacity = normalized;
+            }
+
+            settings.Opacity = normalized;
+        });
     }
 
     public Settings Apply() => Working.Clone();

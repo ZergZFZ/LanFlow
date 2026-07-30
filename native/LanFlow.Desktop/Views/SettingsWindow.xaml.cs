@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Media;
 using System.Windows.Input;
 using LanFlow.Desktop.Models;
 using LanFlow.Desktop.Presentation;
@@ -16,8 +19,12 @@ public partial class SettingsWindow : Window
 {
     private readonly SettingsWindowViewModel _viewModel;
     private readonly Action? _clearIconCache;
+    private static readonly TimeSpan PreviewInterval = TimeSpan.FromMilliseconds(33);
     private readonly UpdateService _updateService = new();
+    private readonly Dictionary<string, PreviewThrottle<double>> _previewThrottles = [];
     private bool _isLoading = true;
+
+    public UnsavedCloseDecision CloseDecision { get; private set; } = UnsavedCloseDecision.KeepEditing;
 
     public SettingsWindow(SettingsPreviewSession session, Action? clearIconCache = null)
     {
@@ -26,12 +33,65 @@ public partial class SettingsWindow : Window
 
         InitializeComponent();
         DataContext = _viewModel;
+        InitializePreviewThrottles();
         LoadControls();
         ShowCategory(_viewModel.SelectedCategory.Id);
         _isLoading = false;
     }
 
     private Settings Working => _viewModel.Working;
+
+    public void FlushPendingPreviews() => FlushPreviewThrottles();
+
+    public void DisposePreviewThrottles()
+    {
+        foreach (var throttle in _previewThrottles.Values)
+        {
+            throttle.Dispose();
+        }
+        _previewThrottles.Clear();
+    }
+
+    private void InitializePreviewThrottles()
+    {
+        var scheduler = new DispatcherTimerScheduler(Dispatcher);
+        foreach (var settingKey in new[]
+                 {
+                     "iconSize",
+                     "cardWidth",
+                     "cardHeight",
+                     "textSize",
+                     "itemSpacing",
+                     "rowSpacing",
+                     "contentPadding",
+                     "groupLabelSize",
+                     "groupLabelFontSize",
+                     "groupNavigationWidth",
+                 })
+        {
+            _previewThrottles.Add(
+                settingKey,
+                new PreviewThrottle<double>(
+                    PreviewInterval,
+                    scheduler,
+                    value => _viewModel.UpdateContinuousSetting(settingKey, value)));
+        }
+
+        _previewThrottles.Add(
+            "opacity",
+            new PreviewThrottle<double>(
+                PreviewInterval,
+                scheduler,
+                _viewModel.UpdateCurrentOpacity));
+    }
+
+    private void FlushPreviewThrottles()
+    {
+        foreach (var throttle in _previewThrottles.Values)
+        {
+            throttle.Flush();
+        }
+    }
 
     private void LoadControls()
     {
@@ -105,6 +165,7 @@ public partial class SettingsWindow : Window
     private void CategoryList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (CategoryList.SelectedItem is not SettingsCategory category) return;
+        FlushPreviewThrottles();
         _viewModel.SelectedCategory = category;
         ShowCategory(category.Id);
     }
@@ -254,6 +315,7 @@ public partial class SettingsWindow : Window
 
     private void TransparencyMode_Changed(object sender, RoutedEventArgs e)
     {
+        FlushPreviewThrottles();
         UpdateTaggedOption(sender, value =>
         {
             _viewModel.Update(settings =>
@@ -277,24 +339,10 @@ public partial class SettingsWindow : Window
     private void NumericSettingSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (_isLoading || sender is not Slider { Tag: string settingKey } slider) return;
-        var value = slider.Value;
-
-        _viewModel.Update(settings =>
+        if (_previewThrottles.TryGetValue(settingKey, out var throttle))
         {
-            switch (settingKey)
-            {
-                case "iconSize": settings.IconSize = value; break;
-                case "cardWidth": settings.CardWidth = value; break;
-                case "cardHeight": settings.CardHeight = value; break;
-                case "textSize": settings.TextSize = value; break;
-                case "itemSpacing": settings.ItemSpacing = value; break;
-                case "rowSpacing": settings.RowSpacing = value; break;
-                case "contentPadding": settings.ContentPadding = value; break;
-                case "groupLabelSize": settings.GroupLabelSize = value; break;
-                case "groupLabelFontSize": settings.GroupLabelFontSize = value; break;
-                case "groupNavigationWidth": settings.GroupNavigationWidth = value; break;
-            }
-        });
+            throttle.Push(slider.Value);
+        }
         RefreshValueLabels();
     }
 
@@ -318,25 +366,17 @@ public partial class SettingsWindow : Window
     private void OpacitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (_isLoading) return;
-        UpdateCurrentOpacity(OpacitySlider.Value);
+        _previewThrottles["opacity"].Push(OpacitySlider.Value);
         RefreshValueLabels();
     }
 
-    private void UpdateCurrentOpacity(double opacity)
+    private void ContinuousSlider_DragCompleted(object sender, DragCompletedEventArgs e)
     {
-        var normalized = Math.Clamp(opacity, 0.55, 1.0);
-        _viewModel.Update(settings =>
+        if (sender is Slider { Tag: string settingKey } &&
+            _previewThrottles.TryGetValue(settingKey, out var throttle))
         {
-            if (settings.TransparencyMode == SettingsOptionValues.TransparencyWholeWindow)
-            {
-                settings.WholeWindowOpacity = normalized;
-            }
-            else
-            {
-                settings.LayeredOpacity = normalized;
-            }
-            settings.Opacity = normalized;
-        });
+            throttle.Flush();
+        }
     }
 
     private void OpacityPercentBox_LostFocus(object sender, RoutedEventArgs e) => ApplyOpacityPercentText();
@@ -359,12 +399,14 @@ public partial class SettingsWindow : Window
             return;
         }
 
-        UpdateCurrentOpacity(Math.Clamp(percent, 55, 100) / 100.0);
+        _previewThrottles["opacity"].Flush();
+        _viewModel.UpdateCurrentOpacity(Math.Clamp(percent, 55, 100) / 100.0);
         RefreshOpacityControls();
     }
 
     private void ResetOpacity_Click(object sender, RoutedEventArgs e)
     {
+        _previewThrottles["opacity"].Flush();
         _viewModel.ResetCurrentOpacity();
         RefreshOpacityControls();
     }
@@ -380,17 +422,17 @@ public partial class SettingsWindow : Window
 
     private void RefreshValueLabels()
     {
-        IconSizeValue.Text = $"{Working.IconSize:0} DIP";
-        CardWidthValue.Text = $"{Working.CardWidth:0} DIP";
-        CardHeightValue.Text = $"{Working.CardHeight:0} DIP";
-        TextSizeValue.Text = $"{Working.TextSize:0} pt";
-        ItemSpacingValue.Text = $"{Working.ItemSpacing:0} DIP";
-        RowSpacingValue.Text = $"{Working.RowSpacing:0} DIP";
-        ContentPaddingValue.Text = $"{Working.ContentPadding:0} DIP";
-        GroupLabelSizeValue.Text = $"{Working.GroupLabelSize:0} DIP";
-        GroupLabelFontSizeValue.Text = $"{Working.GroupLabelFontSize:0} pt";
-        GroupNavigationWidthValue.Text = $"{Working.GroupNavigationWidth:0} DIP";
-        OpacityPercentBox.Text = (_viewModel.CurrentOpacity * 100).ToString("0", CultureInfo.CurrentCulture);
+        IconSizeValue.Text = $"{IconSizeSlider.Value:0} DIP";
+        CardWidthValue.Text = $"{CardWidthSlider.Value:0} DIP";
+        CardHeightValue.Text = $"{CardHeightSlider.Value:0} DIP";
+        TextSizeValue.Text = $"{TextSizeSlider.Value:0} pt";
+        ItemSpacingValue.Text = $"{ItemSpacingSlider.Value:0} DIP";
+        RowSpacingValue.Text = $"{RowSpacingSlider.Value:0} DIP";
+        ContentPaddingValue.Text = $"{ContentPaddingSlider.Value:0} DIP";
+        GroupLabelSizeValue.Text = $"{GroupLabelSizeSlider.Value:0} DIP";
+        GroupLabelFontSizeValue.Text = $"{GroupLabelFontSizeSlider.Value:0} pt";
+        GroupNavigationWidthValue.Text = $"{GroupNavigationWidthSlider.Value:0} DIP";
+        OpacityPercentBox.Text = (OpacitySlider.Value * 100).ToString("0", CultureInfo.CurrentCulture);
     }
 
     private void HotkeyBox_KeyDown(object sender, KeyEventArgs e)
@@ -427,8 +469,130 @@ public partial class SettingsWindow : Window
 
     private void Save_Click(object sender, RoutedEventArgs e)
     {
+        FlushPreviewThrottles();
         _ = _viewModel.Apply();
+        CloseDecision = UnsavedCloseDecision.ApplyAndClose;
         DialogResult = true;
+    }
+
+    private void Window_Closing(object? sender, CancelEventArgs e)
+    {
+        FlushPreviewThrottles();
+        if (CloseDecision != UnsavedCloseDecision.KeepEditing)
+        {
+            return;
+        }
+
+        if (!_viewModel.HasChanges)
+        {
+            CloseDecision = UnsavedCloseDecision.Discard;
+            return;
+        }
+
+        var decision = ShowUnsavedChangesDialog();
+        if (decision == UnsavedCloseDecision.KeepEditing)
+        {
+            e.Cancel = true;
+            return;
+        }
+
+        CloseDecision = decision;
+    }
+
+    private UnsavedCloseDecision ShowUnsavedChangesDialog()
+    {
+        var decision = UnsavedCloseDecision.KeepEditing;
+        var dialog = new Window
+        {
+            Title = "\u672A\u4FDD\u5B58\u7684\u8BBE\u7F6E",
+            Owner = this,
+            Width = 440,
+            Height = 210,
+            MinWidth = 440,
+            MinHeight = 210,
+            MaxWidth = 440,
+            MaxHeight = 210,
+            ResizeMode = ResizeMode.NoResize,
+            ShowInTaskbar = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+        };
+        dialog.SetResourceReference(BackgroundProperty, "WindowBackgroundBrush");
+        dialog.SetResourceReference(ForegroundProperty, "PrimaryTextBrush");
+
+        var title = new TextBlock
+        {
+            Text = "\u8981\u4FDD\u5B58\u8FD9\u4E9B\u8BBE\u7F6E\u66F4\u6539\u5417\uFF1F",
+            FontSize = 17,
+            FontWeight = FontWeights.SemiBold,
+        };
+        var description = new TextBlock
+        {
+            Margin = new Thickness(0, 8, 0, 20),
+            Text = "\u5E94\u7528\u5E76\u5173\u95ED\u4F1A\u5199\u5165\u914D\u7F6E\uFF1B\u653E\u5F03\u66F4\u6539\u4F1A\u6062\u590D\u6253\u5F00\u8BBE\u7F6E\u524D\u7684\u72B6\u6001\u3002",
+            TextWrapping = TextWrapping.Wrap,
+        };
+        description.SetResourceReference(TextBlock.ForegroundProperty, "SecondaryTextBrush");
+
+        var keepEditingButton = CreateCloseDecisionButton("\u7EE7\u7EED\u7F16\u8F91", isDefault: false);
+        keepEditingButton.IsCancel = true;
+        keepEditingButton.Click += (_, _) =>
+        {
+            decision = UnsavedCloseDecision.KeepEditing;
+            dialog.DialogResult = false;
+        };
+
+        var discardButton = CreateCloseDecisionButton("\u653E\u5F03\u66F4\u6539", isDefault: false);
+        discardButton.Click += (_, _) =>
+        {
+            decision = UnsavedCloseDecision.Discard;
+            dialog.DialogResult = true;
+        };
+
+        var applyButton = CreateCloseDecisionButton("\u5E94\u7528\u5E76\u5173\u95ED", isDefault: true);
+        applyButton.Click += (_, _) =>
+        {
+            decision = UnsavedCloseDecision.ApplyAndClose;
+            dialog.DialogResult = true;
+        };
+
+        var buttons = new StackPanel
+        {
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Orientation = Orientation.Horizontal,
+        };
+        buttons.Children.Add(keepEditingButton);
+        buttons.Children.Add(discardButton);
+        buttons.Children.Add(applyButton);
+
+        var content = new Grid { Margin = new Thickness(24) };
+        content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        content.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        content.Children.Add(title);
+        Grid.SetRow(description, 1);
+        content.Children.Add(description);
+        Grid.SetRow(buttons, 2);
+        content.Children.Add(buttons);
+        dialog.Content = content;
+        _ = dialog.ShowDialog();
+        return decision;
+    }
+
+    private Button CreateCloseDecisionButton(string content, bool isDefault)
+    {
+        var button = new Button
+        {
+            Content = content,
+            MinWidth = 96,
+            Height = 34,
+            Margin = new Thickness(8, 0, 0, 0),
+            IsDefault = isDefault,
+        };
+        if (isDefault && TryFindResource("PrimaryButtonStyle") is Style primaryStyle)
+        {
+            button.Style = primaryStyle;
+        }
+        return button;
     }
 
     private void AboutLink_RequestNavigate(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)

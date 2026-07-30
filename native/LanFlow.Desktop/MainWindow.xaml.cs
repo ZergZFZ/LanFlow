@@ -458,12 +458,16 @@ public partial class MainWindow : System.Windows.Window
         var wasEditMode = _isEditMode;
         SetEditMode(true, "设置中：可同时查看和管理启动项");
         var settingsWindow = new SettingsWindow(session, _iconService.Clear) { Owner = this };
-
-        var accepted = settingsWindow.ShowDialog() == true;
-        SettingsPreviewTransaction.Complete(
-            session,
-            accepted,
-            result =>
+        var accepted = false;
+        try
+        {
+            _ = settingsWindow.ShowDialog();
+            var closeDecision = settingsWindow.CloseDecision;
+            var completed = SettingsCloseFlow.TryComplete(
+                session,
+                closeDecision,
+                settingsWindow.FlushPendingPreviews,
+                result =>
             {
                 if (!_hotkeyService.TryRegister(result.Hotkey))
                 {
@@ -481,9 +485,15 @@ public partial class MainWindow : System.Windows.Window
                 _viewModel.ApplyAppearance(result, persist: true);
                 return _viewModel.Settings.Clone();
             });
+            accepted = completed && closeDecision == UnsavedCloseDecision.ApplyAndClose;
+        }
+        finally
+        {
+            settingsWindow.DisposePreviewThrottles();
+        }
 
         ApplySettings();
-        SetEditMode(accepted ? false : wasEditMode, accepted ? "设置已保存" : null);
+        SetEditMode(accepted ? false : wasEditMode, accepted ? "\u8BBE\u7F6E\u5DF2\u4FDD\u5B58" : null);
     }
 
     private void ApplySettingsPreview(Settings settings)

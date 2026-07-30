@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using LanFlow.Desktop.Models;
 using LanFlow.Desktop.Presentation;
 using Xunit;
@@ -139,6 +139,60 @@ public sealed class SettingsWindowViewModelTests
         Assert.Equal(0.85, viewModel.CurrentOpacity, 3);
     }
 
+    [Theory]
+    [InlineData("iconSize", 63)]
+    [InlineData("cardWidth", 196)]
+    [InlineData("cardHeight", 108)]
+    [InlineData("textSize", 17)]
+    [InlineData("itemSpacing", 15)]
+    [InlineData("rowSpacing", 11)]
+    [InlineData("contentPadding", 24)]
+    [InlineData("groupLabelSize", 44)]
+    [InlineData("groupLabelFontSize", 16)]
+    [InlineData("groupNavigationWidth", 172)]
+    public void UpdateContinuousSetting_UpdatesOnlyRequestedField(string settingKey, double value)
+    {
+        var viewModel = CreateViewModel();
+
+        viewModel.UpdateContinuousSetting(settingKey, value);
+
+        var actual = settingKey switch
+        {
+            "iconSize" => viewModel.Working.IconSize,
+            "cardWidth" => viewModel.Working.CardWidth,
+            "cardHeight" => viewModel.Working.CardHeight,
+            "textSize" => viewModel.Working.TextSize,
+            "itemSpacing" => viewModel.Working.ItemSpacing,
+            "rowSpacing" => viewModel.Working.RowSpacing,
+            "contentPadding" => viewModel.Working.ContentPadding,
+            "groupLabelSize" => viewModel.Working.GroupLabelSize,
+            "groupLabelFontSize" => viewModel.Working.GroupLabelFontSize,
+            "groupNavigationWidth" => viewModel.Working.GroupNavigationWidth,
+            _ => throw new InvalidOperationException(),
+        };
+        Assert.Equal(value, actual, 3);
+    }
+
+    [Theory]
+    [InlineData(SettingsOptionValues.TransparencyLayered)]
+    [InlineData(SettingsOptionValues.TransparencyWholeWindow)]
+    public void UpdateCurrentOpacity_UpdatesOnlyActiveMode(string mode)
+    {
+        var viewModel = CreateViewModel(new Settings
+        {
+            TransparencyMode = mode,
+            LayeredOpacity = 0.81,
+            WholeWindowOpacity = 0.73,
+            Opacity = mode == SettingsOptionValues.TransparencyWholeWindow ? 0.73 : 0.81,
+        });
+
+        viewModel.UpdateCurrentOpacity(0.64);
+
+        Assert.Equal(0.64, viewModel.CurrentOpacity, 3);
+        Assert.Equal(mode == SettingsOptionValues.TransparencyLayered ? 0.64 : 0.81, viewModel.Working.LayeredOpacity, 3);
+        Assert.Equal(mode == SettingsOptionValues.TransparencyWholeWindow ? 0.64 : 0.73, viewModel.Working.WholeWindowOpacity, 3);
+        Assert.Equal(0.64, viewModel.Working.Opacity, 3);
+    }
     private static SettingsWindowViewModel CreateViewModel(Settings? settings = null) =>
         new(new SettingsPreviewSession(settings ?? new Settings()));
 }

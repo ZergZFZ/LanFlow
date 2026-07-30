@@ -89,6 +89,41 @@ public sealed class SettingsWindowContractTests
 
         Assert.Contains("new SettingsWindow(session, _iconService.Clear)", mainWindow);
     }
+
+    [Fact]
+    public void SettingsWindow_ThrottlesEveryContinuousSliderAndFlushesDragCompletion()
+    {
+        var xaml = File.ReadAllText(GetDesktopPath("Views", "SettingsWindow.xaml"));
+        var codeBehind = File.ReadAllText(GetDesktopPath("Views", "SettingsWindow.xaml.cs"));
+
+        Assert.Equal(
+            11,
+            System.Text.RegularExpressions.Regex.Matches(
+                xaml,
+                "primitives:Thumb.DragCompleted=\"ContinuousSlider_DragCompleted\"").Count);
+        Assert.Contains("TimeSpan.FromMilliseconds(33)", codeBehind);
+        Assert.Contains("PreviewThrottle<double>", codeBehind);
+        Assert.Contains("FlushPreviewThrottles();", codeBehind);
+    }
+
+    [Fact]
+    public void SettingsWindow_UsesExplicitThreeChoiceCloseFlowWithoutYesNoMessageBox()
+    {
+        var xaml = File.ReadAllText(GetDesktopPath("Views", "SettingsWindow.xaml"));
+        var codeBehind = File.ReadAllText(GetDesktopPath("Views", "SettingsWindow.xaml.cs"));
+        var mainWindow = File.ReadAllText(GetDesktopPath("MainWindow.xaml.cs"));
+
+        Assert.Contains("Closing=\"Window_Closing\"", xaml);
+        Assert.Contains("UnsavedCloseDecision.ApplyAndClose", codeBehind);
+        Assert.Contains("UnsavedCloseDecision.Discard", codeBehind);
+        Assert.Contains("UnsavedCloseDecision.KeepEditing", codeBehind);
+        Assert.Contains("ShowUnsavedChangesDialog", codeBehind);
+        Assert.DoesNotContain("MessageBox.Show", codeBehind);
+        Assert.Contains("SettingsCloseFlow.TryComplete", mainWindow);
+        Assert.Contains("settingsWindow.CloseDecision", mainWindow);
+        Assert.DoesNotContain("var accepted = settingsWindow.ShowDialog() == true;", mainWindow);
+    }
+
     private static string GetDesktopPath(params string[] parts) =>
         Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory,
