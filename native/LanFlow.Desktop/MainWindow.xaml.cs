@@ -457,7 +457,7 @@ public partial class MainWindow : System.Windows.Window
 
         var wasEditMode = _isEditMode;
         SetEditMode(true, "设置中：可同时查看和管理启动项");
-        var settingsWindow = new SettingsWindow(session) { Owner = this };
+        var settingsWindow = new SettingsWindow(session, _iconService.Clear) { Owner = this };
 
         var accepted = settingsWindow.ShowDialog() == true;
         SettingsPreviewTransaction.Complete(
