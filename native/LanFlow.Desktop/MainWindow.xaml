@@ -295,8 +295,14 @@
         </DataTemplate>
     </Window.Resources>
 
-    <Border Background="{DynamicResource WindowBackgroundBrush}" BorderBrush="{DynamicResource WindowBorderBrush}" BorderThickness="1" CornerRadius="14">
-        <Grid>
+    <Grid x:Name="AppearanceRoot">
+        <Border x:Name="SurfaceRoot"
+                Background="{DynamicResource WindowBackgroundBrush}"
+                BorderBrush="{DynamicResource WindowBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="14" />
+        <Border Background="Transparent" CornerRadius="14">
+            <Grid x:Name="ContentRoot">
             <Grid.RowDefinitions>
                 <RowDefinition Height="*" />
                 <RowDefinition Height="38" />
@@ -434,6 +440,9 @@
                 <TextBlock HorizontalAlignment="Center" FontSize="34" Foreground="{DynamicResource SecondaryTextBrush}" Text="＋" />
                 <TextBlock Margin="0,8,0,0" HorizontalAlignment="Center" FontSize="14" Foreground="{DynamicResource SecondaryTextBrush}" Text="此分组还没有启动项目，可将文件拖放到这里添加" />
             </StackPanel>
+            </Grid>
+        </Border>
+        <Grid x:Name="FeedbackRoot" Panel.ZIndex="10">
             <Grid x:Name="NewGroupOverlay" Grid.RowSpan="2" Visibility="Collapsed" Background="{DynamicResource ModalScrimBrush}">
                 <Border Width="360" Padding="22" HorizontalAlignment="Center" VerticalAlignment="Center" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1" CornerRadius="12">
                     <Border.Effect>
@@ -458,5 +467,5 @@
                 </Border>
             </Grid>
         </Grid>
-    </Border>
+    </Grid>
 </Window>

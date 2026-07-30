@@ -62,6 +62,7 @@ public partial class MainWindow : System.Windows.Window
     private readonly GroupSwitchCoordinator _groupSwitchCoordinator;
     private readonly UiPerformanceTrace _uiPerformanceTrace = new();
     private readonly ThemeResourceUpdater _themeResourceUpdater = new();
+    private readonly WindowAppearanceController _windowAppearanceController = new();
     private readonly ShortcutService _shortcutService = new();
     private readonly ImportManifestService _importManifestService;
     private Settings? _settingsBeforePreview;
@@ -475,7 +476,7 @@ public partial class MainWindow : System.Windows.Window
     {
         var settings = _viewModel.Settings;
         _themeResourceUpdater.Apply(Resources, settings.ThemeColors);
-        Opacity = Math.Clamp(settings.Opacity, 0.55, 1.0);
+        _windowAppearanceController.Apply(this, SurfaceRoot, ContentRoot, settings);
         LauncherLayout.Margin = new Thickness(settings.ContentPadding, Math.Max(8, settings.ContentPadding - 4), settings.ContentPadding, Math.Max(8, settings.ContentPadding - 4));
 
         string requestedLayoutMode = NormalizeLayoutMode(settings.LayoutMode);
