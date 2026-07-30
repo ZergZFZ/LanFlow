@@ -1,5 +1,6 @@
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -8,6 +9,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using System.Threading.Tasks;
+using LanFlow.Desktop.Diagnostics;
 using LanFlow.Desktop.Views;
 using LanFlow.Desktop.Models;
 using LanFlow.Desktop.Services;
@@ -52,12 +54,14 @@ public partial class MainWindow : System.Windows.Window
     private readonly HotkeyService _hotkeyService = new();
     private readonly StartupService _startupService = new();
     private readonly ShellIconService _shellIconService = new();
+    private readonly UiPerformanceTrace _uiPerformanceTrace = new();
     private readonly ShortcutService _shortcutService = new();
     private readonly ImportManifestService _importManifestService;
     private Settings? _settingsBeforePreview;
     private bool _isEditMode;
     private bool _iconsLoaded;
     private bool _isModalOperationActive;
+    private long _groupSwitchVersion;
 
     public static readonly DependencyProperty IsEditModeProperty =
         DependencyProperty.Register(
@@ -89,13 +93,6 @@ public partial class MainWindow : System.Windows.Window
         _importManifestService = new ImportManifestService(_shortcutService);
         DataContext = _viewModel;
         ApplySettings();
-        ItemList.ItemContainerGenerator.StatusChanged += (_, _) =>
-        {
-            if (ItemList.ItemContainerGenerator.Status == GeneratorStatus.ContainersGenerated)
-            {
-                Dispatcher.BeginInvoke(DispatcherPriority.Render, ApplyItemMetrics);
-            }
-        };
         // 静默启动时不立即取图标，等窗口真正显示时再加载，加快开机驻留速度。
         EnsureIconsLoaded();
         RefreshGroupTabs();
@@ -445,8 +442,6 @@ public partial class MainWindow : System.Windows.Window
         var cardMode = settings.LayoutMode == "card";
         ItemList.ItemContainerStyle = (Style)FindResource(cardMode ? "LauncherCard" : "LauncherTile");
         ItemList.ItemTemplate = (DataTemplate)FindResource(cardMode ? "CardItemTemplate" : "TileItemTemplate");
-        ItemList.UpdateLayout();
-        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, ApplyItemMetrics);
 
         var groupsAtTop = settings.GroupLayout == "top";
         GroupColumn.Width = groupsAtTop ? new GridLength(0) : new GridLength(132);
@@ -476,39 +471,6 @@ public partial class MainWindow : System.Windows.Window
         {
             // 保留最后一个有效颜色，避免编辑中的不完整色值打断实时预览。
         }
-    }
-
-    private void ApplyItemMetrics()
-    {
-        var settings = _viewModel.Settings;
-        for (var index = 0; index < ItemList.Items.Count; index++)
-        {
-            if (ItemList.ItemContainerGenerator.ContainerFromIndex(index) is not ListBoxItem container) continue;
-            container.Width = settings.CardWidth;
-            container.Height = settings.CardHeight;
-            container.Margin = new Thickness(settings.ItemSpacing / 2, settings.RowSpacing / 2, settings.ItemSpacing / 2, settings.RowSpacing / 2);
-            if (FindChild<Image>(container, "ItemIcon") is { } icon)
-            {
-                icon.Width = settings.IconSize;
-                icon.Height = settings.IconSize;
-            }
-            if (FindChild<TextBlock>(container, "ItemName") is { } name)
-            {
-                name.FontSize = settings.TextSize;
-                name.Visibility = settings.ShowItemTitle ? Visibility.Visible : Visibility.Collapsed;
-            }
-        }
-    }
-
-    private static T? FindChild<T>(DependencyObject parent, string name) where T : FrameworkElement
-    {
-        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
-        {
-            var child = VisualTreeHelper.GetChild(parent, index);
-            if (child is T element && element.Name == name) return element;
-            if (FindChild<T>(child, name) is { } result) return result;
-        }
-        return null;
     }
 
     private static Settings CloneSettings(Settings value) => new()
@@ -606,10 +568,27 @@ public partial class MainWindow : System.Windows.Window
 
     private void SelectGroup(Group group)
     {
+        var switchVersion = Interlocked.Increment(ref _groupSwitchVersion);
+        _uiPerformanceTrace.GroupSwitchStarted(group.Id);
+
         _viewModel.SelectedGroup = group;
         _viewModel.SearchText = string.Empty;
         RefreshGroupTabs();
+        _uiPerformanceTrace.SelectionAcknowledged(group.Id);
         RefreshEmptyState();
+
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+        {
+            if (switchVersion != _groupSwitchVersion ||
+                !string.Equals(_viewModel.SelectedGroup?.Id, group.Id, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            // The current WrapPanel realizes every container. Phase 2 virtualization will
+            // replace this count with the panel's realized range.
+            _uiPerformanceTrace.ContentStable(group.Id, ItemList.Items.Count);
+        });
     }
 
     private void RefreshEmptyState()
