@@ -96,8 +96,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
         settings.ThemeProfile = source.ThemeProfile;
         settings.ThemeColors = source.ThemeColors;
         settings.CustomThemes = source.CustomThemes;
-        settings.Opacity = Math.Clamp(source.Opacity, 0.55, 1.0);
-        settings.LayoutMode = source.LayoutMode == "card" ? "card" : "tile";
+        settings.LayoutMode = source.LayoutMode switch
+        {
+            "tile" => SettingsOptionValues.GridLayout,
+            SettingsOptionValues.GridLayout or SettingsOptionValues.ListLayout or SettingsOptionValues.CardLayout => source.LayoutMode,
+            _ => SettingsOptionValues.GridLayout,
+        };
         settings.IconSize = Math.Clamp(source.IconSize, 24, 72);
         settings.CardWidth = Math.Clamp(source.CardWidth, 48, 320);
         settings.CardHeight = Math.Clamp(source.CardHeight, 48, 240);
@@ -109,7 +113,26 @@ public sealed class MainViewModel : INotifyPropertyChanged
         settings.ShowShortcutBadge = source.ShowShortcutBadge;
         settings.ShowFullItemName = source.ShowFullItemName;
         settings.ShowItemTitle = source.ShowItemTitle;
-        settings.GroupLayout = source.GroupLayout == "top" ? "top" : "left";
+        settings.GroupLayout = source.GroupLayout == SettingsOptionValues.GroupTop
+            ? SettingsOptionValues.GroupTop
+            : SettingsOptionValues.GroupLeft;
+        settings.GroupSwitchMode = source.GroupSwitchMode == SettingsOptionValues.GroupSwitchHover
+            ? SettingsOptionValues.GroupSwitchHover
+            : SettingsOptionValues.GroupSwitchClick;
+        settings.GroupLabelSize = Math.Clamp(source.GroupLabelSize, 28, 52);
+        settings.GroupLabelFontSize = Math.Clamp(source.GroupLabelFontSize, 11, 18);
+        settings.GroupNavigationWidth = Math.Clamp(source.GroupNavigationWidth, 96, 280);
+        settings.TransparencyMode = source.TransparencyMode == SettingsOptionValues.TransparencyWholeWindow
+            ? SettingsOptionValues.TransparencyWholeWindow
+            : SettingsOptionValues.TransparencyLayered;
+        settings.LayeredOpacity = Math.Clamp(source.LayeredOpacity, 0.40, 1.00);
+        settings.WholeWindowOpacity = Math.Clamp(source.WholeWindowOpacity, 0.40, 1.00);
+        settings.Opacity = settings.TransparencyMode == SettingsOptionValues.TransparencyWholeWindow
+            ? settings.WholeWindowOpacity
+            : settings.LayeredOpacity;
+        settings.AnimationMode = source.AnimationMode is SettingsOptionValues.AnimationOn or SettingsOptionValues.AnimationOff
+            ? source.AnimationMode
+            : SettingsOptionValues.AnimationSystem;
         settings.Hotkey = source.Hotkey;
         settings.StartWithWindows = source.StartWithWindows;
         settings.OpenItemsOnSingleClick = source.OpenItemsOnSingleClick;

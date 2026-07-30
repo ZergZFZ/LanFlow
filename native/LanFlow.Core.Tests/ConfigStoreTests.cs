@@ -29,6 +29,52 @@ public sealed class ConfigStoreTests : IDisposable
         Assert.Equal([0x7B], File.ReadAllBytes(store.ConfigPath).Take(1).ToArray());
     }
 
+    [Fact]
+    public void Load_LegacyOpacityMigratesToWholeWindowWithoutChangingValue()
+    {
+        File.WriteAllText(Path.Combine(_tempDirectory, "config.json"), """
+            { "settings": { "opacity": 0.72, "layoutMode": "tile" }, "groups": [] }
+            """);
+
+        var settings = new ConfigStore("Alt+Space", _tempDirectory).Load().Settings;
+
+        Assert.Equal(SettingsOptionValues.TransparencyWholeWindow, settings.TransparencyMode);
+        Assert.Equal(0.72, settings.WholeWindowOpacity, 3);
+        Assert.Equal(0.85, settings.LayeredOpacity, 3);
+        Assert.Equal(SettingsOptionValues.GridLayout, settings.LayoutMode);
+    }
+
+    [Fact]
+    public void Load_MissingFileUsesLayeredEightyFivePercentDefaults()
+    {
+        var settings = new ConfigStore("Alt+Space", _tempDirectory).Load().Settings;
+
+        Assert.Equal(SettingsOptionValues.TransparencyLayered, settings.TransparencyMode);
+        Assert.Equal(0.85, settings.LayeredOpacity, 3);
+        Assert.Equal(0.85, settings.WholeWindowOpacity, 3);
+    }
+
+    [Fact]
+    public void Load_ClampsNewVisualSettings()
+    {
+        File.WriteAllText(Path.Combine(_tempDirectory, "config.json"), """
+            { "settings": {
+                "groupLabelSize": 2,
+                "groupLabelFontSize": 99,
+                "groupNavigationWidth": 999,
+                "layeredOpacity": 0.1,
+                "wholeWindowOpacity": 2.0
+            }, "groups": [] }
+            """);
+
+        var settings = new ConfigStore("Alt+Space", _tempDirectory).Load().Settings;
+
+        Assert.Equal(28, settings.GroupLabelSize);
+        Assert.Equal(18, settings.GroupLabelFontSize);
+        Assert.Equal(280, settings.GroupNavigationWidth);
+        Assert.Equal(0.40, settings.LayeredOpacity, 3);
+        Assert.Equal(1.00, settings.WholeWindowOpacity, 3);
+    }
     public void Dispose()
     {
         if (Directory.Exists(_tempDirectory)) Directory.Delete(_tempDirectory, true);

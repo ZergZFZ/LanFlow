@@ -129,7 +129,31 @@ public sealed class Settings
     public bool ShowItemTitle { get; set; } = true;
 
     [JsonPropertyName("groupLayout")]
-    public string GroupLayout { get; set; } = "left";
+    public string GroupLayout { get; set; } = SettingsOptionValues.GroupLeft;
+
+    [JsonPropertyName("groupSwitchMode")]
+    public string GroupSwitchMode { get; set; } = SettingsOptionValues.GroupSwitchClick;
+
+    [JsonPropertyName("groupLabelSize")]
+    public double GroupLabelSize { get; set; } = 36;
+
+    [JsonPropertyName("groupLabelFontSize")]
+    public double GroupLabelFontSize { get; set; } = 13;
+
+    [JsonPropertyName("groupNavigationWidth")]
+    public double GroupNavigationWidth { get; set; } = 132;
+
+    [JsonPropertyName("transparencyMode")]
+    public string? TransparencyMode { get; set; }
+
+    [JsonPropertyName("layeredOpacity")]
+    public double LayeredOpacity { get; set; } = 0.85;
+
+    [JsonPropertyName("wholeWindowOpacity")]
+    public double WholeWindowOpacity { get; set; } = 0.85;
+
+    [JsonPropertyName("animationMode")]
+    public string AnimationMode { get; set; } = SettingsOptionValues.AnimationSystem;
 
     [JsonPropertyName("startWithWindows")]
     public bool StartWithWindows { get; set; }
@@ -158,6 +182,14 @@ public sealed class Settings
         ShowFullItemName = ShowFullItemName,
         ShowItemTitle = ShowItemTitle,
         GroupLayout = GroupLayout,
+        GroupSwitchMode = GroupSwitchMode,
+        GroupLabelSize = GroupLabelSize,
+        GroupLabelFontSize = GroupLabelFontSize,
+        GroupNavigationWidth = GroupNavigationWidth,
+        TransparencyMode = TransparencyMode,
+        LayeredOpacity = LayeredOpacity,
+        WholeWindowOpacity = WholeWindowOpacity,
+        AnimationMode = AnimationMode,
         StartWithWindows = StartWithWindows,
         OpenItemsOnSingleClick = OpenItemsOnSingleClick,
     };
