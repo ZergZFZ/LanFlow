@@ -10,6 +10,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using System.Threading.Tasks;
+using LanFlow.Desktop.Controls;
 using LanFlow.Desktop.Diagnostics;
 using LanFlow.Desktop.Views;
 using LanFlow.Desktop.Models;
@@ -63,6 +64,15 @@ public partial class MainWindow : System.Windows.Window
     private bool _isModalOperationActive;
     private CancellationTokenSource? _iconBatchCts;
     private long _groupSwitchVersion;
+    private readonly Dictionary<(string GroupId, string LayoutMode), ViewStateSnapshot> _viewStateSnapshots = [];
+    private VirtualizingWrapPanel? _wrapPanel;
+    private string _activeLayoutMode = "tile";
+    private string? _lastSelectedItemId;
+
+    private sealed record ViewStateSnapshot(
+        string? SelectedItemId,
+        string? FocusedItemId,
+        double VerticalOffset);
 
     public static readonly DependencyProperty IsEditModeProperty =
         DependencyProperty.Register(
@@ -93,7 +103,9 @@ public partial class MainWindow : System.Windows.Window
         _viewModel = new MainViewModel(new ConfigStore("Alt+Space"));
         _importManifestService = new ImportManifestService(_shortcutService);
         DataContext = _viewModel;
-        ((INotifyCollectionChanged)_viewModel.VisibleItems).CollectionChanged += (_, _) => _ = LoadVisibleIconsAsync();
+        ((INotifyCollectionChanged)_viewModel.VisibleItems).CollectionChanged += VisibleItems_CollectionChanged;
+        _activeLayoutMode = NormalizeLayoutMode(_viewModel.Settings.LayoutMode);
+        ItemList.Loaded += (_, _) => AttachVirtualizingPanel();
         ApplySettings();
         IsVisibleChanged += (_, _) =>
         {
@@ -302,7 +314,7 @@ public partial class MainWindow : System.Windows.Window
         }
     }
 
-    private static T? FindAncestor<T>(DependencyObject source) where T : DependencyObject
+    private static T? FindAncestor<T>(DependencyObject? source) where T : DependencyObject
     {
         for (var current = source; current is not null; current = VisualTreeHelper.GetParent(current))
         {
@@ -457,9 +469,34 @@ public partial class MainWindow : System.Windows.Window
         Opacity = Math.Clamp(settings.Opacity, 0.55, 1.0);
         LauncherLayout.Margin = new Thickness(settings.ContentPadding, Math.Max(8, settings.ContentPadding - 4), settings.ContentPadding, Math.Max(8, settings.ContentPadding - 4));
 
-        var cardMode = settings.LayoutMode == "card";
-        ItemList.ItemContainerStyle = (Style)FindResource(cardMode ? "LauncherCard" : "LauncherTile");
-        ItemList.ItemTemplate = (DataTemplate)FindResource(cardMode ? "CardItemTemplate" : "TileItemTemplate");
+        string requestedLayoutMode = NormalizeLayoutMode(settings.LayoutMode);
+        bool layoutModeChanged = !string.Equals(_activeLayoutMode, requestedLayoutMode, StringComparison.Ordinal);
+        if (layoutModeChanged)
+        {
+            SaveCurrentViewState(_activeLayoutMode);
+        }
+
+        bool listMode = requestedLayoutMode == "list";
+        bool cardMode = requestedLayoutMode == "card";
+        ItemList.ItemContainerStyle = (Style)FindResource(
+            listMode ? "LauncherList" : cardMode ? "LauncherCard" : "LauncherTile");
+        ItemList.ItemTemplate = (DataTemplate)FindResource(
+            listMode || cardMode ? "CardItemTemplate" : "TileItemTemplate");
+
+        var requestedItemsPanel = (ItemsPanelTemplate)FindResource(
+            listMode ? "VirtualizingListItemsPanel" : "VirtualizingWrapItemsPanel");
+        if (!ReferenceEquals(ItemList.ItemsPanel, requestedItemsPanel))
+        {
+            DetachVirtualizingPanel();
+            ItemList.ItemsPanel = requestedItemsPanel;
+        }
+
+        _activeLayoutMode = requestedLayoutMode;
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+        {
+            AttachVirtualizingPanel();
+            RestoreViewState(reuseOffset: !layoutModeChanged);
+        });
         _ = LoadVisibleIconsAsync();
 
         var groupsAtTop = settings.GroupLayout == "top";
@@ -478,6 +515,237 @@ public partial class MainWindow : System.Windows.Window
         Grid.SetColumn(ItemListHost, groupsAtTop ? 0 : 2);
         Grid.SetColumnSpan(ItemListHost, groupsAtTop ? 3 : 1);
         ItemListHost.Margin = new Thickness(0, 4, 0, 0);
+    }
+
+    private static string NormalizeLayoutMode(string? layoutMode) =>
+        layoutMode is "card" or "list" ? layoutMode : "tile";
+
+    private void VisibleItems_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        PreserveCurrentSnapshotAfterCollectionChange();
+        _ = LoadVisibleIconsAsync();
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => RestoreViewState(reuseOffset: true));
+    }
+
+    private void ItemList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ItemList.SelectedItem is LauncherItem item)
+        {
+            _lastSelectedItemId = item.Id;
+        }
+
+        SaveCurrentViewState(_activeLayoutMode);
+    }
+
+    private void ItemList_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            LaunchSelectedItem();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Space)
+        {
+            if (ItemList.SelectedIndex < 0 && ItemList.Items.Count > 0)
+            {
+                ItemList.SelectedIndex = 0;
+            }
+
+            FocusSelectedContainer();
+            e.Handled = true;
+            return;
+        }
+
+        if (_activeLayoutMode == "list" ||
+            e.Key is not (Key.Left or Key.Right or Key.Up or Key.Down) ||
+            ItemList.Items.Count == 0)
+        {
+            return;
+        }
+
+        AttachVirtualizingPanel();
+        int columns = Math.Max(1, _wrapPanel?.RealizedRange.Columns ?? 1);
+        int currentIndex = ItemList.SelectedIndex >= 0 ? ItemList.SelectedIndex : 0;
+        var direction = e.Key switch
+        {
+            Key.Left => NavigationDirection.Left,
+            Key.Right => NavigationDirection.Right,
+            Key.Up => NavigationDirection.Up,
+            _ => NavigationDirection.Down
+        };
+        var layout = new VirtualizingWrapLayout(
+            _viewModel.Settings.CardWidth,
+            _viewModel.Settings.CardHeight,
+            _viewModel.Settings.ItemSpacing,
+            _viewModel.Settings.RowSpacing,
+            bufferRows: 1);
+        int nextIndex = layout.MoveIndex(currentIndex, direction, ItemList.Items.Count, columns);
+        ItemList.SelectedIndex = nextIndex;
+        ItemList.ScrollIntoView(ItemList.Items[nextIndex]);
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, FocusSelectedContainer);
+        e.Handled = true;
+    }
+
+    private void SaveCurrentViewState(string layoutMode)
+    {
+        if (_viewModel.SelectedGroup is not { } group)
+        {
+            return;
+        }
+
+        string? selectedId = (ItemList.SelectedItem as LauncherItem)?.Id ?? _lastSelectedItemId;
+        string? focusedId = (FindAncestor<ListBoxItem>(Keyboard.FocusedElement as DependencyObject)?.DataContext as LauncherItem)?.Id;
+        _viewStateSnapshots[(group.Id, layoutMode)] = new ViewStateSnapshot(
+            selectedId,
+            focusedId,
+            GetCurrentVerticalOffset());
+    }
+
+    private void PreserveCurrentSnapshotAfterCollectionChange()
+    {
+        if (_viewModel.SelectedGroup is not { } group)
+        {
+            return;
+        }
+
+        var key = (group.Id, _activeLayoutMode);
+        _viewStateSnapshots.TryGetValue(key, out ViewStateSnapshot? previous);
+        string? selectedId = (ItemList.SelectedItem as LauncherItem)?.Id
+            ?? previous?.SelectedItemId
+            ?? _lastSelectedItemId;
+        string? focusedId = (FindAncestor<ListBoxItem>(Keyboard.FocusedElement as DependencyObject)?.DataContext as LauncherItem)?.Id
+            ?? previous?.FocusedItemId;
+        _viewStateSnapshots[key] = new ViewStateSnapshot(
+            selectedId,
+            focusedId,
+            GetCurrentVerticalOffset());
+    }
+
+    private void RestoreViewState(bool reuseOffset)
+    {
+        if (_viewModel.SelectedGroup is not { } group)
+        {
+            return;
+        }
+
+        _viewStateSnapshots.TryGetValue((group.Id, _activeLayoutMode), out ViewStateSnapshot? snapshot);
+        string? selectedId = snapshot?.SelectedItemId ?? _lastSelectedItemId;
+        LauncherItem? selected = selectedId is null
+            ? null
+            : _viewModel.VisibleItems.FirstOrDefault(item => string.Equals(item.Id, selectedId, StringComparison.Ordinal));
+
+        if (selected is not null)
+        {
+            ItemList.SelectedItem = selected;
+        }
+
+        if (reuseOffset && snapshot is not null)
+        {
+            SetCurrentVerticalOffset(snapshot.VerticalOffset);
+        }
+        else if (selected is not null)
+        {
+            ItemList.ScrollIntoView(selected);
+        }
+
+        string? focusId = snapshot?.FocusedItemId;
+        if (focusId is null)
+        {
+            return;
+        }
+
+        LauncherItem? focused = _viewModel.VisibleItems.FirstOrDefault(
+            item => string.Equals(item.Id, focusId, StringComparison.Ordinal));
+        if (focused is not null && ItemList.ItemContainerGenerator.ContainerFromItem(focused) is ListBoxItem container)
+        {
+            container.Focus();
+        }
+    }
+
+    private double GetCurrentVerticalOffset()
+    {
+        AttachVirtualizingPanel();
+        if (_wrapPanel is not null)
+        {
+            return _wrapPanel.VerticalOffset;
+        }
+
+        return FindVisualChild<ScrollViewer>(ItemList)?.VerticalOffset ?? 0;
+    }
+
+    private void SetCurrentVerticalOffset(double offset)
+    {
+        AttachVirtualizingPanel();
+        if (_wrapPanel is not null)
+        {
+            _wrapPanel.SetVerticalOffset(offset);
+            return;
+        }
+
+        FindVisualChild<ScrollViewer>(ItemList)?.ScrollToVerticalOffset(offset);
+    }
+
+    private void FocusSelectedContainer()
+    {
+        if (ItemList.SelectedItem is not null &&
+            ItemList.ItemContainerGenerator.ContainerFromItem(ItemList.SelectedItem) is ListBoxItem container)
+        {
+            container.Focus();
+        }
+    }
+
+    private void AttachVirtualizingPanel()
+    {
+        VirtualizingWrapPanel? panel = FindVisualChild<VirtualizingWrapPanel>(ItemList);
+        if (ReferenceEquals(panel, _wrapPanel))
+        {
+            return;
+        }
+
+        DetachVirtualizingPanel();
+        _wrapPanel = panel;
+        if (_wrapPanel is not null)
+        {
+            _wrapPanel.ViewportChanged += VirtualizingPanel_ViewportChanged;
+        }
+    }
+
+    private void DetachVirtualizingPanel()
+    {
+        if (_wrapPanel is not null)
+        {
+            _wrapPanel.ViewportChanged -= VirtualizingPanel_ViewportChanged;
+            _wrapPanel = null;
+        }
+    }
+
+    private void VirtualizingPanel_ViewportChanged(object? sender, ViewportRange range)
+    {
+        if (_viewModel.SelectedGroup is { } group)
+        {
+            _uiPerformanceTrace.ContentStable(group.Id, _wrapPanel?.RealizedIndices.Count ?? 0);
+        }
+    }
+
+    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (int index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            DependencyObject child = VisualTreeHelper.GetChild(parent, index);
+            if (child is T match)
+            {
+                return match;
+            }
+
+            if (FindVisualChild<T>(child) is { } descendant)
+            {
+                return descendant;
+            }
+        }
+
+        return null;
     }
 
     private void SetBrush(string key, string color)
@@ -587,6 +855,12 @@ public partial class MainWindow : System.Windows.Window
 
     private void SelectGroup(Group group)
     {
+        if (string.Equals(_viewModel.SelectedGroup?.Id, group.Id, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        SaveCurrentViewState(_activeLayoutMode);
         var switchVersion = Interlocked.Increment(ref _groupSwitchVersion);
         _uiPerformanceTrace.GroupSwitchStarted(group.Id);
 
@@ -604,9 +878,11 @@ public partial class MainWindow : System.Windows.Window
                 return;
             }
 
-            // The current WrapPanel realizes every container. Phase 2 virtualization will
-            // replace this count with the panel's realized range.
-            _uiPerformanceTrace.ContentStable(group.Id, ItemList.Items.Count);
+            AttachVirtualizingPanel();
+            RestoreViewState(reuseOffset: true);
+            _uiPerformanceTrace.ContentStable(
+                group.Id,
+                _wrapPanel?.RealizedIndices.Count ?? ItemList.Items.Count);
         });
     }
 

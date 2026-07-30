@@ -1,6 +1,7 @@
 <Window x:Class="LanFlow.Desktop.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:LanFlow.Desktop.Controls"
         Title="LanFlow"
         Icon="Assets/LanFlow.png"
         Width="760"
@@ -26,6 +27,17 @@
         <SolidColorBrush x:Key="HoverBrush" Color="#2B3247" />
         <SolidColorBrush x:Key="IconSurfaceBrush" Color="#2A3040" />
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+        <ItemsPanelTemplate x:Key="VirtualizingWrapItemsPanel">
+            <controls:VirtualizingWrapPanel
+                ItemWidth="{Binding DataContext.Settings.CardWidth, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                ItemHeight="{Binding DataContext.Settings.CardHeight, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                HorizontalSpacing="{Binding DataContext.Settings.ItemSpacing, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                VerticalSpacing="{Binding DataContext.Settings.RowSpacing, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                BufferRows="1" />
+        </ItemsPanelTemplate>
+        <ItemsPanelTemplate x:Key="VirtualizingListItemsPanel">
+            <VirtualizingStackPanel />
+        </ItemsPanelTemplate>
         <Style x:Key="TabButton" TargetType="Button">
             <Setter Property="Height" Value="34" />
             <Setter Property="Margin" Value="0,0,0,4" />
@@ -96,6 +108,31 @@
             </Setter>
         </Style>
         <Style x:Key="LauncherCard" TargetType="ListBoxItem" BasedOn="{StaticResource LauncherTile}" />
+        <Style x:Key="LauncherList" TargetType="ListBoxItem">
+            <Setter Property="Height" Value="64" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="listRow" Background="{TemplateBinding Background}" CornerRadius="8">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="listRow" Property="Background" Value="{DynamicResource HoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="listRow" Property="Background" Value="{DynamicResource SelectedTileBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="LauncherContextMenu" TargetType="ContextMenu">
             <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource SurfaceBorderBrush}" />
@@ -306,24 +343,24 @@
                              Padding="6"
                              BorderThickness="0"
                              Background="Transparent"
+                             ScrollViewer.CanContentScroll="True"
                              ScrollViewer.HorizontalScrollBarVisibility="Hidden"
                              ScrollViewer.VerticalScrollBarVisibility="Hidden"
+                             VirtualizingPanel.IsVirtualizing="True"
+                             VirtualizingPanel.VirtualizationMode="Recycling"
+                             ItemsPanel="{StaticResource VirtualizingWrapItemsPanel}"
                              ItemsSource="{Binding VisibleItems}"
                              ItemContainerStyle="{StaticResource LauncherTile}"
                              ItemTemplate="{StaticResource TileItemTemplate}"
                              AllowDrop="True"
                              DragOver="ItemList_DragOver"
                              Drop="ItemList_Drop"
+                             PreviewKeyDown="ItemList_PreviewKeyDown"
+                             SelectionChanged="ItemList_SelectionChanged"
                              PreviewMouseMove="ItemList_PreviewMouseMove"
                              PreviewMouseLeftButtonUp="ItemList_PreviewMouseLeftButtonUp"
                              MouseDoubleClick="ItemList_MouseDoubleClick"
-                             PreviewMouseLeftButtonDown="ItemList_PreviewMouseLeftButtonDown">
-                        <ListBox.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <WrapPanel Width="{Binding ActualWidth, ElementName=ItemList}" />
-                            </ItemsPanelTemplate>
-                        </ListBox.ItemsPanel>
-                    </ListBox>
+                             PreviewMouseLeftButtonDown="ItemList_PreviewMouseLeftButtonDown" />
                 </Grid>
             </Grid>
 
