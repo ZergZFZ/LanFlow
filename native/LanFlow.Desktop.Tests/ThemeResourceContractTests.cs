@@ -33,28 +33,6 @@ public sealed class ThemeResourceContractTests
         "SettingsSectionHeaderStyle",
     ];
 
-    private static readonly HashSet<string> LegacyMainWindowColors = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "#171B28",
-        "#343B50",
-        "#22283A",
-        "#38425B",
-        "#1D2231",
-        "#F5F7FC",
-        "#ADB5C7",
-        "#35405E",
-        "#5A00B7C3",
-        "#2B3247",
-        "#2A3040",
-        "#CC1F1F1F",
-        "#8994AA",
-        "#F1BD68",
-        "#57627A",
-        "#88000000",
-        "#000000",
-        "#00FFFFFF",
-    };
-
     [Theory]
     [InlineData("Color.Neutral.000")]
     [InlineData("Color.Neutral.050")]
@@ -110,14 +88,33 @@ public sealed class ThemeResourceContractTests
     }
 
     [Fact]
-    public void MainWindow_DoesNotIntroduceColorsOutsideMigrationBaseline()
+    public void MainWindow_UsesSemanticResourcesInsteadOfLiteralColors()
     {
         var xaml = File.ReadAllText(GetDesktopPath("MainWindow.xaml"));
         var colors = Regex.Matches(xaml, "#[0-9A-Fa-f]{6,8}")
             .Select(match => match.Value)
             .Distinct(StringComparer.OrdinalIgnoreCase);
 
-        Assert.All(colors, color => Assert.Contains(color, LegacyMainWindowColors));
+        Assert.All(colors, color => Assert.Equal("#00FFFFFF", color, ignoreCase: true));
+    }
+
+
+    [Fact]
+    public void MainWindowAndNavigation_UseDistinctSemanticInteractionStates()
+    {
+        var mainWindow = File.ReadAllText(GetDesktopPath("MainWindow.xaml"));
+        var navigation = File.ReadAllText(GetDesktopPath("Controls", "GroupNavigationControl.xaml"));
+        var mainWindowCodeBehind = File.ReadAllText(GetDesktopPath("MainWindow.xaml.cs"));
+        var combined = mainWindow + navigation + mainWindowCodeBehind;
+
+        Assert.Contains("{DynamicResource ItemHoverBrush}", combined);
+        Assert.Contains("{DynamicResource ItemSelectedBrush}", combined);
+        Assert.Contains("{DynamicResource FocusBorderBrush}", combined);
+        Assert.Contains("DragIndicatorBrush", combined);
+        Assert.Contains("{DynamicResource GroupTabSelectedBrush}", navigation);
+        Assert.DoesNotContain("ScaleTransform", combined);
+        Assert.Contains("Property=\"BorderThickness\" Value=\"2\"", mainWindow);
+        Assert.Contains("Property=\"BorderThickness\" Value=\"2\"", navigation);
     }
 
     private static string GetDesktopPath(params string[] parts) =>

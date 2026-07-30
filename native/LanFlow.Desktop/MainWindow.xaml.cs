@@ -61,6 +61,7 @@ public partial class MainWindow : System.Windows.Window
     private readonly ViewportIconCoordinator _iconCoordinator;
     private readonly GroupSwitchCoordinator _groupSwitchCoordinator;
     private readonly UiPerformanceTrace _uiPerformanceTrace = new();
+    private readonly ThemeResourceUpdater _themeResourceUpdater = new();
     private readonly ShortcutService _shortcutService = new();
     private readonly ImportManifestService _importManifestService;
     private Settings? _settingsBeforePreview;
@@ -473,18 +474,7 @@ public partial class MainWindow : System.Windows.Window
     private void ApplySettings()
     {
         var settings = _viewModel.Settings;
-        var colors = settings.ThemeColors;
-        SetBrush("PanelBrush", colors.Panel);
-        SetBrush("PanelBorderBrush", colors.PanelBorder);
-        SetBrush("SurfaceBrush", colors.Surface);
-        SetBrush("SurfaceBorderBrush", colors.SurfaceBorder);
-        SetBrush("FooterBrush", colors.Footer);
-        SetBrush("TextPrimaryBrush", colors.TextPrimary);
-        SetBrush("TextSecondaryBrush", colors.TextSecondary);
-        SetBrush("AccentBrush", colors.Accent);
-        SetBrush("SelectedTileBrush", colors.Accent);
-        SetBrush("HoverBrush", colors.Hover);
-        SetBrush("IconSurfaceBrush", colors.IconSurface);
+        _themeResourceUpdater.Apply(Resources, settings.ThemeColors);
         Opacity = Math.Clamp(settings.Opacity, 0.55, 1.0);
         LauncherLayout.Margin = new Thickness(settings.ContentPadding, Math.Max(8, settings.ContentPadding - 4), settings.ContentPadding, Math.Max(8, settings.ContentPadding - 4));
 
@@ -804,18 +794,6 @@ public partial class MainWindow : System.Windows.Window
         }
 
         return null;
-    }
-
-    private void SetBrush(string key, string color)
-    {
-        try
-        {
-            Resources[key] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color));
-        }
-        catch (FormatException)
-        {
-            // 保留最后一个有效颜色，避免编辑中的不完整色值打断实时预览。
-        }
     }
 
     private static Settings CloneSettings(Settings value) => new()
@@ -1822,7 +1800,7 @@ public partial class MainWindow : System.Windows.Window
                 Width = 82,
                 Padding = new Thickness(8, 6, 8, 7),
                 Background = new SolidColorBrush(Color.FromRgb(51, 58, 72)),
-                BorderBrush = new SolidColorBrush(Color.FromRgb(100, 198, 226)),
+                BorderBrush = (Brush)FindResource("DragIndicatorBrush"),
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(9),
                 Opacity = 1,

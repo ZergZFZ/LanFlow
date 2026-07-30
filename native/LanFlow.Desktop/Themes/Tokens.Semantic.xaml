@@ -13,6 +13,11 @@
     <SolidColorBrush x:Key="DividerBrush" Color="{StaticResource Color.Neutral.100}" />
     <SolidColorBrush x:Key="DangerBrush" Color="{StaticResource Color.Danger.500}" />
     <SolidColorBrush x:Key="DragIndicatorBrush" Color="{StaticResource Color.Accent.500}" />
+    <SolidColorBrush x:Key="IconSurfaceBrush" Color="{StaticResource Color.Neutral.100}" />
+    <SolidColorBrush x:Key="WarningBrush" Color="#FFF1BD68" />
+    <SolidColorBrush x:Key="ModalScrimBrush" Color="#CC121826" />
+    <SolidColorBrush x:Key="PrimaryOnAccentTextBrush" Color="{StaticResource Color.Neutral.000}" />
+    <Color x:Key="ShadowColor">#FF000000</Color>
 
     <!-- Compatibility aliases retained until every existing view is migrated. -->
     <SolidColorBrush x:Key="WindowBackground" Color="{StaticResource Color.Neutral.050}" />
