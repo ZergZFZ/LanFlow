@@ -9,13 +9,20 @@ namespace LanFlow.Desktop.Controls;
 
 public sealed class GroupNavigationEventArgs : RoutedEventArgs
 {
-    public GroupNavigationEventArgs(RoutedEvent routedEvent, object source, Group group)
+    public GroupNavigationEventArgs(
+        RoutedEvent routedEvent,
+        object source,
+        Group group,
+        bool isActive = true)
         : base(routedEvent, source)
     {
         Group = group;
+        IsActive = isActive;
     }
 
     public Group Group { get; }
+
+    public bool IsActive { get; }
 }
 
 public partial class GroupNavigationControl : UserControl
@@ -157,14 +164,23 @@ public partial class GroupNavigationControl : UserControl
         remove => RemoveHandler(GroupDroppedEvent, value);
     }
 
-    private void GroupItem_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) =>
+    private void GroupItem_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
         RaiseGroupEvent(sender, GroupInvokedEvent);
+        e.Handled = true;
+    }
 
     private void GroupItem_MouseEnter(object sender, MouseEventArgs e) =>
-        RaiseGroupEvent(sender, GroupHoveredEvent);
+        RaiseGroupEvent(sender, GroupHoveredEvent, isActive: true);
+
+    private void GroupItem_MouseLeave(object sender, MouseEventArgs e) =>
+        RaiseGroupEvent(sender, GroupHoveredEvent, isActive: false);
 
     private void GroupItem_DragEnter(object sender, DragEventArgs e) =>
-        RaiseGroupEvent(sender, GroupDragHoveredEvent);
+        RaiseGroupEvent(sender, GroupDragHoveredEvent, isActive: true);
+
+    private void GroupItem_DragLeave(object sender, DragEventArgs e) =>
+        RaiseGroupEvent(sender, GroupDragHoveredEvent, isActive: false);
 
     private void GroupItem_DragOver(object sender, DragEventArgs e)
     {
@@ -180,11 +196,14 @@ public partial class GroupNavigationControl : UserControl
         e.Handled = true;
     }
 
-    private void RaiseGroupEvent(object sender, RoutedEvent routedEvent)
+    private void RaiseGroupEvent(
+        object sender,
+        RoutedEvent routedEvent,
+        bool isActive = true)
     {
         if (sender is ListBoxItem { DataContext: Group group })
         {
-            RaiseEvent(new GroupNavigationEventArgs(routedEvent, this, group));
+            RaiseEvent(new GroupNavigationEventArgs(routedEvent, this, group, isActive));
         }
     }
 }

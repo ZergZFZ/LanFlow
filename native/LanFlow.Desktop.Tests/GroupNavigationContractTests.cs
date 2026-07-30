@@ -60,6 +60,31 @@ public sealed class GroupNavigationContractTests
         Assert.Contains("AutomationProperties.Name=\"{Binding Name}\"", xaml);
     }
 
+    [Fact]
+    public void Control_EmitsLeaveTransitionsForHoverAndDragIntent()
+    {
+        var xaml = File.ReadAllText(GetDesktopPath("Controls", "GroupNavigationControl.xaml"));
+
+        Assert.Contains("Event=\"MouseLeave\" Handler=\"GroupItem_MouseLeave\"", xaml);
+        Assert.Contains("Event=\"DragLeave\" Handler=\"GroupItem_DragLeave\"", xaml);
+    }
+
+    [Fact]
+    public void MainWindow_UsesCoordinatorForNavigationAndLogicalDragGeometry()
+    {
+        var source = File.ReadAllText(GetDesktopPath("MainWindow.xaml.cs"));
+
+        Assert.Contains("GroupSwitchCoordinator", source);
+        Assert.Contains("RequestClick", source);
+        Assert.Contains("BeginHover", source);
+        Assert.Contains("BeginDragHover", source);
+        Assert.Contains("EndDrag", source);
+        Assert.Contains("IndexFromPoint", source);
+        Assert.Contains("DragAutoScrollEdge = 32", source);
+        Assert.Contains("DragAutoScrollStep = 16", source);
+        Assert.DoesNotContain("Opacity = 0.78", source);
+    }
+
     private static int CountOccurrences(string text, string value)
     {
         var count = 0;

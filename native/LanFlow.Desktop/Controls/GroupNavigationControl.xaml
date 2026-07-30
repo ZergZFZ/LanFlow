@@ -38,7 +38,9 @@
             <Setter Property="AllowDrop" Value="True" />
             <EventSetter Event="PreviewMouseLeftButtonDown" Handler="GroupItem_PreviewMouseLeftButtonDown" />
             <EventSetter Event="MouseEnter" Handler="GroupItem_MouseEnter" />
+            <EventSetter Event="MouseLeave" Handler="GroupItem_MouseLeave" />
             <EventSetter Event="DragEnter" Handler="GroupItem_DragEnter" />
+            <EventSetter Event="DragLeave" Handler="GroupItem_DragLeave" />
             <EventSetter Event="DragOver" Handler="GroupItem_DragOver" />
             <EventSetter Event="Drop" Handler="GroupItem_Drop" />
             <Setter Property="Template">
