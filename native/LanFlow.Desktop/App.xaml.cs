@@ -179,11 +179,6 @@ public partial class App : Application
             return;
         }
 
-        if (MainWindow is MainWindow mw)
-        {
-            mw.EnsureIconsLoaded();
-        }
-
         MainWindow.Show();
         MainWindow.WindowState = WindowState.Normal;
         MainWindow.Activate();

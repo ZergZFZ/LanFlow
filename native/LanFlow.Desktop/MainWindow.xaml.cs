@@ -1,3 +1,4 @@
+using System.Collections.Specialized;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -53,14 +54,14 @@ public partial class MainWindow : System.Windows.Window
     private readonly LauncherService _launcherService = new();
     private readonly HotkeyService _hotkeyService = new();
     private readonly StartupService _startupService = new();
-    private readonly ShellIconService _shellIconService = new();
+    private readonly IIconService _iconService = new ShellIconService();
     private readonly UiPerformanceTrace _uiPerformanceTrace = new();
     private readonly ShortcutService _shortcutService = new();
     private readonly ImportManifestService _importManifestService;
     private Settings? _settingsBeforePreview;
     private bool _isEditMode;
-    private bool _iconsLoaded;
     private bool _isModalOperationActive;
+    private CancellationTokenSource? _iconBatchCts;
     private long _groupSwitchVersion;
 
     public static readonly DependencyProperty IsEditModeProperty =
@@ -92,9 +93,19 @@ public partial class MainWindow : System.Windows.Window
         _viewModel = new MainViewModel(new ConfigStore("Alt+Space"));
         _importManifestService = new ImportManifestService(_shortcutService);
         DataContext = _viewModel;
+        ((INotifyCollectionChanged)_viewModel.VisibleItems).CollectionChanged += (_, _) => _ = LoadVisibleIconsAsync();
         ApplySettings();
-        // 静默启动时不立即取图标，等窗口真正显示时再加载，加快开机驻留速度。
-        EnsureIconsLoaded();
+        IsVisibleChanged += (_, _) =>
+        {
+            if (IsVisible)
+            {
+                _ = LoadVisibleIconsAsync();
+            }
+            else
+            {
+                _iconBatchCts?.Cancel();
+            }
+        };
         RefreshGroupTabs();
         RefreshEmptyState();
 
@@ -112,7 +123,15 @@ public partial class MainWindow : System.Windows.Window
                 _viewModel.StatusText = $"全局快捷键 {_viewModel.Settings.Hotkey} 注册失败";
             }
         };
-        Closed += (_, _) => _hotkeyService.Dispose();
+        Closed += MainWindow_Closed;
+    }
+
+    private async void MainWindow_Closed(object? sender, EventArgs e)
+    {
+        _iconBatchCts?.Cancel();
+        _iconBatchCts?.Dispose();
+        _hotkeyService.Dispose();
+        await _iconService.DisposeAsync();
     }
 
     private void ShowFromHotkey()
@@ -360,7 +379,6 @@ public partial class MainWindow : System.Windows.Window
                 try
                 {
                     // 提交已完成；后续仅同步界面，不再把刷新异常误报为保存失败或允许重复提交。
-                    LoadIcons();
                     _viewModel.RefreshGroups();
                     _viewModel.RefreshVisibleItems();
                     RefreshGroupTabs();
@@ -442,6 +460,7 @@ public partial class MainWindow : System.Windows.Window
         var cardMode = settings.LayoutMode == "card";
         ItemList.ItemContainerStyle = (Style)FindResource(cardMode ? "LauncherCard" : "LauncherTile");
         ItemList.ItemTemplate = (DataTemplate)FindResource(cardMode ? "CardItemTemplate" : "TileItemTemplate");
+        _ = LoadVisibleIconsAsync();
 
         var groupsAtTop = settings.GroupLayout == "top";
         GroupColumn.Width = groupsAtTop ? new GridLength(0) : new GridLength(132);
@@ -596,20 +615,51 @@ public partial class MainWindow : System.Windows.Window
         EmptyPanel.Visibility = _viewModel.VisibleItems.Any() ? Visibility.Collapsed : Visibility.Visible;
     }
 
-    private void LoadIcons()
+    private Task LoadVisibleIconsAsync()
     {
-        foreach (var item in _viewModel.Config.Groups.SelectMany(group => group.Items))
+        if (!IsVisible) return Task.CompletedTask;
+
+        _iconBatchCts?.Cancel();
+        _iconBatchCts?.Dispose();
+        _iconBatchCts = new CancellationTokenSource();
+        var token = _iconBatchCts.Token;
+        var pixelSize = Math.Max(
+            16,
+            (int)Math.Ceiling(_viewModel.Settings.IconSize * VisualTreeHelper.GetDpi(this).DpiScaleX));
+
+        var requests = _viewModel.VisibleItems.Select(item =>
         {
-            item.IconImage = _shellIconService.GetIcon(item.Path);
-        }
+            var requestVersion = ++item.IconRequestVersion;
+            return LoadOneAsync(item, requestVersion, pixelSize, token);
+        });
+        return Task.WhenAll(requests);
     }
 
-    // 仅在首次需要显示时加载图标：静默启动可跳过，缩短开机驻留时间。
-    public void EnsureIconsLoaded()
+    private async Task LoadOneAsync(
+        LauncherItem item,
+        int requestVersion,
+        int pixelSize,
+        CancellationToken token)
     {
-        if (_iconsLoaded) return;
-        _iconsLoaded = true;
-        LoadIcons();
+        try
+        {
+            var image = await _iconService.GetIconAsync(
+                item.Path,
+                pixelSize,
+                IconLoadPriority.Viewport,
+                token);
+            if (!token.IsCancellationRequested && item.IconRequestVersion == requestVersion)
+            {
+                item.IconImage = image;
+            }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
+        catch (Exception) when (!token.IsCancellationRequested)
+        {
+            if (item.IconRequestVersion == requestVersion) item.IconImage = null;
+        }
     }
 
     private void ItemList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
@@ -985,7 +1035,6 @@ public partial class MainWindow : System.Windows.Window
         }
 
         var item = new LauncherItem { Name = dialog.ItemName, Path = dialog.ItemPath };
-        item.IconImage = _shellIconService.GetIcon(item.Path);
         _viewModel.SelectedGroup.Items.Add(item);
         _viewModel.RefreshVisibleItems();
         _viewModel.Save();
@@ -1011,9 +1060,12 @@ public partial class MainWindow : System.Windows.Window
             return;
         }
 
+        var oldPath = item.Path;
         item.Name = dialog.ItemName;
         item.Path = dialog.ItemPath;
-        item.IconImage = _shellIconService.GetIcon(item.Path);
+        item.IconImage = null;
+        _iconService.Invalidate(oldPath);
+        _iconService.Invalidate(item.Path);
         _viewModel.RefreshVisibleItems();
         _viewModel.Save();
     }
@@ -1238,7 +1290,7 @@ public partial class MainWindow : System.Windows.Window
                 {
                     Children =
                     {
-                        new Image { Source = (item.IconImage as System.Windows.Media.ImageSource) ?? _shellIconService.GetIcon(item.Path), Width = 34, Height = 34, HorizontalAlignment = HorizontalAlignment.Center },
+                        new Image { Source = item.IconImage as System.Windows.Media.ImageSource, Width = 34, Height = 34, HorizontalAlignment = HorizontalAlignment.Center },
                         new TextBlock { Text = item.Name, MaxWidth = 66, Margin = new Thickness(0, 5, 0, 0), FontSize = 11, Foreground = Brushes.White, TextAlignment = TextAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis }
                     }
                 }
@@ -1304,7 +1356,6 @@ public partial class MainWindow : System.Windows.Window
             }
 
             var item = new LauncherItem { Name = Path.GetFileNameWithoutExtension(path), Path = path };
-            item.IconImage = _shellIconService.GetIcon(path);
             _viewModel.SelectedGroup.Items.Insert(0, item);
             addedCount++;
         }

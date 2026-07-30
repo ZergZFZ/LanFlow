@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Text.Json.Serialization;
 
 namespace LanFlow.Desktop.Models;
@@ -30,8 +31,10 @@ public sealed class Group
     public string SortMode { get; set; } = "custom";
 }
 
-public sealed class LauncherItem
+public sealed class LauncherItem : INotifyPropertyChanged
 {
+    private object? _iconImage;
+    private int _iconRequestVersion;
     [JsonPropertyName("id")]
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
 
@@ -69,7 +72,25 @@ public sealed class LauncherItem
 
     // 平台无关的图标承载：Desktop 塞 System.Windows.Media.ImageSource，Linux 塞 Avalonia.Media.IImage。
     [JsonIgnore]
-    public object? IconImage { get; set; }
+    public object? IconImage
+    {
+        get => _iconImage;
+        set
+        {
+            if (ReferenceEquals(_iconImage, value)) return;
+            _iconImage = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IconImage)));
+        }
+    }
+
+    [JsonIgnore]
+    public int IconRequestVersion
+    {
+        get => _iconRequestVersion;
+        set => _iconRequestVersion = value;
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
 }
 
 public sealed class Settings
