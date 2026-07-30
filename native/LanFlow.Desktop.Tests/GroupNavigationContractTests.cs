@@ -73,13 +73,15 @@ public sealed class GroupNavigationContractTests
     public void MainWindow_UsesCoordinatorForNavigationAndLogicalDragGeometry()
     {
         var source = File.ReadAllText(GetDesktopPath("MainWindow.xaml.cs"));
+        var dragCoordinator = File.ReadAllText(GetDesktopPath("Presentation", "LauncherDragDropCoordinator.cs"));
 
         Assert.Contains("GroupSwitchCoordinator", source);
+        Assert.Contains("LauncherDragDropCoordinator", source);
         Assert.Contains("RequestClick", source);
         Assert.Contains("BeginHover", source);
         Assert.Contains("BeginDragHover", source);
         Assert.Contains("EndDrag", source);
-        Assert.Contains("IndexFromPoint", source);
+        Assert.Contains("IndexFromPoint", dragCoordinator);
         Assert.Contains("DragAutoScrollEdge = 32", source);
         Assert.Contains("DragAutoScrollStep = 16", source);
         Assert.DoesNotContain("Opacity = 0.78", source);

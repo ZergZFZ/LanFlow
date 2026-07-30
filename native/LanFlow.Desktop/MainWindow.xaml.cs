@@ -1,6 +1,5 @@
 using System.Collections.Specialized;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
@@ -22,35 +21,6 @@ namespace LanFlow.Desktop;
 
 public partial class MainWindow : System.Windows.Window
 {
-    [DllImport("user32.dll")]
-    private static extern int GetWindowLong(IntPtr hwnd, int nIndex);
-
-    [DllImport("user32.dll")]
-    private static extern int SetWindowLong(IntPtr hwnd, int nIndex, int dwNewLong);
-
-    [DllImport("user32.dll")]
-    private static extern bool SetWindowPos(IntPtr hwnd, IntPtr hwndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
-
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS pMarInset);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MARGINS
-    {
-        public int cxLeftWidth;
-        public int cxRightWidth;
-        public int cyTopHeight;
-        public int cyBottomHeight;
-    }
-
-    private const int GWL_STYLE = -16;
-    private const int GWL_EXSTYLE = -20;
-    private const int WS_THICKFRAME = 0x00040000;
-    private const int WS_EX_LAYERED = 0x00080000;
-    private const int SWP_FRAMECHANGED = 0x0020;
-    private const int SWP_NOMOVE = 0x0002;
-    private const int SWP_NOSIZE = 0x0001;
-    private const int SWP_NOZORDER = 0x0004;
     private const double DragAutoScrollEdge = 32;
     private const double DragAutoScrollStep = 16;
 
@@ -66,6 +36,8 @@ public partial class MainWindow : System.Windows.Window
     private readonly WindowAppearanceController _windowAppearanceController = new();
     private readonly AnimationPreferenceService _animationPreferenceService = new();
     private readonly ContentTransitionController _contentTransitionController = new();
+    private readonly MainWindowSettingsCoordinator _settingsCoordinator;
+    private readonly LauncherDragDropCoordinator _dragDropCoordinator;
     private readonly ShortcutService _shortcutService = new();
     private readonly ImportManifestService _importManifestService;
     private bool _isEditMode;
@@ -101,12 +73,7 @@ public partial class MainWindow : System.Windows.Window
     private bool _isContextMenuActivationPending;
     private Point _dragStartPoint;
     private LauncherItem? _draggedItem;
-    private Group? _dragSourceGroup;
-    private int _dragSourceIndex = -1;
-    private bool _dragStartedWhileFiltering;
     private Popup? _dragGhost;
-    private LauncherItem? _previewTargetItem;
-    private int _previewInsertIndex = -1;
 
     public MainWindow()
     {
@@ -117,6 +84,23 @@ public partial class MainWindow : System.Windows.Window
         _groupSwitchCoordinator = new GroupSwitchCoordinator(
             new DispatcherTimerScheduler(Dispatcher),
             TimeSpan.FromMilliseconds(200));
+        _dragDropCoordinator = new LauncherDragDropCoordinator(
+            _viewModel.RefreshVisibleItems,
+            _viewModel.Save,
+            status => _viewModel.StatusText = status);
+        _settingsCoordinator = new MainWindowSettingsCoordinator(
+            _themeResourceUpdater,
+            _windowAppearanceController,
+            Resources,
+            this,
+            SurfaceRoot,
+            ContentRoot,
+            ApplyWorkingAppearanceSettings,
+            PersistAppearanceSettings,
+            ApplyLayoutSettings,
+            ApplyNavigationSettings,
+            ApplyAnimationSettings,
+            ApplyIconSizeSettings);
         _groupSwitchCoordinator.SelectedGroupId = _viewModel.SelectedGroup?.Id;
         _groupSwitchCoordinator.SwitchRequested += GroupSwitchCoordinator_SwitchRequested;
         _animationPreferenceService.PreferenceChanged += AnimationPreferenceService_PreferenceChanged;
@@ -129,7 +113,7 @@ public partial class MainWindow : System.Windows.Window
             _ = LoadVisibleIconsAsync();
         };
         ItemList.SizeChanged += ItemList_SizeChanged;
-        ApplySettings();
+        _settingsCoordinator.Restore(_viewModel.Settings);
         IsVisibleChanged += (_, _) =>
         {
             if (IsVisible)
@@ -150,7 +134,7 @@ public partial class MainWindow : System.Windows.Window
                 hwndSource.AddHook(WndProc);
             }
 
-            AddDwmShadow();
+            _windowAppearanceController.EnableNativeShadow(this);
 
             if (!_hotkeyService.Register(this, ShowFromHotkey, _viewModel.Settings.Hotkey))
             {
@@ -183,28 +167,6 @@ public partial class MainWindow : System.Windows.Window
         WindowState = WindowState.Normal;
         Activate();
         Focus();
-    }
-
-    private void AddDwmShadow()
-    {
-        var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-
-        // 恢复 WS_THICKFRAME，让 DWM 认为这是一个可调整大小的窗口，从而绘制原生阴影
-        var style = GetWindowLong(hwnd, GWL_STYLE);
-        SetWindowLong(hwnd, GWL_STYLE, style | WS_THICKFRAME);
-
-        // 让 DWM 将 frame 扩展到客户区边缘，触发原生阴影绘制
-        var margins = new MARGINS
-        {
-            cxLeftWidth = 1,
-            cxRightWidth = 1,
-            cyTopHeight = 1,
-            cyBottomHeight = 1
-        };
-        DwmExtendFrameIntoClientArea(hwnd, ref margins);
-
-        // 通知窗口 frame 已变更
-        SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
     }
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -482,7 +444,7 @@ public partial class MainWindow : System.Windows.Window
                     _viewModel.StatusText = "开机启动设置失败，请检查当前用户注册表权限";
                 }
 
-                _viewModel.ApplyAppearance(result, persist: true);
+                _settingsCoordinator.Apply(result);
                 return _viewModel.Settings.Clone();
             });
             accepted = completed && closeDecision == UnsavedCloseDecision.ApplyAndClose;
@@ -492,22 +454,35 @@ public partial class MainWindow : System.Windows.Window
             settingsWindow.DisposePreviewThrottles();
         }
 
-        ApplySettings();
+        if (!accepted)
+        {
+            _settingsCoordinator.Restore(_viewModel.Settings);
+        }
+
         SetEditMode(accepted ? false : wasEditMode, accepted ? "\u8BBE\u7F6E\u5DF2\u4FDD\u5B58" : null);
     }
 
-    private void ApplySettingsPreview(Settings settings)
+    private Settings ApplyWorkingAppearanceSettings(Settings settings)
     {
         _viewModel.ApplyAppearance(settings, persist: false);
-        ApplySettings();
+        return _viewModel.Settings.Clone();
     }
 
-    private void ApplySettings()
+    private Settings PersistAppearanceSettings(Settings settings)
     {
-        var settings = _viewModel.Settings;
-        _themeResourceUpdater.Apply(Resources, settings.ThemeColors);
-        _windowAppearanceController.Apply(this, SurfaceRoot, ContentRoot, settings);
-        LauncherLayout.Margin = new Thickness(settings.ContentPadding, Math.Max(8, settings.ContentPadding - 4), settings.ContentPadding, Math.Max(8, settings.ContentPadding - 4));
+        _viewModel.ApplyAppearance(settings, persist: true);
+        return _viewModel.Settings.Clone();
+    }
+
+    private void ApplySettingsPreview(Settings settings) => _settingsCoordinator.Preview(settings);
+
+    private void ApplyLayoutSettings(Settings settings)
+    {
+        LauncherLayout.Margin = new Thickness(
+            settings.ContentPadding,
+            Math.Max(8, settings.ContentPadding - 4),
+            settings.ContentPadding,
+            Math.Max(8, settings.ContentPadding - 4));
 
         string requestedLayoutMode = NormalizeLayoutMode(settings.LayoutMode);
         bool layoutModeChanged = !string.Equals(_activeLayoutMode, requestedLayoutMode, StringComparison.Ordinal);
@@ -516,8 +491,8 @@ public partial class MainWindow : System.Windows.Window
             SaveCurrentViewState(_activeLayoutMode);
         }
 
-        bool listMode = requestedLayoutMode == "list";
-        bool cardMode = requestedLayoutMode == "card";
+        bool listMode = requestedLayoutMode == SettingsOptionValues.ListLayout;
+        bool cardMode = requestedLayoutMode == SettingsOptionValues.CardLayout;
         ItemList.ItemContainerStyle = (Style)FindResource(
             listMode ? "LauncherList" : cardMode ? "LauncherCard" : "LauncherTile");
         ItemList.ItemTemplate = (DataTemplate)FindResource(
@@ -536,10 +511,12 @@ public partial class MainWindow : System.Windows.Window
         {
             AttachVirtualizingPanel();
             RestoreViewState(reuseOffset: !layoutModeChanged);
-            _ = LoadVisibleIconsAsync();
         });
+    }
 
-        var groupsAtTop = settings.GroupLayout == SettingsOptionValues.GroupTop;
+    private void ApplyNavigationSettings(Settings settings)
+    {
+        bool groupsAtTop = settings.GroupLayout == SettingsOptionValues.GroupTop;
         GroupColumn.Width = groupsAtTop ? new GridLength(0) : new GridLength(settings.GroupNavigationWidth);
         GroupSeparatorColumn.Width = groupsAtTop ? new GridLength(0) : new GridLength(14);
         GroupRow.Height = groupsAtTop ? new GridLength(settings.GroupLabelSize + 8) : new GridLength(0);
@@ -554,6 +531,25 @@ public partial class MainWindow : System.Windows.Window
         Grid.SetColumnSpan(ItemListHost, groupsAtTop ? 3 : 1);
         ItemListHost.Margin = new Thickness(0, 4, 0, 0);
     }
+
+    private void ApplyAnimationSettings(Settings settings)
+    {
+        bool animationsDisabled = string.Equals(
+                settings.AnimationMode,
+                SettingsOptionValues.AnimationOff,
+                StringComparison.Ordinal) ||
+            (string.Equals(
+                 settings.AnimationMode,
+                 SettingsOptionValues.AnimationSystem,
+                 StringComparison.Ordinal) &&
+             !_animationPreferenceService.AreAnimationsEnabled);
+        if (animationsDisabled)
+        {
+            _contentTransitionCancellation?.Cancel();
+        }
+    }
+
+    private void ApplyIconSizeSettings(Settings unusedSettings) => _ = LoadVisibleIconsAsync();
 
     private static string NormalizeLayoutMode(string? layoutMode) =>
         layoutMode is "card" or "list" ? layoutMode : "tile";
@@ -869,7 +865,7 @@ public partial class MainWindow : System.Windows.Window
 
     private void GroupNavigation_GroupDragHovered(object sender, GroupNavigationEventArgs e)
     {
-        if (!_isEditMode || _dragStartedWhileFiltering)
+        if (!_isEditMode || _dragDropCoordinator.StartedWhileFiltering)
         {
             return;
         }
@@ -888,16 +884,18 @@ public partial class MainWindow : System.Windows.Window
     private void GroupNavigation_GroupDropped(object sender, GroupNavigationEventArgs e)
     {
         _groupSwitchCoordinator.EndDrag();
-        if (!_isEditMode || _dragStartedWhileFiltering ||
-            _draggedItem is null || _dragSourceGroup is null)
+        if (!_isEditMode || _draggedItem is null || !_dragDropCoordinator.IsActive)
         {
             return;
         }
 
-        RestorePreviewOrder();
-        MoveItem(_draggedItem, _dragSourceGroup, e.Group, e.Group.Items.Count);
+        _dragDropCoordinator.Drop(
+            _dragDropCoordinator.Generation,
+            e.Group,
+            e.Group.Items,
+            e.Group.Items.Count);
         _draggedItem = null;
-        _dragSourceGroup = null;
+        RefreshEmptyState();
     }
 
     private void GroupSwitchCoordinator_SwitchRequested(
@@ -1146,9 +1144,10 @@ public partial class MainWindow : System.Windows.Window
             ItemList.SelectedItem = launcherItem;
             _dragStartPoint = e.GetPosition(ItemList);
             _draggedItem = launcherItem;
-            _dragSourceGroup = group;
-            _dragSourceIndex = group.Items.IndexOf(launcherItem);
-            _dragStartedWhileFiltering = !string.IsNullOrWhiteSpace(_viewModel.SearchText);
+            _dragDropCoordinator.Begin(
+                launcherItem,
+                group,
+                !string.IsNullOrWhiteSpace(_viewModel.SearchText));
         }
     }
 
@@ -1227,7 +1226,7 @@ public partial class MainWindow : System.Windows.Window
         if (sender is not MenuItem { Tag: Group targetGroup } || ItemList.SelectedItem is not LauncherItem item) return;
         var sourceGroup = _viewModel.SelectedGroup;
         if (sourceGroup is null || sourceGroup == targetGroup) return;
-        MoveItem(item, sourceGroup, targetGroup, targetGroup.Items.Count);
+        MoveItemWithCoordinator(item, sourceGroup, targetGroup, targetGroup.Items.Count);
     }
 
     private void DeleteButton_MouseEnter(object sender, MouseEventArgs e)
@@ -1587,14 +1586,14 @@ public partial class MainWindow : System.Windows.Window
             return;
         }
 
-        if (_isEditMode && !_dragStartedWhileFiltering &&
+        if (_isEditMode && _dragDropCoordinator.IsActive &&
             CanReorderSelectedGroup() &&
-            e.Data.GetData(typeof(LauncherItem)) is LauncherItem item)
+            e.Data.GetData(typeof(LauncherItem)) is LauncherItem)
         {
-            var position = e.GetPosition(ItemList);
+            Point position = e.GetPosition(ItemList);
             UpdateDragGhost(e.GetPosition(this));
             AutoScrollDuringDrag(position);
-            PreviewItemOrder(item, GetLogicalInsertIndex(e));
+            UpdateDragOrder(e);
             e.Effects = DragDropEffects.Move;
             e.Handled = true;
             return;
@@ -1612,26 +1611,18 @@ public partial class MainWindow : System.Windows.Window
             return;
         }
 
-        if (_isEditMode && !_dragStartedWhileFiltering &&
+        if (_isEditMode && _dragDropCoordinator.IsActive &&
             CanReorderSelectedGroup() &&
-            e.Data.GetData(typeof(LauncherItem)) is LauncherItem item &&
-            _dragSourceGroup is not null)
+            e.Data.GetData(typeof(LauncherItem)) is LauncherItem)
         {
-            var targetIndex = GetLogicalInsertIndex(e);
-            if (ReferenceEquals(_dragSourceGroup, _viewModel.SelectedGroup) && _previewInsertIndex >= 0)
-            {
-                _previewTargetItem = null;
-                _previewInsertIndex = -1;
-                _viewModel.RefreshVisibleItems();
-                _viewModel.Save();
-                _viewModel.StatusText = "项目顺序已更新";
-            }
-            else
-            {
-                RestorePreviewOrder();
-                MoveItem(item, _dragSourceGroup, _viewModel.SelectedGroup, targetIndex);
-            }
-
+            UpdateDragOrder(e);
+            _dragDropCoordinator.Drop(
+                _dragDropCoordinator.Generation,
+                _viewModel.SelectedGroup,
+                _viewModel.VisibleItems,
+                _viewModel.VisibleItems.Count);
+            _draggedItem = null;
+            RefreshEmptyState();
             return;
         }
 
@@ -1640,8 +1631,8 @@ public partial class MainWindow : System.Windows.Window
             return;
         }
 
-        var addedCount = AddPathsToSelectedGroup(paths);
-        _viewModel.StatusText = addedCount == 0 ? "没有可添加的新项目" : $"已添加 {addedCount} 个项目";
+        int addedCount = AddPathsToSelectedGroup(paths);
+        _viewModel.StatusText = addedCount == 0 ? "\u6CA1\u6709\u53EF\u6DFB\u52A0\u7684\u65B0\u9879\u76EE" : $"\u5DF2\u6DFB\u52A0 {addedCount} \u4E2A\u9879\u76EE";
         if (addedCount > 0)
         {
             _viewModel.RefreshVisibleItems();
@@ -1652,12 +1643,13 @@ public partial class MainWindow : System.Windows.Window
 
     private void ItemList_PreviewMouseMove(object sender, MouseEventArgs e)
     {
-        if (!_isEditMode || e.LeftButton != MouseButtonState.Pressed || _draggedItem is null || _dragSourceGroup is null)
+        if (!_isEditMode || e.LeftButton != MouseButtonState.Pressed ||
+            _draggedItem is null || !_dragDropCoordinator.IsActive)
         {
             return;
         }
 
-        var position = e.GetPosition(ItemList);
+        Point position = e.GetPosition(ItemList);
         if (Math.Abs(position.X - _dragStartPoint.X) < SystemParameters.MinimumHorizontalDragDistance &&
             Math.Abs(position.Y - _dragStartPoint.Y) < SystemParameters.MinimumVerticalDragDistance)
         {
@@ -1672,22 +1664,17 @@ public partial class MainWindow : System.Windows.Window
         finally
         {
             _groupSwitchCoordinator.EndDrag();
-            RestorePreviewOrder();
+            _dragDropCoordinator.Cancel(_dragDropCoordinator.Generation);
             CloseDragGhost();
             _draggedItem = null;
-            _dragSourceGroup = null;
-            _dragSourceIndex = -1;
-            _dragStartedWhileFiltering = false;
         }
     }
 
     private void ItemList_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         _groupSwitchCoordinator.EndDrag();
+        _dragDropCoordinator.Cancel(_dragDropCoordinator.Generation);
         _draggedItem = null;
-        _dragSourceGroup = null;
-        _dragSourceIndex = -1;
-        _dragStartedWhileFiltering = false;
 
         if (!_isEditMode && _viewModel.Settings.OpenItemsOnSingleClick &&
             GetParent<ListBoxItem>(e.OriginalSource as DependencyObject)?.DataContext is LauncherItem item)
@@ -1702,101 +1689,37 @@ public partial class MainWindow : System.Windows.Window
         string.IsNullOrWhiteSpace(_viewModel.SearchText) &&
         !string.Equals(_viewModel.SelectedGroup.SortMode, "frequency", StringComparison.Ordinal);
 
-    private void PreviewItemOrder(LauncherItem item, int targetIndex)
+    private LauncherDragUpdate UpdateDragOrder(DragEventArgs e)
     {
-        if (_dragSourceGroup is null || _viewModel.SelectedGroup is null)
+        if (_viewModel.SelectedGroup is not { } targetGroup)
         {
-            return;
+            return default;
         }
 
-        _previewInsertIndex = targetIndex;
-        if (!ReferenceEquals(_dragSourceGroup, _viewModel.SelectedGroup))
-        {
-            return;
-        }
-
-        var currentIndex = _viewModel.SelectedGroup.Items.IndexOf(item);
-        targetIndex = Math.Clamp(targetIndex, 0, _viewModel.SelectedGroup.Items.Count);
-        if (currentIndex < 0)
-        {
-            return;
-        }
-
-        if (currentIndex < targetIndex)
-        {
-            targetIndex--;
-        }
-
-        targetIndex = Math.Clamp(targetIndex, 0, _viewModel.SelectedGroup.Items.Count - 1);
-        if (currentIndex == targetIndex)
-        {
-            return;
-        }
-
-        _viewModel.SelectedGroup.Items.Move(currentIndex, targetIndex);
-        _previewTargetItem = item;
-        _previewInsertIndex = targetIndex;
-        _viewModel.RefreshVisibleItems();
-    }
-
-    private void RestorePreviewOrder()
-    {
-        if (_draggedItem is not null && _dragSourceGroup is not null && _dragSourceIndex >= 0)
-        {
-            var currentIndex = _dragSourceGroup.Items.IndexOf(_draggedItem);
-            var targetIndex = Math.Clamp(_dragSourceIndex, 0, Math.Max(0, _dragSourceGroup.Items.Count - 1));
-            if (currentIndex >= 0 && currentIndex != targetIndex)
-            {
-                _dragSourceGroup.Items.Move(currentIndex, targetIndex);
-                if (ReferenceEquals(_dragSourceGroup, _viewModel.SelectedGroup))
-                {
-                    _viewModel.RefreshVisibleItems();
-                }
-            }
-        }
-
-        _previewTargetItem = null;
-        _previewInsertIndex = -1;
-    }
-
-    private int GetLogicalInsertIndex(DragEventArgs e)
-    {
-        if (_viewModel.SelectedGroup is null)
-        {
-            return 0;
-        }
-
-        var visibleCount = _viewModel.VisibleItems.Count;
-        if (visibleCount == 0)
-        {
-            return 0;
-        }
-
-        int visibleIndex;
         if (_activeLayoutMode != SettingsOptionValues.ListLayout && _wrapPanel is not null)
         {
-            var point = e.GetPosition(_wrapPanel);
-            var logicalPoint = new Point(
+            Point point = e.GetPosition(_wrapPanel);
+            Point logicalPoint = new(
                 point.X + _wrapPanel.HorizontalOffset,
                 point.Y + _wrapPanel.VerticalOffset);
-            var columns = Math.Max(1, _wrapPanel.RealizedRange.Columns);
+            int columns = Math.Max(1, _wrapPanel.RealizedRange.Columns);
             var layout = new VirtualizingWrapLayout(
                 _wrapPanel.ItemWidth,
                 _wrapPanel.ItemHeight,
                 _wrapPanel.HorizontalSpacing,
                 _wrapPanel.VerticalSpacing,
                 _wrapPanel.BufferRows);
-            visibleIndex = layout.IndexFromPoint(logicalPoint, visibleCount, columns);
-            if (visibleIndex >= 0)
-            {
-                var itemRect = layout.GetItemRect(visibleIndex, columns);
-                if (logicalPoint.X > itemRect.Left + (itemRect.Width / 2))
-                {
-                    visibleIndex++;
-                }
-            }
+            return _dragDropCoordinator.Update(
+                _dragDropCoordinator.Generation,
+                targetGroup,
+                _viewModel.VisibleItems,
+                logicalPoint,
+                layout,
+                columns);
         }
-        else if (FindAncestor<ListBoxItem>(e.OriginalSource as DependencyObject) is { DataContext: LauncherItem targetItem } container)
+
+        int visibleIndex;
+        if (FindAncestor<ListBoxItem>(e.OriginalSource as DependencyObject) is { DataContext: LauncherItem targetItem } container)
         {
             visibleIndex = _viewModel.VisibleItems.IndexOf(targetItem);
             if (e.GetPosition(container).Y > container.ActualHeight / 2)
@@ -1806,23 +1729,14 @@ public partial class MainWindow : System.Windows.Window
         }
         else
         {
-            visibleIndex = visibleCount;
+            visibleIndex = _viewModel.VisibleItems.Count;
         }
 
-        return MapVisibleInsertIndexToSource(visibleIndex);
-    }
-
-    private int MapVisibleInsertIndexToSource(int visibleIndex)
-    {
-        var group = _viewModel.SelectedGroup;
-        if (group is null || visibleIndex >= _viewModel.VisibleItems.Count)
-        {
-            return group?.Items.Count ?? 0;
-        }
-
-        visibleIndex = Math.Clamp(visibleIndex, 0, _viewModel.VisibleItems.Count - 1);
-        var sourceIndex = group.Items.IndexOf(_viewModel.VisibleItems[visibleIndex]);
-        return sourceIndex >= 0 ? sourceIndex : group.Items.Count;
+        return _dragDropCoordinator.Update(
+            _dragDropCoordinator.Generation,
+            targetGroup,
+            _viewModel.VisibleItems,
+            visibleIndex);
     }
 
     private void AutoScrollDuringDrag(Point position)
@@ -1895,25 +1809,15 @@ public partial class MainWindow : System.Windows.Window
         }
     }
 
-    private void MoveItem(LauncherItem item, Group sourceGroup, Group targetGroup, int targetIndex)
+    private void MoveItemWithCoordinator(
+        LauncherItem item,
+        Group sourceGroup,
+        Group targetGroup,
+        int targetIndex)
     {
-        var sourceIndex = sourceGroup.Items.IndexOf(item);
-        if (sourceIndex < 0)
-        {
-            return;
-        }
-
-        if (sourceGroup == targetGroup && sourceIndex < targetIndex)
-        {
-            targetIndex--;
-        }
-
-        sourceGroup.Items.Remove(item);
-        targetIndex = Math.Clamp(targetIndex, 0, targetGroup.Items.Count);
-        targetGroup.Items.Insert(targetIndex, item);
-        _viewModel.RefreshVisibleItems();
-        _viewModel.Save();
-        _viewModel.StatusText = sourceGroup == targetGroup ? "项目顺序已更新" : $"已移至“{targetGroup.Name}”";
+        long generation = _dragDropCoordinator.Begin(item, sourceGroup, isFiltering: false);
+        _dragDropCoordinator.Drop(generation, targetGroup, targetGroup.Items, targetIndex);
+        RefreshEmptyState();
     }
 
     private int AddPathsToSelectedGroup(IEnumerable<string> paths)
