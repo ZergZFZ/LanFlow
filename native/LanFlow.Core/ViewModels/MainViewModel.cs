@@ -1,7 +1,9 @@
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using LanFlow.Core.Collections;
 using LanFlow.Desktop.Models;
 using LanFlow.Desktop.Services;
 
@@ -10,6 +12,7 @@ namespace LanFlow.Desktop.ViewModels;
 public sealed class MainViewModel : INotifyPropertyChanged
 {
     private readonly IConfigStore _configStore;
+    private readonly RangeObservableCollection<LauncherItem> _visibleItems = [];
     private Group? _selectedGroup;
     private string _searchText = string.Empty;
     private string _statusText = "就绪";
@@ -18,7 +21,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         _configStore = configStore;
         Config = _configStore.Load();
+        VisibleItems = new ReadOnlyObservableCollection<LauncherItem>(_visibleItems);
         SelectedGroup = Config.Groups.FirstOrDefault();
+        RefreshVisibleItems();
     }
 
     public AppConfig Config { get; private set; }
@@ -33,7 +38,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             if (_selectedGroup == value) return;
             _selectedGroup = value;
             OnPropertyChanged();
-            OnPropertyChanged(nameof(VisibleItems));
+            RefreshVisibleItems();
             OnPropertyChanged(nameof(SelectedGroupName));
             OnPropertyChanged(nameof(InfoText));
         }
@@ -49,7 +54,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             if (_searchText == value) return;
             _searchText = value;
             OnPropertyChanged();
-            OnPropertyChanged(nameof(VisibleItems));
+            RefreshVisibleItems();
         }
     }
 
@@ -68,12 +73,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public string InfoText =>
         $"LanFlow · 主题={(Settings.Theme == "light" ? "light" : "dark")} · 分组数={Config.Groups.Count} · 当前分组={SelectedGroupName}";
 
-    public IEnumerable<LauncherItem> VisibleItems => string.IsNullOrWhiteSpace(SearchText)
-        ? OrderItems(SelectedGroup)
-        : Config.Groups.SelectMany(OrderItems).Where(item =>
-            item.Name.Contains(SearchText, StringComparison.CurrentCultureIgnoreCase) ||
-            item.Path.Contains(SearchText, StringComparison.CurrentCultureIgnoreCase) ||
-            item.Command.Contains(SearchText, StringComparison.CurrentCultureIgnoreCase));
+    public ReadOnlyObservableCollection<LauncherItem> VisibleItems { get; }
 
     private static IEnumerable<LauncherItem> OrderItems(Group? group) => group is null
         ? []
@@ -83,11 +83,20 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         OnPropertyChanged(nameof(Groups));
         OnPropertyChanged(nameof(SelectedGroupName));
-        OnPropertyChanged(nameof(VisibleItems));
+        RefreshVisibleItems();
         OnPropertyChanged(nameof(InfoText));
     }
 
-    public void RefreshVisibleItems() => OnPropertyChanged(nameof(VisibleItems));
+    public void RefreshVisibleItems()
+    {
+        var query = string.IsNullOrWhiteSpace(SearchText)
+            ? OrderItems(SelectedGroup)
+            : Config.Groups.SelectMany(OrderItems).Where(item =>
+                item.Name.Contains(SearchText, StringComparison.CurrentCultureIgnoreCase) ||
+                item.Path.Contains(SearchText, StringComparison.CurrentCultureIgnoreCase) ||
+                item.Command.Contains(SearchText, StringComparison.CurrentCultureIgnoreCase));
+        _visibleItems.ReplaceRange(query.ToArray());
+    }
 
     public void ApplyAppearance(Settings source, bool persist)
     {
