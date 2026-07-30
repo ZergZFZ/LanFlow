@@ -12,6 +12,7 @@ using System.Windows.Threading;
 using System.Threading.Tasks;
 using LanFlow.Desktop.Controls;
 using LanFlow.Desktop.Diagnostics;
+using LanFlow.Desktop.Presentation;
 using LanFlow.Desktop.Views;
 using LanFlow.Desktop.Models;
 using LanFlow.Desktop.Services;
@@ -56,16 +57,18 @@ public partial class MainWindow : System.Windows.Window
     private readonly HotkeyService _hotkeyService = new();
     private readonly StartupService _startupService = new();
     private readonly IIconService _iconService = new ShellIconService();
+    private readonly ViewportIconCoordinator _iconCoordinator;
     private readonly UiPerformanceTrace _uiPerformanceTrace = new();
     private readonly ShortcutService _shortcutService = new();
     private readonly ImportManifestService _importManifestService;
     private Settings? _settingsBeforePreview;
     private bool _isEditMode;
     private bool _isModalOperationActive;
-    private CancellationTokenSource? _iconBatchCts;
     private long _groupSwitchVersion;
     private readonly Dictionary<(string GroupId, string LayoutMode), ViewStateSnapshot> _viewStateSnapshots = [];
     private VirtualizingWrapPanel? _wrapPanel;
+    private ScrollViewer? _itemScrollViewer;
+    private bool _isClosed;
     private string _activeLayoutMode = "tile";
     private string? _lastSelectedItemId;
 
@@ -102,10 +105,16 @@ public partial class MainWindow : System.Windows.Window
         InitializeComponent();
         _viewModel = new MainViewModel(new ConfigStore("Alt+Space"));
         _importManifestService = new ImportManifestService(_shortcutService);
+        _iconCoordinator = new ViewportIconCoordinator(_iconService);
         DataContext = _viewModel;
         ((INotifyCollectionChanged)_viewModel.VisibleItems).CollectionChanged += VisibleItems_CollectionChanged;
         _activeLayoutMode = NormalizeLayoutMode(_viewModel.Settings.LayoutMode);
-        ItemList.Loaded += (_, _) => AttachVirtualizingPanel();
+        ItemList.Loaded += (_, _) =>
+        {
+            AttachVirtualizingPanel();
+            _ = LoadVisibleIconsAsync();
+        };
+        ItemList.SizeChanged += ItemList_SizeChanged;
         ApplySettings();
         IsVisibleChanged += (_, _) =>
         {
@@ -115,7 +124,7 @@ public partial class MainWindow : System.Windows.Window
             }
             else
             {
-                _iconBatchCts?.Cancel();
+                _iconCoordinator.CancelPending();
             }
         };
         RefreshGroupTabs();
@@ -140,8 +149,11 @@ public partial class MainWindow : System.Windows.Window
 
     private async void MainWindow_Closed(object? sender, EventArgs e)
     {
-        _iconBatchCts?.Cancel();
-        _iconBatchCts?.Dispose();
+        _isClosed = true;
+        ((INotifyCollectionChanged)_viewModel.VisibleItems).CollectionChanged -= VisibleItems_CollectionChanged;
+        ItemList.SizeChanged -= ItemList_SizeChanged;
+        DetachVirtualizingPanel();
+        _iconCoordinator.Dispose();
         _hotkeyService.Dispose();
         await _iconService.DisposeAsync();
     }
@@ -496,8 +508,8 @@ public partial class MainWindow : System.Windows.Window
         {
             AttachVirtualizingPanel();
             RestoreViewState(reuseOffset: !layoutModeChanged);
+            _ = LoadVisibleIconsAsync();
         });
-        _ = LoadVisibleIconsAsync();
 
         var groupsAtTop = settings.GroupLayout == "top";
         GroupColumn.Width = groupsAtTop ? new GridLength(0) : new GridLength(132);
@@ -698,17 +710,34 @@ public partial class MainWindow : System.Windows.Window
 
     private void AttachVirtualizingPanel()
     {
-        VirtualizingWrapPanel? panel = FindVisualChild<VirtualizingWrapPanel>(ItemList);
-        if (ReferenceEquals(panel, _wrapPanel))
+        var panel = FindVisualChild<VirtualizingWrapPanel>(ItemList);
+        if (!ReferenceEquals(panel, _wrapPanel))
         {
-            return;
+            if (_wrapPanel is not null)
+            {
+                _wrapPanel.ViewportChanged -= VirtualizingPanel_ViewportChanged;
+            }
+
+            _wrapPanel = panel;
+            if (_wrapPanel is not null)
+            {
+                _wrapPanel.ViewportChanged += VirtualizingPanel_ViewportChanged;
+            }
         }
 
-        DetachVirtualizingPanel();
-        _wrapPanel = panel;
-        if (_wrapPanel is not null)
+        var scrollViewer = FindVisualChild<ScrollViewer>(ItemList);
+        if (!ReferenceEquals(scrollViewer, _itemScrollViewer))
         {
-            _wrapPanel.ViewportChanged += VirtualizingPanel_ViewportChanged;
+            if (_itemScrollViewer is not null)
+            {
+                _itemScrollViewer.ScrollChanged -= ItemScrollViewer_ScrollChanged;
+            }
+
+            _itemScrollViewer = scrollViewer;
+            if (_itemScrollViewer is not null)
+            {
+                _itemScrollViewer.ScrollChanged += ItemScrollViewer_ScrollChanged;
+            }
         }
     }
 
@@ -719,14 +748,38 @@ public partial class MainWindow : System.Windows.Window
             _wrapPanel.ViewportChanged -= VirtualizingPanel_ViewportChanged;
             _wrapPanel = null;
         }
+
+        if (_itemScrollViewer is not null)
+        {
+            _itemScrollViewer.ScrollChanged -= ItemScrollViewer_ScrollChanged;
+            _itemScrollViewer = null;
+        }
     }
 
     private void VirtualizingPanel_ViewportChanged(object? sender, ViewportRange range)
     {
+        _ = LoadVisibleIconsAsync(range);
         if (_viewModel.SelectedGroup is { } group)
         {
             _uiPerformanceTrace.ContentStable(group.Id, _wrapPanel?.RealizedIndices.Count ?? 0);
         }
+    }
+
+    private void ItemScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        if (_wrapPanel is null && e.VerticalChange != 0)
+        {
+            _ = LoadVisibleIconsAsync();
+        }
+    }
+
+    private void ItemList_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+        {
+            AttachVirtualizingPanel();
+            _ = LoadVisibleIconsAsync();
+        });
     }
 
     private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
@@ -891,50 +944,106 @@ public partial class MainWindow : System.Windows.Window
         EmptyPanel.Visibility = _viewModel.VisibleItems.Any() ? Visibility.Collapsed : Visibility.Visible;
     }
 
-    private Task LoadVisibleIconsAsync()
+    private async Task LoadVisibleIconsAsync(ViewportRange? requestedRange = null)
     {
-        if (!IsVisible) return Task.CompletedTask;
+        if (_isClosed || !IsVisible || _viewModel.VisibleItems.Count == 0)
+        {
+            return;
+        }
 
-        _iconBatchCts?.Cancel();
-        _iconBatchCts?.Dispose();
-        _iconBatchCts = new CancellationTokenSource();
-        var token = _iconBatchCts.Token;
+        AttachVirtualizingPanel();
+        var viewport = requestedRange ?? GetCurrentIconViewport();
         var pixelSize = Math.Max(
             16,
             (int)Math.Ceiling(_viewModel.Settings.IconSize * VisualTreeHelper.GetDpi(this).DpiScaleX));
+        var themeVariant = _viewModel.Settings.Theme;
 
-        var requests = _viewModel.VisibleItems.Select(item =>
+        await _iconCoordinator.RefreshAsync(
+            _viewModel.VisibleItems,
+            viewport,
+            pixelSize,
+            themeVariant,
+            default);
+        await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+
+        if (_isClosed || !IsVisible || _viewModel.SelectedGroup is not { } selectedGroup)
         {
-            var requestVersion = ++item.IconRequestVersion;
-            return LoadOneAsync(item, requestVersion, pixelSize, token);
-        });
-        return Task.WhenAll(requests);
+            return;
+        }
+
+        await _iconCoordinator.PreheatAsync(
+            _viewModel.Config.Groups,
+            selectedGroup.Id,
+            pixelSize,
+            themeVariant,
+            default);
     }
 
-    private async Task LoadOneAsync(
-        LauncherItem item,
-        int requestVersion,
-        int pixelSize,
-        CancellationToken token)
+    private ViewportRange GetCurrentIconViewport()
     {
-        try
+        if (_viewModel.VisibleItems.Count == 0)
         {
-            var image = await _iconService.GetIconAsync(
-                item.Path,
-                pixelSize,
-                IconLoadPriority.Viewport,
-                token);
-            if (!token.IsCancellationRequested && item.IconRequestVersion == requestVersion)
+            return ViewportRange.Empty;
+        }
+
+        if (_wrapPanel is { RealizedRange.FirstIndex: >= 0 } panel)
+        {
+            return panel.RealizedRange;
+        }
+
+        if (_activeLayoutMode == "list")
+        {
+            var realizedIndices = new List<int>();
+            CollectRealizedItemIndices(ItemList, realizedIndices);
+            if (realizedIndices.Count > 0)
             {
-                item.IconImage = image;
+                return new ViewportRange(realizedIndices.Min(), realizedIndices.Max(), 1);
             }
         }
-        catch (OperationCanceledException) when (token.IsCancellationRequested)
+
+        return GetInitialIconViewport();
+    }
+
+    private ViewportRange GetInitialIconViewport()
+    {
+        var itemCount = _viewModel.VisibleItems.Count;
+        var availableWidth = Math.Max(1, ItemList.ActualWidth - ItemList.Padding.Left - ItemList.Padding.Right);
+        var availableHeight = Math.Max(1, ItemList.ActualHeight - ItemList.Padding.Top - ItemList.Padding.Bottom);
+        int firstScreenCount;
+
+        if (_activeLayoutMode == "list")
         {
+            firstScreenCount = Math.Max(1, (int)Math.Ceiling(availableHeight / Math.Max(1, _viewModel.Settings.CardHeight)));
         }
-        catch (Exception) when (!token.IsCancellationRequested)
+        else
         {
-            if (item.IconRequestVersion == requestVersion) item.IconImage = null;
+            var itemWidth = Math.Max(1, _viewModel.Settings.CardWidth + _viewModel.Settings.ItemSpacing);
+            var itemHeight = Math.Max(1, _viewModel.Settings.CardHeight + _viewModel.Settings.RowSpacing);
+            var columns = Math.Max(1, (int)(availableWidth / itemWidth));
+            var rows = Math.Max(1, (int)Math.Ceiling(availableHeight / itemHeight));
+            firstScreenCount = columns * rows;
+        }
+
+        return new ViewportRange(0, Math.Min(itemCount, firstScreenCount) - 1, Math.Max(1, firstScreenCount));
+    }
+
+    private void CollectRealizedItemIndices(DependencyObject parent, ICollection<int> indices)
+    {
+        for (var childIndex = 0; childIndex < VisualTreeHelper.GetChildrenCount(parent); childIndex++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, childIndex);
+            if (child is ListBoxItem container)
+            {
+                var itemIndex = ItemList.ItemContainerGenerator.IndexFromContainer(container);
+                if (itemIndex >= 0)
+                {
+                    indices.Add(itemIndex);
+                }
+
+                continue;
+            }
+
+            CollectRealizedItemIndices(child, indices);
         }
     }
 
