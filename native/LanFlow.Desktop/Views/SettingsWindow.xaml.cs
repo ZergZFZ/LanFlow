@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -7,44 +7,44 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using LanFlow.Desktop.Models;
+using LanFlow.Desktop.Presentation;
 using LanFlow.Desktop.Services;
 
 namespace LanFlow.Desktop.Views;
 
 public partial class SettingsWindow : Window
 {
-    private readonly Settings _working;
+    private readonly SettingsPreviewSession _session;
     private bool _isLoading = true;
     private readonly UpdateService _updateService = new();
 
-    public SettingsWindow(Settings settings)
+    public SettingsWindow(SettingsPreviewSession session)
     {
-        _working = Clone(settings);
+        _session = session ?? throw new ArgumentNullException(nameof(session));
         InitializeComponent();
         LoadControls();
         _isLoading = false;
     }
 
-    public Settings Result => Clone(_working);
-    public event Action<Settings>? PreviewChanged;
+    private Settings Working => _session.Working;
 
     private void LoadControls()
     {
-        ThemePresetCombo.SelectedIndex = _working.Theme == "light" ? 1 : _working.Theme == "custom" ? 2 : 0;
-        LayoutModeToggle.State = _working.LayoutMode == "card";
-        ShowTitleToggle.State = _working.ShowItemTitle;
-        SingleClickOpenRadio.IsChecked = _working.OpenItemsOnSingleClick;
-        DoubleClickOpenRadio.IsChecked = !_working.OpenItemsOnSingleClick;
-        IconSizeSlider.Value = _working.IconSize;
-        CardWidthSlider.Value = _working.CardWidth;
-        CardHeightSlider.Value = _working.CardHeight;
-        TextSizeSlider.Value = _working.TextSize;
-        ItemSpacingSlider.Value = _working.ItemSpacing;
-        RowSpacingSlider.Value = _working.RowSpacing;
-        OpacitySlider.Value = _working.Opacity;
-        GroupLayoutToggle.State = _working.GroupLayout == "top";
-        HotkeyBox.Text = _working.Hotkey;
-        RunAtStartupCheck.IsChecked = _working.StartWithWindows;
+        ThemePresetCombo.SelectedIndex = Working.Theme == "light" ? 1 : Working.Theme == "custom" ? 2 : 0;
+        LayoutModeToggle.State = Working.LayoutMode == "card";
+        ShowTitleToggle.State = Working.ShowItemTitle;
+        SingleClickOpenRadio.IsChecked = Working.OpenItemsOnSingleClick;
+        DoubleClickOpenRadio.IsChecked = !Working.OpenItemsOnSingleClick;
+        IconSizeSlider.Value = Working.IconSize;
+        CardWidthSlider.Value = Working.CardWidth;
+        CardHeightSlider.Value = Working.CardHeight;
+        TextSizeSlider.Value = Working.TextSize;
+        ItemSpacingSlider.Value = Working.ItemSpacing;
+        RowSpacingSlider.Value = Working.RowSpacing;
+        OpacitySlider.Value = Working.Opacity;
+        GroupLayoutToggle.State = Working.GroupLayout == "top";
+        HotkeyBox.Text = Working.Hotkey;
+        RunAtStartupCheck.IsChecked = Working.StartWithWindows;
         LoadColorControls();
         RefreshValueLabels();
         VersionText.Text = "v" + (System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.1.5");
@@ -52,7 +52,7 @@ public partial class SettingsWindow : Window
 
     private void LoadColorControls()
     {
-        var c = _working.ThemeColors;
+        var c = Working.ThemeColors;
         PanelColorBox.Text = c.Panel; PanelBorderColorBox.Text = c.PanelBorder; SurfaceColorBox.Text = c.Surface;
         SurfaceBorderColorBox.Text = c.SurfaceBorder; FooterColorBox.Text = c.Footer;
         PrimaryTextColorBox.Text = c.TextPrimary; SecondaryTextColorBox.Text = c.TextSecondary; AccentColorBox.Text = c.Accent;
@@ -89,55 +89,68 @@ public partial class SettingsWindow : Window
     private void ThemePresetCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_isLoading || ThemePresetCombo.SelectedItem is not ComboBoxItem { Tag: string theme }) return;
-        _working.Theme = theme;
-        _working.ThemeProfile = theme == "light" ? "浅色" : theme == "dark" ? "深色" : "自定义";
-        _working.ThemeColors = theme == "light" ? ThemeColors.Light() : theme == "dark" ? ThemeColors.Dark() : Clone(_working.ThemeColors);
+        _session.Update(settings =>
+        {
+            settings.Theme = theme;
+            settings.ThemeProfile = theme == "light" ? "浅色" : theme == "dark" ? "深色" : "自定义";
+            settings.ThemeColors = theme == "light"
+                ? ThemeColors.Light()
+                : theme == "dark"
+                    ? ThemeColors.Dark()
+                    : settings.ThemeColors.Clone();
+        });
         _isLoading = true;
         LoadColorControls();
         _isLoading = false;
-        Preview();
     }
 
     private void SettingsChanged(object sender, RoutedEventArgs e)
     {
         if (_isLoading) return;
-        _working.LayoutMode = LayoutModeToggle.State ? "card" : "tile";
-        _working.ShowItemTitle = ShowTitleToggle.State;
-        _working.OpenItemsOnSingleClick = SingleClickOpenRadio.IsChecked == true;
-        _working.IconSize = IconSizeSlider.Value;
-        _working.CardWidth = CardWidthSlider.Value;
-        _working.CardHeight = CardHeightSlider.Value;
-        _working.TextSize = TextSizeSlider.Value;
-        _working.ItemSpacing = ItemSpacingSlider.Value;
-        _working.RowSpacing = RowSpacingSlider.Value;
-        _working.Opacity = OpacitySlider.Value;
-        _working.GroupLayout = GroupLayoutToggle.State ? "top" : "left";
-        _working.StartWithWindows = RunAtStartupCheck.IsChecked == true;
+        _session.Update(settings =>
+        {
+            LegacySettingsControlMapper.ApplyLayoutToggle(
+                settings,
+                LayoutModeToggle.State,
+                ReferenceEquals(sender, LayoutModeToggle));
+            settings.ShowItemTitle = ShowTitleToggle.State;
+            settings.OpenItemsOnSingleClick = SingleClickOpenRadio.IsChecked == true;
+            settings.IconSize = IconSizeSlider.Value;
+            settings.CardWidth = CardWidthSlider.Value;
+            settings.CardHeight = CardHeightSlider.Value;
+            settings.TextSize = TextSizeSlider.Value;
+            settings.ItemSpacing = ItemSpacingSlider.Value;
+            settings.RowSpacing = RowSpacingSlider.Value;
+            LegacySettingsControlMapper.ApplyOpacity(settings, OpacitySlider.Value);
+            settings.GroupLayout = GroupLayoutToggle.State ? "top" : "left";
+            settings.StartWithWindows = RunAtStartupCheck.IsChecked == true;
+        });
         RefreshValueLabels();
-        Preview();
     }
 
     private void ThemeColorChanged(object sender, TextChangedEventArgs e)
     {
         if (_isLoading) return;
-        var c = _working.ThemeColors;
-        c.Panel = PanelColorBox.Text; c.PanelBorder = PanelBorderColorBox.Text;
-        c.Surface = SurfaceColorBox.Text; c.SurfaceBorder = SurfaceBorderColorBox.Text; c.Footer = FooterColorBox.Text;
-        c.TextPrimary = PrimaryTextColorBox.Text; c.TextSecondary = SecondaryTextColorBox.Text; c.Accent = AccentColorBox.Text;
-        c.Hover = HoverColorBox.Text; c.IconSurface = IconSurfaceColorBox.Text;
-        _working.Theme = "custom";
-        _working.ThemeProfile = "自定义";
+        _session.Update(settings =>
+        {
+            var colors = settings.ThemeColors;
+            colors.Panel = PanelColorBox.Text; colors.PanelBorder = PanelBorderColorBox.Text;
+            colors.Surface = SurfaceColorBox.Text; colors.SurfaceBorder = SurfaceBorderColorBox.Text; colors.Footer = FooterColorBox.Text;
+            colors.TextPrimary = PrimaryTextColorBox.Text; colors.TextSecondary = SecondaryTextColorBox.Text; colors.Accent = AccentColorBox.Text;
+            colors.Hover = HoverColorBox.Text; colors.IconSurface = IconSurfaceColorBox.Text;
+            settings.Theme = "custom";
+            settings.ThemeProfile = "自定义";
+        });
         RefreshColorPickerButtons();
-        Preview();
     }
 
     private void RefreshValueLabels()
     {
-        IconSizeValue.Text = $"{_working.IconSize:0}";
-        CardWidthValue.Text = $"{_working.CardWidth:0}";
-        CardHeightValue.Text = $"{_working.CardHeight:0}";
-        TextSizeValue.Text = $"{_working.TextSize:0}";
-        OpacityValue.Text = $"{_working.Opacity:P0}";
+        IconSizeValue.Text = $"{Working.IconSize:0}";
+        CardWidthValue.Text = $"{Working.CardWidth:0}";
+        CardHeightValue.Text = $"{Working.CardHeight:0}";
+        TextSizeValue.Text = $"{Working.TextSize:0}";
+        OpacityValue.Text = $"{Working.Opacity:P0}";
     }
 
     private void HotkeyBox_KeyDown(object sender, KeyEventArgs e)
@@ -153,12 +166,10 @@ public partial class SettingsWindow : Window
         if (modifiers.HasFlag(ModifierKeys.Windows)) parts.Add("Win");
         var candidate = string.Join('+', parts.Append(key.ToString()));
         if (!HotkeyService.TryNormalize(candidate, out var normalized)) return;
-        _working.Hotkey = normalized;
+        _session.Update(settings => settings.Hotkey = normalized);
         HotkeyBox.Text = normalized;
-        Preview();
     }
 
-    private void Preview() => PreviewChanged?.Invoke(Result);
     private void Save_Click(object sender, RoutedEventArgs e) => DialogResult = true;
 
     private void AboutLink_RequestNavigate(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
@@ -221,19 +232,4 @@ public partial class SettingsWindow : Window
         }
     }
 
-    private static Settings Clone(Settings value) => new()
-    {
-        Hotkey = value.Hotkey, Theme = value.Theme, ThemeProfile = value.ThemeProfile, ThemeColors = Clone(value.ThemeColors),
-        CustomThemes = value.CustomThemes.Select(p => new ThemeProfile { Name = p.Name, Colors = Clone(p.Colors) }).ToList(), Opacity = value.Opacity,
-        LayoutMode = value.LayoutMode, IconSize = value.IconSize, CardWidth = value.CardWidth, CardHeight = value.CardHeight, TextSize = value.TextSize, ItemSpacing = value.ItemSpacing,
-        RowSpacing = value.RowSpacing, ContentPadding = value.ContentPadding, ShowShortcutBadge = value.ShowShortcutBadge, ShowItemTitle = value.ShowItemTitle,
-        ShowFullItemName = value.ShowFullItemName, GroupLayout = value.GroupLayout, StartWithWindows = value.StartWithWindows,
-        OpenItemsOnSingleClick = value.OpenItemsOnSingleClick,
-    };
-
-    private static ThemeColors Clone(ThemeColors c) => new()
-    {
-        Panel = c.Panel, PanelBorder = c.PanelBorder, Surface = c.Surface, SurfaceBorder = c.SurfaceBorder, Footer = c.Footer,
-        TextPrimary = c.TextPrimary, TextSecondary = c.TextSecondary, Accent = c.Accent, Hover = c.Hover, IconSurface = c.IconSurface
-    };
 }

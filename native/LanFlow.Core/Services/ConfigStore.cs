@@ -107,11 +107,7 @@ public sealed class ConfigStore : IConfigStore
         }
 
         settings.Opacity = Math.Clamp(settings.Opacity, 0.40, 1.00);
-        settings.LayeredOpacity = Math.Clamp(settings.LayeredOpacity, 0.40, 1.00);
-        settings.WholeWindowOpacity = Math.Clamp(settings.WholeWindowOpacity, 0.40, 1.00);
-        settings.GroupLabelSize = Math.Clamp(settings.GroupLabelSize, 28, 52);
-        settings.GroupLabelFontSize = Math.Clamp(settings.GroupLabelFontSize, 11, 18);
-        settings.GroupNavigationWidth = Math.Clamp(settings.GroupNavigationWidth, 96, 280);
+        SettingsNormalizer.ClampPreviewValues(settings);
 
         settings.Opacity = settings.TransparencyMode == SettingsOptionValues.TransparencyWholeWindow
             ? settings.WholeWindowOpacity

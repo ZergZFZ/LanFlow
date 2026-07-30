@@ -68,7 +68,6 @@ public partial class MainWindow : System.Windows.Window
     private readonly ContentTransitionController _contentTransitionController = new();
     private readonly ShortcutService _shortcutService = new();
     private readonly ImportManifestService _importManifestService;
-    private Settings? _settingsBeforePreview;
     private bool _isEditMode;
     private bool _isModalOperationActive;
     private long _latestGroupSwitchGeneration;
@@ -452,33 +451,45 @@ public partial class MainWindow : System.Windows.Window
     }
     private void OpenSettings_Click(object sender, RoutedEventArgs e)
     {
-        _settingsBeforePreview = CloneSettings(_viewModel.Settings);
+        var session = new SettingsPreviewSession(_viewModel.Settings);
+        var original = session.Original;
+        session.PreviewRequested += (_, settings) => ApplySettingsPreview(settings);
+
         var wasEditMode = _isEditMode;
         SetEditMode(true, "设置中：可同时查看和管理启动项");
-        var settingsWindow = new SettingsWindow(_viewModel.Settings) { Owner = this };
-        settingsWindow.PreviewChanged += settings => { _viewModel.ApplyAppearance(settings, persist: false); ApplySettings(); };
+        var settingsWindow = new SettingsWindow(session) { Owner = this };
 
-        if (settingsWindow.ShowDialog() == true)
-        {
-            var result = settingsWindow.Result;
-            if (!_hotkeyService.TryRegister(result.Hotkey))
+        var accepted = settingsWindow.ShowDialog() == true;
+        SettingsPreviewTransaction.Complete(
+            session,
+            accepted,
+            result =>
             {
-                result.Hotkey = _settingsBeforePreview.Hotkey;
-                _viewModel.StatusText = "快捷键被其他程序占用，已保留原组合键";
-            }
-            result.StartWithWindows = _startupService.SetEnabled(result.StartWithWindows) && _startupService.IsEnabled();
-            if (result.StartWithWindows != settingsWindow.Result.StartWithWindows) _viewModel.StatusText = "开机启动设置失败，请检查当前用户注册表权限";
-            _viewModel.ApplyAppearance(result, persist: true);
-        }
-        else if (_settingsBeforePreview is not null)
-        {
-            _startupService.SetEnabled(_settingsBeforePreview.StartWithWindows);
-            _viewModel.ApplyAppearance(_settingsBeforePreview, persist: false);
-        }
+                if (!_hotkeyService.TryRegister(result.Hotkey))
+                {
+                    result.Hotkey = original.Hotkey;
+                    _viewModel.StatusText = "快捷键被其他程序占用，已保留原组合键";
+                }
+
+                var requestedStartup = result.StartWithWindows;
+                result.StartWithWindows = _startupService.SetEnabled(requestedStartup) && _startupService.IsEnabled();
+                if (result.StartWithWindows != requestedStartup)
+                {
+                    _viewModel.StatusText = "开机启动设置失败，请检查当前用户注册表权限";
+                }
+
+                _viewModel.ApplyAppearance(result, persist: true);
+                return _viewModel.Settings.Clone();
+            });
 
         ApplySettings();
-        SetEditMode(settingsWindow.DialogResult == true ? false : wasEditMode, settingsWindow.DialogResult == true ? "设置已保存" : null);
-        _settingsBeforePreview = null;
+        SetEditMode(accepted ? false : wasEditMode, accepted ? "设置已保存" : null);
+    }
+
+    private void ApplySettingsPreview(Settings settings)
+    {
+        _viewModel.ApplyAppearance(settings, persist: false);
+        ApplySettings();
     }
 
     private void ApplySettings()
@@ -805,18 +816,6 @@ public partial class MainWindow : System.Windows.Window
 
         return null;
     }
-
-    private static Settings CloneSettings(Settings value) => new()
-    {
-        Hotkey = value.Hotkey, Theme = value.Theme, ThemeProfile = value.ThemeProfile, Opacity = value.Opacity,
-        LayoutMode = value.LayoutMode, IconSize = value.IconSize, CardWidth = value.CardWidth, CardHeight = value.CardHeight, TextSize = value.TextSize,
-        ItemSpacing = value.ItemSpacing, RowSpacing = value.RowSpacing, ContentPadding = value.ContentPadding,
-        ShowShortcutBadge = value.ShowShortcutBadge, ShowFullItemName = value.ShowFullItemName, ShowItemTitle = value.ShowItemTitle, GroupLayout = value.GroupLayout,
-        StartWithWindows = value.StartWithWindows,
-        ThemeColors = new ThemeColors { Panel = value.ThemeColors.Panel, PanelBorder = value.ThemeColors.PanelBorder, Surface = value.ThemeColors.Surface, SurfaceBorder = value.ThemeColors.SurfaceBorder, Footer = value.ThemeColors.Footer, TextPrimary = value.ThemeColors.TextPrimary, TextSecondary = value.ThemeColors.TextSecondary, Accent = value.ThemeColors.Accent, Hover = value.ThemeColors.Hover, IconSurface = value.ThemeColors.IconSurface },
-        CustomThemes = value.CustomThemes.Select(profile => new ThemeProfile { Name = profile.Name, Colors = new ThemeColors { Panel = profile.Colors.Panel, PanelBorder = profile.Colors.PanelBorder, Surface = profile.Colors.Surface, SurfaceBorder = profile.Colors.SurfaceBorder, Footer = profile.Colors.Footer, TextPrimary = profile.Colors.TextPrimary, TextSecondary = profile.Colors.TextSecondary, Accent = profile.Colors.Accent, Hover = profile.Colors.Hover, IconSurface = profile.Colors.IconSurface } }).ToList(),
-    };
-
 
     private void ToggleEditMode_Click(object sender, RoutedEventArgs e) => SetEditMode(!_isEditMode, null);
 
