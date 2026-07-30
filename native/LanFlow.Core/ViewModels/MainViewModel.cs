@@ -9,19 +9,19 @@ namespace LanFlow.Desktop.ViewModels;
 
 public sealed class MainViewModel : INotifyPropertyChanged
 {
-    private readonly ConfigStore _configStore;
+    private readonly IConfigStore _configStore;
     private Group? _selectedGroup;
     private string _searchText = string.Empty;
     private string _statusText = "就绪";
 
-    public MainViewModel(ConfigStore configStore)
+    public MainViewModel(IConfigStore configStore)
     {
         _configStore = configStore;
         Config = _configStore.Load();
         SelectedGroup = Config.Groups.FirstOrDefault();
     }
 
-    public AppConfig Config { get; }
+    public AppConfig Config { get; private set; }
     public IEnumerable<Group> Groups => Config.Groups;
     public Settings Settings => Config.Settings;
 
@@ -123,6 +123,21 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         _configStore.Save(Config);
         StatusText = "已保存";
+    }
+
+    public void SaveAndApply(AppConfig config)
+    {
+        ArgumentNullException.ThrowIfNull(config);
+        var selectedGroupId = SelectedGroup?.Id;
+
+        // 提交边界只负责持久化和内存交换。UI 通知由调用方在预览窗口关闭后执行，
+        // 避免保存成功后的事件处理异常被误判为“保存失败”并允许重复提交。
+        _configStore.Save(config);
+        Config = config;
+        _selectedGroup = selectedGroupId is null
+            ? Config.Groups.FirstOrDefault()
+            : Config.Groups.FirstOrDefault(group => string.Equals(group.Id, selectedGroupId, StringComparison.Ordinal))
+              ?? Config.Groups.FirstOrDefault();
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

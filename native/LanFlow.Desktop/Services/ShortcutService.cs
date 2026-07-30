@@ -4,7 +4,7 @@ using System.Text;
 
 namespace LanFlow.Desktop.Services;
 
-public sealed class ShortcutService
+public sealed class ShortcutService : IShortcutTargetResolver
 {
     public string ResolveTargetPath(string path)
     {

@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -53,9 +53,11 @@ public partial class MainWindow : System.Windows.Window
     private readonly StartupService _startupService = new();
     private readonly ShellIconService _shellIconService = new();
     private readonly ShortcutService _shortcutService = new();
+    private readonly ImportManifestService _importManifestService;
     private Settings? _settingsBeforePreview;
     private bool _isEditMode;
     private bool _iconsLoaded;
+    private bool _isModalOperationActive;
 
     public static readonly DependencyProperty IsEditModeProperty =
         DependencyProperty.Register(
@@ -84,6 +86,7 @@ public partial class MainWindow : System.Windows.Window
     {
         InitializeComponent();
         _viewModel = new MainViewModel(new ConfigStore("Alt+Space"));
+        _importManifestService = new ImportManifestService(_shortcutService);
         DataContext = _viewModel;
         ApplySettings();
         ItemList.ItemContainerGenerator.StatusChanged += (_, _) =>
@@ -220,7 +223,7 @@ public partial class MainWindow : System.Windows.Window
     {
         base.OnDeactivated(e);
 
-        if (!IsVisible || _isEditMode || IsExiting())
+        if (!IsVisible || _isEditMode || _isModalOperationActive || IsExiting())
         {
             return;
         }
@@ -230,7 +233,7 @@ public partial class MainWindow : System.Windows.Window
         // 若立即隐藏就会出现“右键闪退”。延迟到 Background 优先级可确保计数已稳定。
         Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
         {
-            if (IsVisible && !_isEditMode && !IsExiting() && _openContextMenus == 0 && !_isContextMenuActivationPending)
+            if (IsVisible && !_isEditMode && !_isModalOperationActive && !IsExiting() && _openContextMenus == 0 && !_isContextMenuActivationPending)
             {
                 Hide();
             }
@@ -307,6 +310,88 @@ public partial class MainWindow : System.Windows.Window
         Focus();
     }
 
+    private void ImportManifest_Click(object sender, RoutedEventArgs e)
+    {
+        var previousStatus = _viewModel.StatusText;
+        string? finalStatus = null;
+        _isModalOperationActive = true;
+
+        try
+        {
+            var fileDialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "选择 LanFlow 导入清单",
+                Filter = "JSON 清单 (*.json)|*.json|所有文件 (*.*)|*.*",
+                DefaultExt = ".json",
+                CheckFileExists = true,
+                Multiselect = false,
+            };
+
+            _viewModel.StatusText = "请选择 import-manifest.json";
+            if (fileDialog.ShowDialog(this) != true)
+            {
+                finalStatus = previousStatus;
+                return;
+            }
+
+            ImportPreview preview;
+            try
+            {
+                preview = _importManifestService.LoadPreview(fileDialog.FileName, _viewModel.Config);
+            }
+            catch (ImportManifestException ex)
+            {
+                MessageBox.Show(this, ex.Message, "导入清单无效", MessageBoxButton.OK, MessageBoxImage.Warning);
+                finalStatus = "导入清单校验失败";
+                return;
+            }
+
+            var previewWindow = new ImportPreviewWindow(preview, selection =>
+            {
+                var result = _importManifestService.BuildMerge(_viewModel.Config, selection);
+                _viewModel.SaveAndApply(result.Config);
+                return result;
+            })
+            {
+                Owner = this,
+            };
+
+            if (previewWindow.ShowDialog() == true && previewWindow.Result is { } result)
+            {
+                var successStatus = $"已导入 {result.ImportedItemCount} 个项目，创建 {result.ImportedGroupCount} 个分组，跳过 {result.SkippedItemCount} 个项目";
+                finalStatus = successStatus;
+                try
+                {
+                    // 提交已完成；后续仅同步界面，不再把刷新异常误报为保存失败或允许重复提交。
+                    LoadIcons();
+                    _viewModel.RefreshGroups();
+                    _viewModel.RefreshVisibleItems();
+                    RefreshGroupTabs();
+                    RefreshEmptyState();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(this, $"导入已保存，但界面刷新失败：{ex.Message}\n请重启 LanFlow 查看导入结果。", "导入已保存", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    finalStatus = $"{successStatus}；界面刷新失败，请重启 LanFlow";
+                }
+            }
+            else
+            {
+                finalStatus = "已取消导入";
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"导入失败：{ex.Message}", "导入失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            finalStatus = "导入失败，配置未更改";
+        }
+        finally
+        {
+            _isModalOperationActive = false;
+            _viewModel.StatusText = finalStatus ?? previousStatus;
+            Activate();
+        }
+    }
     private void OpenSettings_Click(object sender, RoutedEventArgs e)
     {
         _settingsBeforePreview = CloneSettings(_viewModel.Settings);
