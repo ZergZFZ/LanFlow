@@ -1,5 +1,4 @@
 using System.IO;
-using System.Text;
 using System.Text.Json;
 using LanFlow.Desktop.Models;
 
@@ -13,12 +12,6 @@ public interface IConfigStore
 
 public sealed class ConfigStore : IConfigStore
 {
-    private static readonly JsonSerializerOptions SerializerOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        WriteIndented = true,
-    };
-
     private readonly string _configDirectory;
     private readonly string _configPath;
     private readonly string _defaultHotkey;
@@ -34,29 +27,31 @@ public sealed class ConfigStore : IConfigStore
 
     public string ConfigPath => _configPath;
 
+    public string ConfigDirectory => _configDirectory;
+
     public AppConfig Load()
     {
         if (!File.Exists(_configPath))
         {
-            return Normalize(new AppConfig());
+            return Normalize(new AppConfig(), isExistingConfig: false);
         }
 
         try
         {
             using var stream = File.OpenRead(_configPath);
-            return Normalize(JsonSerializer.Deserialize<AppConfig>(stream, SerializerOptions) ?? new AppConfig());
+            return Normalize(ConfigDocumentSerializer.Deserialize(stream), isExistingConfig: true);
         }
         catch (JsonException)
         {
-            return Normalize(new AppConfig());
+            return Normalize(new AppConfig(), isExistingConfig: false);
         }
         catch (IOException)
         {
-            return Normalize(new AppConfig());
+            return Normalize(new AppConfig(), isExistingConfig: false);
         }
     }
 
-    private AppConfig Normalize(AppConfig config)
+    private AppConfig Normalize(AppConfig config, bool isExistingConfig)
     {
         config.Settings ??= new Settings();
         var settings = config.Settings;
@@ -70,14 +65,48 @@ public sealed class ConfigStore : IConfigStore
         {
             settings.Hotkey = _defaultHotkey;
         }
+
         settings.Theme = settings.Theme == "light" ? "light" : "dark";
         settings.ThemeProfile = string.IsNullOrWhiteSpace(settings.ThemeProfile)
             ? (settings.Theme == "light" ? "浅色" : "深色")
             : settings.ThemeProfile;
         settings.ThemeColors ??= settings.Theme == "light" ? ThemeColors.Light() : ThemeColors.Dark();
         settings.CustomThemes ??= [];
-        settings.LayoutMode = settings.LayoutMode == "card" ? "card" : "tile";
-        settings.Opacity = Math.Clamp(settings.Opacity, 0.55, 1.0);
+
+            settings.LayoutMode = settings.LayoutMode switch
+            {
+                "tile" or "list" => SettingsOptionValues.GridLayout,
+                SettingsOptionValues.GridLayout or SettingsOptionValues.CardLayout => settings.LayoutMode,
+                _ => SettingsOptionValues.GridLayout,
+            };
+        settings.GroupLayout = settings.GroupLayout == SettingsOptionValues.GroupTop
+            ? SettingsOptionValues.GroupTop
+            : SettingsOptionValues.GroupLeft;
+        settings.GroupSwitchMode = settings.GroupSwitchMode == SettingsOptionValues.GroupSwitchHover
+            ? SettingsOptionValues.GroupSwitchHover
+            : SettingsOptionValues.GroupSwitchClick;
+        settings.AnimationMode = settings.AnimationMode is SettingsOptionValues.AnimationOn or SettingsOptionValues.AnimationOff
+            ? settings.AnimationMode
+            : SettingsOptionValues.AnimationSystem;
+
+        if (string.IsNullOrWhiteSpace(settings.TransparencyMode))
+        {
+            settings.TransparencyMode = isExistingConfig
+                ? SettingsOptionValues.TransparencyWholeWindow
+                : SettingsOptionValues.TransparencyLayered;
+            if (isExistingConfig) settings.WholeWindowOpacity = settings.Opacity;
+        }
+        else if (settings.TransparencyMode != SettingsOptionValues.TransparencyWholeWindow)
+        {
+            settings.TransparencyMode = SettingsOptionValues.TransparencyLayered;
+        }
+
+        settings.Opacity = Math.Clamp(settings.Opacity, 0.40, 1.00);
+        SettingsNormalizer.ClampPreviewValues(settings);
+
+        settings.Opacity = settings.TransparencyMode == SettingsOptionValues.TransparencyWholeWindow
+            ? settings.WholeWindowOpacity
+            : settings.LayeredOpacity;
         settings.IconSize = Math.Clamp(settings.IconSize, 24, 72);
         settings.CardWidth = Math.Clamp(settings.CardWidth, 48, 320);
         settings.CardHeight = Math.Clamp(settings.CardHeight, 48, 240);
@@ -86,20 +115,18 @@ public sealed class ConfigStore : IConfigStore
         settings.ItemSpacing = Math.Clamp(settings.ItemSpacing, 0, 64);
         settings.RowSpacing = Math.Clamp(settings.RowSpacing, 0, 80);
         settings.ContentPadding = Math.Clamp(settings.ContentPadding, 6, 40);
-        settings.GroupLayout = settings.GroupLayout == "top" ? "top" : "left";
         return config;
     }
-
     public void Save(AppConfig config)
     {
         ArgumentNullException.ThrowIfNull(config);
+        Normalize(config, isExistingConfig: true);
         Directory.CreateDirectory(_configDirectory);
         var temporaryPath = _configPath + ".tmp";
-        var json = JsonSerializer.Serialize(config, SerializerOptions);
 
         try
         {
-            File.WriteAllText(temporaryPath, json, new UTF8Encoding(false));
+            File.WriteAllBytes(temporaryPath, ConfigDocumentSerializer.Serialize(config));
             File.Move(temporaryPath, _configPath, true);
         }
         catch

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Text.Json.Serialization;
 
 namespace LanFlow.Desktop.Models;
@@ -30,8 +31,10 @@ public sealed class Group
     public string SortMode { get; set; } = "custom";
 }
 
-public sealed class LauncherItem
+public sealed class LauncherItem : INotifyPropertyChanged
 {
+    private object? _iconImage;
+    private int _iconRequestVersion;
     [JsonPropertyName("id")]
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
 
@@ -69,7 +72,25 @@ public sealed class LauncherItem
 
     // 平台无关的图标承载：Desktop 塞 System.Windows.Media.ImageSource，Linux 塞 Avalonia.Media.IImage。
     [JsonIgnore]
-    public object? IconImage { get; set; }
+    public object? IconImage
+    {
+        get => _iconImage;
+        set
+        {
+            if (ReferenceEquals(_iconImage, value)) return;
+            _iconImage = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IconImage)));
+        }
+    }
+
+    [JsonIgnore]
+    public int IconRequestVersion
+    {
+        get => _iconRequestVersion;
+        set => _iconRequestVersion = value;
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
 }
 
 public sealed class Settings
@@ -129,13 +150,40 @@ public sealed class Settings
     public bool ShowItemTitle { get; set; } = true;
 
     [JsonPropertyName("groupLayout")]
-    public string GroupLayout { get; set; } = "left";
+    public string GroupLayout { get; set; } = SettingsOptionValues.GroupLeft;
+
+    [JsonPropertyName("groupSwitchMode")]
+    public string GroupSwitchMode { get; set; } = SettingsOptionValues.GroupSwitchClick;
+
+    [JsonPropertyName("groupLabelSize")]
+    public double GroupLabelSize { get; set; } = 36;
+
+    [JsonPropertyName("groupLabelFontSize")]
+    public double GroupLabelFontSize { get; set; } = 13;
+
+    [JsonPropertyName("groupNavigationWidth")]
+    public double GroupNavigationWidth { get; set; } = 132;
+
+    [JsonPropertyName("transparencyMode")]
+    public string? TransparencyMode { get; set; }
+
+    [JsonPropertyName("layeredOpacity")]
+    public double LayeredOpacity { get; set; } = 0.85;
+
+    [JsonPropertyName("wholeWindowOpacity")]
+    public double WholeWindowOpacity { get; set; } = 0.85;
+
+    [JsonPropertyName("animationMode")]
+    public string AnimationMode { get; set; } = SettingsOptionValues.AnimationSystem;
 
     [JsonPropertyName("startWithWindows")]
     public bool StartWithWindows { get; set; }
 
     [JsonPropertyName("openItemsOnSingleClick")]
     public bool OpenItemsOnSingleClick { get; set; } = true;
+
+    [JsonPropertyName("groupHoverDelayMs")]
+    public int GroupHoverDelayMs { get; set; } = SettingsOptionValues.DefaultGroupHoverDelayMs;
 
     public Settings Clone() => new()
     {
@@ -158,8 +206,17 @@ public sealed class Settings
         ShowFullItemName = ShowFullItemName,
         ShowItemTitle = ShowItemTitle,
         GroupLayout = GroupLayout,
+        GroupSwitchMode = GroupSwitchMode,
+        GroupLabelSize = GroupLabelSize,
+        GroupLabelFontSize = GroupLabelFontSize,
+        GroupNavigationWidth = GroupNavigationWidth,
+        TransparencyMode = TransparencyMode,
+        LayeredOpacity = LayeredOpacity,
+        WholeWindowOpacity = WholeWindowOpacity,
+        AnimationMode = AnimationMode,
         StartWithWindows = StartWithWindows,
         OpenItemsOnSingleClick = OpenItemsOnSingleClick,
+        GroupHoverDelayMs = GroupHoverDelayMs,
     };
 }
 

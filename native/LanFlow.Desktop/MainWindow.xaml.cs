@@ -1,5 +1,6 @@
+using System.Collections.Specialized;
 using System.IO;
-using System.Runtime.InteropServices;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -8,6 +9,9 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using System.Threading.Tasks;
+using LanFlow.Desktop.Controls;
+using LanFlow.Desktop.Diagnostics;
+using LanFlow.Desktop.Presentation;
 using LanFlow.Desktop.Views;
 using LanFlow.Desktop.Models;
 using LanFlow.Desktop.Services;
@@ -17,47 +21,42 @@ namespace LanFlow.Desktop;
 
 public partial class MainWindow : System.Windows.Window
 {
-    [DllImport("user32.dll")]
-    private static extern int GetWindowLong(IntPtr hwnd, int nIndex);
-
-    [DllImport("user32.dll")]
-    private static extern int SetWindowLong(IntPtr hwnd, int nIndex, int dwNewLong);
-
-    [DllImport("user32.dll")]
-    private static extern bool SetWindowPos(IntPtr hwnd, IntPtr hwndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
-
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS pMarInset);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MARGINS
-    {
-        public int cxLeftWidth;
-        public int cxRightWidth;
-        public int cyTopHeight;
-        public int cyBottomHeight;
-    }
-
-    private const int GWL_STYLE = -16;
-    private const int GWL_EXSTYLE = -20;
-    private const int WS_THICKFRAME = 0x00040000;
-    private const int WS_EX_LAYERED = 0x00080000;
-    private const int SWP_FRAMECHANGED = 0x0020;
-    private const int SWP_NOMOVE = 0x0002;
-    private const int SWP_NOSIZE = 0x0001;
-    private const int SWP_NOZORDER = 0x0004;
+    private const double DragAutoScrollEdge = 32;
+    private const double DragAutoScrollStep = 16;
 
     private readonly MainViewModel _viewModel;
     private readonly LauncherService _launcherService = new();
     private readonly HotkeyService _hotkeyService = new();
     private readonly StartupService _startupService = new();
-    private readonly ShellIconService _shellIconService = new();
+    private readonly IIconService _iconService = new ShellIconService();
+    private readonly ViewportIconCoordinator _iconCoordinator;
+    private readonly GroupSwitchCoordinator _groupSwitchCoordinator;
+    private readonly UiPerformanceTrace _uiPerformanceTrace = new();
+    private readonly ThemeResourceUpdater _themeResourceUpdater = new();
+    private readonly WindowAppearanceController _windowAppearanceController = new();
+    private readonly AnimationPreferenceService _animationPreferenceService = new();
+    private readonly ContentTransitionController _contentTransitionController = new();
+    private readonly MainWindowSettingsCoordinator _settingsCoordinator;
+    private readonly SettingsWindowPlacement _settingsPlacement;
+    private SettingsWindow? _settingsWindow;
+    private readonly LauncherDragDropCoordinator _dragDropCoordinator;
     private readonly ShortcutService _shortcutService = new();
     private readonly ImportManifestService _importManifestService;
-    private Settings? _settingsBeforePreview;
     private bool _isEditMode;
-    private bool _iconsLoaded;
     private bool _isModalOperationActive;
+    private long _latestGroupSwitchGeneration;
+    private readonly Dictionary<(string GroupId, string LayoutMode), ViewStateSnapshot> _viewStateSnapshots = [];
+    private VirtualizingWrapPanel? _wrapPanel;
+    private ScrollViewer? _itemScrollViewer;
+    private bool _isClosed;
+    private CancellationTokenSource? _contentTransitionCancellation;
+    private string _activeLayoutMode = "tile";
+    private string? _lastSelectedItemId;
+
+    private sealed record ViewStateSnapshot(
+        string? SelectedItemId,
+        string? FocusedItemId,
+        double VerticalOffset);
 
     public static readonly DependencyProperty IsEditModeProperty =
         DependencyProperty.Register(
@@ -76,29 +75,62 @@ public partial class MainWindow : System.Windows.Window
     private bool _isContextMenuActivationPending;
     private Point _dragStartPoint;
     private LauncherItem? _draggedItem;
-    private Group? _dragSourceGroup;
-    private int _dragSourceIndex = -1;
     private Popup? _dragGhost;
-    private LauncherItem? _previewTargetItem;
-    private int _previewInsertIndex = -1;
 
     public MainWindow()
     {
         InitializeComponent();
-        _viewModel = new MainViewModel(new ConfigStore("Alt+Space"));
+        _viewModel = new MainViewModel(CreateConfigStore());
         _importManifestService = new ImportManifestService(_shortcutService);
+        _iconCoordinator = new ViewportIconCoordinator(_iconService);
+        _groupSwitchCoordinator = new GroupSwitchCoordinator(
+            new DispatcherTimerScheduler(Dispatcher),
+            TimeSpan.FromMilliseconds(_viewModel.Settings.GroupHoverDelayMs));
+        _dragDropCoordinator = new LauncherDragDropCoordinator(
+            _viewModel.RefreshVisibleItems,
+            _viewModel.Save,
+            status => _viewModel.StatusText = status);
+        _settingsCoordinator = new MainWindowSettingsCoordinator(
+            _themeResourceUpdater,
+            _windowAppearanceController,
+            Application.Current?.Resources ?? Resources,
+            this,
+            SurfaceRoot,
+            ContentRoot,
+            ApplyWorkingAppearanceSettings,
+            PersistAppearanceSettings,
+            ApplyLayoutSettings,
+            ApplyNavigationSettings,
+            ApplyAnimationSettings,
+            ApplyIconSizeSettings);
+        _groupSwitchCoordinator.SelectedGroupId = _viewModel.SelectedGroup?.Id;
+        _groupSwitchCoordinator.SwitchRequested += GroupSwitchCoordinator_SwitchRequested;
+        _animationPreferenceService.PreferenceChanged += AnimationPreferenceService_PreferenceChanged;
         DataContext = _viewModel;
-        ApplySettings();
-        ItemList.ItemContainerGenerator.StatusChanged += (_, _) =>
+        ((INotifyCollectionChanged)_viewModel.VisibleItems).CollectionChanged += VisibleItems_CollectionChanged;
+        _activeLayoutMode = NormalizeLayoutMode(_viewModel.Settings.LayoutMode);
+        ItemList.Loaded += (_, _) =>
         {
-            if (ItemList.ItemContainerGenerator.Status == GeneratorStatus.ContainersGenerated)
+            AttachVirtualizingPanel();
+            ScheduleInitialItemRealization();
+            _ = LoadVisibleIconsAsync();
+        };
+        ItemList.SizeChanged += ItemList_SizeChanged;
+        _settingsCoordinator.Restore(_viewModel.Settings);
+
+        _settingsPlacement = new SettingsWindowPlacement(new MonitorWorkAreaProvider());
+
+        IsVisibleChanged += (_, _) =>
+        {
+            if (IsVisible)
             {
-                Dispatcher.BeginInvoke(DispatcherPriority.Render, ApplyItemMetrics);
+                _ = LoadVisibleIconsAsync();
+            }
+            else
+            {
+                _iconCoordinator.CancelPending();
             }
         };
-        // 静默启动时不立即取图标，等窗口真正显示时再加载，加快开机驻留速度。
-        EnsureIconsLoaded();
-        RefreshGroupTabs();
         RefreshEmptyState();
 
         SourceInitialized += (_, _) =>
@@ -108,14 +140,32 @@ public partial class MainWindow : System.Windows.Window
                 hwndSource.AddHook(WndProc);
             }
 
-            AddDwmShadow();
+            _windowAppearanceController.EnableNativeShadow(this);
 
             if (!_hotkeyService.Register(this, ShowFromHotkey, _viewModel.Settings.Hotkey))
             {
                 _viewModel.StatusText = $"全局快捷键 {_viewModel.Settings.Hotkey} 注册失败";
             }
         };
-        Closed += (_, _) => _hotkeyService.Dispose();
+        Closed += MainWindow_Closed;
+    }
+
+    private async void MainWindow_Closed(object? sender, EventArgs e)
+    {
+        _settingsWindow?.CloseForOwnerShutdown();
+        _isClosed = true;
+        ((INotifyCollectionChanged)_viewModel.VisibleItems).CollectionChanged -= VisibleItems_CollectionChanged;
+        ItemList.SizeChanged -= ItemList_SizeChanged;
+        DetachVirtualizingPanel();
+        _groupSwitchCoordinator.SwitchRequested -= GroupSwitchCoordinator_SwitchRequested;
+        _animationPreferenceService.PreferenceChanged -= AnimationPreferenceService_PreferenceChanged;
+        _contentTransitionCancellation?.Cancel();
+        _contentTransitionCancellation?.Dispose();
+        _animationPreferenceService.Dispose();
+        _groupSwitchCoordinator.Dispose();
+        _iconCoordinator.Dispose();
+        _hotkeyService.Dispose();
+        await _iconService.DisposeAsync();
     }
 
     private void ShowFromHotkey()
@@ -124,28 +174,6 @@ public partial class MainWindow : System.Windows.Window
         WindowState = WindowState.Normal;
         Activate();
         Focus();
-    }
-
-    private void AddDwmShadow()
-    {
-        var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-
-        // 恢复 WS_THICKFRAME，让 DWM 认为这是一个可调整大小的窗口，从而绘制原生阴影
-        var style = GetWindowLong(hwnd, GWL_STYLE);
-        SetWindowLong(hwnd, GWL_STYLE, style | WS_THICKFRAME);
-
-        // 让 DWM 将 frame 扩展到客户区边缘，触发原生阴影绘制
-        var margins = new MARGINS
-        {
-            cxLeftWidth = 1,
-            cxRightWidth = 1,
-            cyTopHeight = 1,
-            cyBottomHeight = 1
-        };
-        DwmExtendFrameIntoClientArea(hwnd, ref margins);
-
-        // 通知窗口 frame 已变更
-        SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
     }
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -286,7 +314,7 @@ public partial class MainWindow : System.Windows.Window
         }
     }
 
-    private static T? FindAncestor<T>(DependencyObject source) where T : DependencyObject
+    private static T? FindAncestor<T>(DependencyObject? source) where T : DependencyObject
     {
         for (var current = source; current is not null; current = VisualTreeHelper.GetParent(current))
         {
@@ -363,10 +391,8 @@ public partial class MainWindow : System.Windows.Window
                 try
                 {
                     // 提交已完成；后续仅同步界面，不再把刷新异常误报为保存失败或允许重复提交。
-                    LoadIcons();
                     _viewModel.RefreshGroups();
                     _viewModel.RefreshVisibleItems();
-                    RefreshGroupTabs();
                     RefreshEmptyState();
                 }
                 catch (Exception ex)
@@ -392,73 +418,167 @@ public partial class MainWindow : System.Windows.Window
             Activate();
         }
     }
-    private void OpenSettings_Click(object sender, RoutedEventArgs e)
+    // 配置目录由 locator 解析：默认 %APPDATA%\LanFlow，或用户自定义位置。
+    private static ConfigStore CreateConfigStore()
     {
-        _settingsBeforePreview = CloneSettings(_viewModel.Settings);
-        var wasEditMode = _isEditMode;
-        SetEditMode(true, "设置中：可同时查看和管理启动项");
-        var settingsWindow = new SettingsWindow(_viewModel.Settings) { Owner = this };
-        settingsWindow.PreviewChanged += settings => { _viewModel.ApplyAppearance(settings, persist: false); ApplySettings(); RefreshGroupTabs(); };
-
-        if (settingsWindow.ShowDialog() == true)
-        {
-            var result = settingsWindow.Result;
-            if (!_hotkeyService.TryRegister(result.Hotkey))
-            {
-                result.Hotkey = _settingsBeforePreview.Hotkey;
-                _viewModel.StatusText = "快捷键被其他程序占用，已保留原组合键";
-            }
-            result.StartWithWindows = _startupService.SetEnabled(result.StartWithWindows) && _startupService.IsEnabled();
-            if (result.StartWithWindows != settingsWindow.Result.StartWithWindows) _viewModel.StatusText = "开机启动设置失败，请检查当前用户注册表权限";
-            _viewModel.ApplyAppearance(result, persist: true);
-        }
-        else if (_settingsBeforePreview is not null)
-        {
-            _startupService.SetEnabled(_settingsBeforePreview.StartWithWindows);
-            _viewModel.ApplyAppearance(_settingsBeforePreview, persist: false);
-        }
-
-        ApplySettings();
-        RefreshGroupTabs();
-        SetEditMode(settingsWindow.DialogResult == true ? false : wasEditMode, settingsWindow.DialogResult == true ? "设置已保存" : null);
-        _settingsBeforePreview = null;
+        var location = new ConfigLocationService();
+        return new ConfigStore("Alt+Space", location.Resolve().DirectoryPath);
     }
 
-    private void ApplySettings()
+    private static SettingsMaintenanceService CreateMaintenanceService()
     {
-        var settings = _viewModel.Settings;
-        var colors = settings.ThemeColors;
-        SetBrush("PanelBrush", colors.Panel);
-        SetBrush("PanelBorderBrush", colors.PanelBorder);
-        SetBrush("SurfaceBrush", colors.Surface);
-        SetBrush("SurfaceBorderBrush", colors.SurfaceBorder);
-        SetBrush("FooterBrush", colors.Footer);
-        SetBrush("TextPrimaryBrush", colors.TextPrimary);
-        SetBrush("TextSecondaryBrush", colors.TextSecondary);
-        SetBrush("AccentBrush", colors.Accent);
-        SetBrush("SelectedTileBrush", colors.Accent);
-        SetBrush("HoverBrush", colors.Hover);
-        SetBrush("IconSurfaceBrush", colors.IconSurface);
-        Opacity = Math.Clamp(settings.Opacity, 0.55, 1.0);
-        LauncherLayout.Margin = new Thickness(settings.ContentPadding, Math.Max(8, settings.ContentPadding - 4), settings.ContentPadding, Math.Max(8, settings.ContentPadding - 4));
+        var location = new ConfigLocationService();
+        return new SettingsMaintenanceService(
+            new ConfigStore("Alt+Space", location.Resolve().DirectoryPath),
+            new ConfigMigrationService(location),
+            location);
+    }
 
-        var cardMode = settings.LayoutMode == "card";
-        ItemList.ItemContainerStyle = (Style)FindResource(cardMode ? "LauncherCard" : "LauncherTile");
-        ItemList.ItemTemplate = (DataTemplate)FindResource(cardMode ? "CardItemTemplate" : "TileItemTemplate");
-        ItemList.UpdateLayout();
-        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, ApplyItemMetrics);
+    private void OpenSettings_Click(object sender, RoutedEventArgs e)
+    {
+        if (_settingsWindow is not null && _settingsWindow.IsVisible)
+        {
+            _settingsWindow.Activate();
+            return;
+        }
 
-        var groupsAtTop = settings.GroupLayout == "top";
-        GroupColumn.Width = groupsAtTop ? new GridLength(0) : new GridLength(132);
+        var session = new SettingsPreviewSession(_viewModel.Settings);
+        var original = session.Original;
+        session.PreviewRequested += (_, settings) => ApplySettingsPreview(settings);
+
+        var wasEditMode = _isEditMode;
+        SetEditMode(true, "设置中：可同时查看和管理启动项");
+        var settingsWindow = new SettingsWindow(session, _iconService.Clear, CreateMaintenanceService()) { Owner = this };
+        _settingsWindow = settingsWindow;
+        _settingsPlacement.Apply(settingsWindow, this);
+        settingsWindow.Closed += (_, _) =>
+        {
+            try
+            {
+                var closeDecision = settingsWindow.CloseDecision;
+                var completed = SettingsCloseFlow.TryComplete(
+                    session,
+                    closeDecision,
+                    settingsWindow.FlushPendingPreviews,
+                    result =>
+                    {
+                        if (!_hotkeyService.TryRegister(result.Hotkey))
+                        {
+                            result.Hotkey = original.Hotkey;
+                            _viewModel.StatusText = "快捷键被其他程序占用，已保留原组合键";
+                        }
+
+                        var requestedStartup = result.StartWithWindows;
+                        result.StartWithWindows = _startupService.SetEnabled(requestedStartup) && _startupService.IsEnabled();
+                        if (result.StartWithWindows != requestedStartup)
+                        {
+                            _viewModel.StatusText = "开机启动设置失败，请检查当前用户注册表权限";
+                        }
+
+                        _settingsCoordinator.Apply(result);
+                        return _viewModel.Settings.Clone();
+                    });
+
+                if (!completed)
+                {
+                    _settingsCoordinator.Restore(_viewModel.Settings);
+                    SetEditMode(wasEditMode, null);
+                    return;
+                }
+
+                SetEditMode(false, "设置已保存");
+            }
+            catch (Exception ex)
+            {
+                _settingsCoordinator.Restore(_viewModel.Settings);
+                _viewModel.StatusText = $"保存失败：{ex.Message}";
+                SetEditMode(wasEditMode, null);
+            }
+            finally
+            {
+                settingsWindow.DisposePreviewThrottles();
+                _settingsWindow = null;
+            }
+        };
+
+        settingsWindow.Show();
+    }
+
+    private Settings ApplyWorkingAppearanceSettings(Settings settings)
+    {
+        _viewModel.ApplyAppearance(settings, persist: false);
+        return _viewModel.Settings.Clone();
+    }
+
+    private Settings PersistAppearanceSettings(Settings settings)
+    {
+        _viewModel.ApplyAppearance(settings, persist: true);
+        _groupSwitchCoordinator.UpdateIntentDelay(_viewModel.Settings);
+        return _viewModel.Settings.Clone();
+    }
+
+    private void ApplySettingsPreview(Settings settings)
+    {
+        _groupSwitchCoordinator.UpdateIntentDelay(settings);
+        _settingsCoordinator.Preview(settings);
+    }
+
+    private void ApplyLayoutSettings(Settings settings)
+    {
+        LauncherLayout.Margin = new Thickness(
+            settings.ContentPadding,
+            Math.Max(8, settings.ContentPadding - 4),
+            settings.ContentPadding,
+            Math.Max(8, settings.ContentPadding - 4));
+
+        string requestedLayoutMode = NormalizeLayoutMode(settings.LayoutMode);
+        bool layoutModeChanged = !string.Equals(_activeLayoutMode, requestedLayoutMode, StringComparison.Ordinal);
+        if (layoutModeChanged)
+        {
+            SaveCurrentViewState(_activeLayoutMode);
+        }
+
+        if (layoutModeChanged)
+        {
+            _iconCoordinator.CancelPending();
+        }
+
+        bool cardMode = requestedLayoutMode == SettingsOptionValues.CardLayout;
+        ItemList.ItemContainerStyle = (Style)FindResource(
+            cardMode ? "LauncherCard" : "LauncherTile");
+        ItemList.ItemTemplate = (DataTemplate)FindResource(
+            cardMode ? "CardItemTemplate" : "TileItemTemplate");
+
+        var requestedItemsPanel = (ItemsPanelTemplate)FindResource("VirtualizingWrapItemsPanel");
+        if (!ReferenceEquals(ItemList.ItemsPanel, requestedItemsPanel))
+        {
+            DetachVirtualizingPanel();
+            ItemList.ItemsPanel = requestedItemsPanel;
+        }
+
+        _activeLayoutMode = requestedLayoutMode;
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+        {
+            AttachVirtualizingPanel();
+            RestoreViewState(reuseOffset: !layoutModeChanged);
+            if (layoutModeChanged)
+            {
+                _ = LoadVisibleIconsAsync();
+            }
+        });
+    }
+
+    private void ApplyNavigationSettings(Settings settings)
+    {
+        bool groupsAtTop = settings.GroupLayout == SettingsOptionValues.GroupTop;
+        GroupColumn.Width = groupsAtTop ? new GridLength(0) : new GridLength(settings.GroupNavigationWidth);
         GroupSeparatorColumn.Width = groupsAtTop ? new GridLength(0) : new GridLength(14);
-        GroupRow.Height = groupsAtTop ? new GridLength(42) : new GridLength(0);
-        Grid.SetRow(GroupTabsHost, groupsAtTop ? 1 : 2);
-        Grid.SetColumn(GroupTabsHost, 0);
-        Grid.SetColumnSpan(GroupTabsHost, groupsAtTop ? 3 : 1);
-        GroupTabsHost.Margin = groupsAtTop ? new Thickness(0, 8, 0, 0) : new Thickness(0, 12, 0, 0);
-        GroupTabsHost.VerticalScrollBarVisibility = ScrollBarVisibility.Hidden;
-        GroupTabsHost.HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden;
-        GroupTabs.Orientation = groupsAtTop ? Orientation.Horizontal : Orientation.Vertical;
+        GroupRow.Height = groupsAtTop ? new GridLength(settings.GroupLabelSize + 8) : new GridLength(0);
+        Grid.SetRow(GroupNavigation, groupsAtTop ? 1 : 2);
+        Grid.SetColumn(GroupNavigation, 0);
+        Grid.SetColumnSpan(GroupNavigation, groupsAtTop ? 3 : 1);
+        GroupNavigation.Width = groupsAtTop ? double.NaN : settings.GroupNavigationWidth;
+        GroupNavigation.Margin = groupsAtTop ? new Thickness(0, 8, 0, 0) : new Thickness(0, 12, 0, 0);
         GroupSeparator.Visibility = Visibility.Collapsed;
         Grid.SetRow(ItemListHost, 2);
         Grid.SetColumn(ItemListHost, groupsAtTop ? 0 : 2);
@@ -466,62 +586,320 @@ public partial class MainWindow : System.Windows.Window
         ItemListHost.Margin = new Thickness(0, 4, 0, 0);
     }
 
-    private void SetBrush(string key, string color)
+    private void ApplyAnimationSettings(Settings settings)
     {
-        try
+        bool animationsDisabled = string.Equals(
+                settings.AnimationMode,
+                SettingsOptionValues.AnimationOff,
+                StringComparison.Ordinal) ||
+            (string.Equals(
+                 settings.AnimationMode,
+                 SettingsOptionValues.AnimationSystem,
+                 StringComparison.Ordinal) &&
+             !_animationPreferenceService.AreAnimationsEnabled);
+        if (animationsDisabled)
         {
-            Resources[key] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color));
-        }
-        catch (FormatException)
-        {
-            // 保留最后一个有效颜色，避免编辑中的不完整色值打断实时预览。
+            _contentTransitionCancellation?.Cancel();
         }
     }
 
-    private void ApplyItemMetrics()
+    private void ApplyIconSizeSettings(Settings unusedSettings) => _ = LoadVisibleIconsAsync();
+
+    private static string NormalizeLayoutMode(string? layoutMode) =>
+        layoutMode == SettingsOptionValues.CardLayout
+            ? SettingsOptionValues.CardLayout
+            : SettingsOptionValues.GridLayout;
+
+    private void VisibleItems_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        var settings = _viewModel.Settings;
-        for (var index = 0; index < ItemList.Items.Count; index++)
+        PreserveCurrentSnapshotAfterCollectionChange();
+        _ = LoadVisibleIconsAsync();
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => RestoreViewState(reuseOffset: true));
+    }
+
+    private void ItemList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ItemList.SelectedItem is LauncherItem item)
         {
-            if (ItemList.ItemContainerGenerator.ContainerFromIndex(index) is not ListBoxItem container) continue;
-            container.Width = settings.CardWidth;
-            container.Height = settings.CardHeight;
-            container.Margin = new Thickness(settings.ItemSpacing / 2, settings.RowSpacing / 2, settings.ItemSpacing / 2, settings.RowSpacing / 2);
-            if (FindChild<Image>(container, "ItemIcon") is { } icon)
+            _lastSelectedItemId = item.Id;
+        }
+
+        SaveCurrentViewState(_activeLayoutMode);
+    }
+
+    private void ItemList_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            LaunchSelectedItem();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Space)
+        {
+            if (ItemList.SelectedIndex < 0 && ItemList.Items.Count > 0)
             {
-                icon.Width = settings.IconSize;
-                icon.Height = settings.IconSize;
+                ItemList.SelectedIndex = 0;
             }
-            if (FindChild<TextBlock>(container, "ItemName") is { } name)
+
+            FocusSelectedContainer();
+            e.Handled = true;
+            return;
+        }
+
+        if (_activeLayoutMode == "list" ||
+            e.Key is not (Key.Left or Key.Right or Key.Up or Key.Down) ||
+            ItemList.Items.Count == 0)
+        {
+            return;
+        }
+
+        AttachVirtualizingPanel();
+        int columns = Math.Max(1, _wrapPanel?.RealizedRange.Columns ?? 1);
+        int currentIndex = ItemList.SelectedIndex >= 0 ? ItemList.SelectedIndex : 0;
+        var direction = e.Key switch
+        {
+            Key.Left => NavigationDirection.Left,
+            Key.Right => NavigationDirection.Right,
+            Key.Up => NavigationDirection.Up,
+            _ => NavigationDirection.Down
+        };
+        var layout = new VirtualizingWrapLayout(
+            _viewModel.Settings.CardWidth,
+            _viewModel.Settings.CardHeight,
+            _viewModel.Settings.ItemSpacing,
+            _viewModel.Settings.RowSpacing,
+            bufferRows: 1);
+        int nextIndex = layout.MoveIndex(currentIndex, direction, ItemList.Items.Count, columns);
+        ItemList.SelectedIndex = nextIndex;
+        ItemList.ScrollIntoView(ItemList.Items[nextIndex]);
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, FocusSelectedContainer);
+        e.Handled = true;
+    }
+
+    private void SaveCurrentViewState(string layoutMode)
+    {
+        if (_viewModel.SelectedGroup is not { } group)
+        {
+            return;
+        }
+
+        string? selectedId = (ItemList.SelectedItem as LauncherItem)?.Id ?? _lastSelectedItemId;
+        string? focusedId = (FindAncestor<ListBoxItem>(Keyboard.FocusedElement as DependencyObject)?.DataContext as LauncherItem)?.Id;
+        _viewStateSnapshots[(group.Id, layoutMode)] = new ViewStateSnapshot(
+            selectedId,
+            focusedId,
+            GetCurrentVerticalOffset());
+    }
+
+    private void PreserveCurrentSnapshotAfterCollectionChange()
+    {
+        if (_viewModel.SelectedGroup is not { } group)
+        {
+            return;
+        }
+
+        var key = (group.Id, _activeLayoutMode);
+        _viewStateSnapshots.TryGetValue(key, out ViewStateSnapshot? previous);
+        string? selectedId = (ItemList.SelectedItem as LauncherItem)?.Id
+            ?? previous?.SelectedItemId
+            ?? _lastSelectedItemId;
+        string? focusedId = (FindAncestor<ListBoxItem>(Keyboard.FocusedElement as DependencyObject)?.DataContext as LauncherItem)?.Id
+            ?? previous?.FocusedItemId;
+        _viewStateSnapshots[key] = new ViewStateSnapshot(
+            selectedId,
+            focusedId,
+            GetCurrentVerticalOffset());
+    }
+
+    private void RestoreViewState(bool reuseOffset)
+    {
+        if (_viewModel.SelectedGroup is not { } group)
+        {
+            return;
+        }
+
+        _viewStateSnapshots.TryGetValue((group.Id, _activeLayoutMode), out ViewStateSnapshot? snapshot);
+        string? selectedId = snapshot?.SelectedItemId ?? _lastSelectedItemId;
+        LauncherItem? selected = selectedId is null
+            ? null
+            : _viewModel.VisibleItems.FirstOrDefault(item => string.Equals(item.Id, selectedId, StringComparison.Ordinal));
+
+        if (selected is not null)
+        {
+            ItemList.SelectedItem = selected;
+        }
+
+        if (reuseOffset && snapshot is not null)
+        {
+            SetCurrentVerticalOffset(snapshot.VerticalOffset);
+        }
+        else if (selected is not null)
+        {
+            ItemList.ScrollIntoView(selected);
+        }
+
+        string? focusId = snapshot?.FocusedItemId;
+        if (focusId is null)
+        {
+            return;
+        }
+
+        LauncherItem? focused = _viewModel.VisibleItems.FirstOrDefault(
+            item => string.Equals(item.Id, focusId, StringComparison.Ordinal));
+        if (focused is not null && ItemList.ItemContainerGenerator.ContainerFromItem(focused) is ListBoxItem container)
+        {
+            container.Focus();
+        }
+    }
+
+    private double GetCurrentVerticalOffset()
+    {
+        AttachVirtualizingPanel();
+        if (_wrapPanel is not null)
+        {
+            return _wrapPanel.VerticalOffset;
+        }
+
+        return FindVisualChild<ScrollViewer>(ItemList)?.VerticalOffset ?? 0;
+    }
+
+    private void SetCurrentVerticalOffset(double offset)
+    {
+        AttachVirtualizingPanel();
+        if (_wrapPanel is not null)
+        {
+            _wrapPanel.SetVerticalOffset(offset);
+            return;
+        }
+
+        FindVisualChild<ScrollViewer>(ItemList)?.ScrollToVerticalOffset(offset);
+    }
+
+    private void FocusSelectedContainer()
+    {
+        if (ItemList.SelectedItem is not null &&
+            ItemList.ItemContainerGenerator.ContainerFromItem(ItemList.SelectedItem) is ListBoxItem container)
+        {
+            container.Focus();
+        }
+    }
+
+    private void AttachVirtualizingPanel()
+    {
+        var panel = FindVisualChild<VirtualizingWrapPanel>(ItemList);
+        if (!ReferenceEquals(panel, _wrapPanel))
+        {
+            if (_wrapPanel is not null)
             {
-                name.FontSize = settings.TextSize;
-                name.Visibility = settings.ShowItemTitle ? Visibility.Visible : Visibility.Collapsed;
+                _wrapPanel.ViewportChanged -= VirtualizingPanel_ViewportChanged;
+            }
+
+            _wrapPanel = panel;
+            if (_wrapPanel is not null)
+            {
+                _wrapPanel.ViewportChanged += VirtualizingPanel_ViewportChanged;
+            }
+        }
+
+        var scrollViewer = FindVisualChild<ScrollViewer>(ItemList);
+        if (!ReferenceEquals(scrollViewer, _itemScrollViewer))
+        {
+            if (_itemScrollViewer is not null)
+            {
+                _itemScrollViewer.ScrollChanged -= ItemScrollViewer_ScrollChanged;
+            }
+
+            _itemScrollViewer = scrollViewer;
+            if (_itemScrollViewer is not null)
+            {
+                _itemScrollViewer.ScrollChanged += ItemScrollViewer_ScrollChanged;
             }
         }
     }
 
-    private static T? FindChild<T>(DependencyObject parent, string name) where T : FrameworkElement
+    private void DetachVirtualizingPanel()
     {
-        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        if (_wrapPanel is not null)
         {
-            var child = VisualTreeHelper.GetChild(parent, index);
-            if (child is T element && element.Name == name) return element;
-            if (FindChild<T>(child, name) is { } result) return result;
+            _wrapPanel.ViewportChanged -= VirtualizingPanel_ViewportChanged;
+            _wrapPanel = null;
         }
+
+        if (_itemScrollViewer is not null)
+        {
+            _itemScrollViewer.ScrollChanged -= ItemScrollViewer_ScrollChanged;
+            _itemScrollViewer = null;
+        }
+    }
+
+    private void VirtualizingPanel_ViewportChanged(object? sender, ViewportRange range)
+    {
+        _ = LoadVisibleIconsAsync(range);
+        if (_viewModel.SelectedGroup is { } group)
+        {
+            _uiPerformanceTrace.ContentStable(group.Id, _wrapPanel?.RealizedIndices.Count ?? 0);
+        }
+    }
+
+    private void ItemScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        if (_wrapPanel is null && e.VerticalChange != 0)
+        {
+            _ = LoadVisibleIconsAsync();
+        }
+    }
+
+    private void ItemList_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+        {
+            AttachVirtualizingPanel();
+            _ = LoadVisibleIconsAsync();
+        });
+    }
+
+    private void ScheduleInitialItemRealization()
+    {
+        Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () =>
+        {
+            if (_isClosed || !ItemList.IsLoaded)
+            {
+                return;
+            }
+
+            // The initial ItemsSource is populated before the virtualizing panel joins the visual tree.
+            // Synchronize that binding, then emit the same reset that a group change produces so the panel realizes it.
+            AttachVirtualizingPanel();
+            ItemList.GetBindingExpression(ItemsControl.ItemsSourceProperty)?.UpdateTarget();
+            _viewModel.RefreshVisibleItems();
+            ItemList.InvalidateMeasure();
+            ItemList.InvalidateArrange();
+            _wrapPanel?.InvalidateMeasure();
+            _wrapPanel?.InvalidateArrange();
+            _ = LoadVisibleIconsAsync();
+        });
+    }
+
+    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (int index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            DependencyObject child = VisualTreeHelper.GetChild(parent, index);
+            if (child is T match)
+            {
+                return match;
+            }
+
+            if (FindVisualChild<T>(child) is { } descendant)
+            {
+                return descendant;
+            }
+        }
+
         return null;
     }
-
-    private static Settings CloneSettings(Settings value) => new()
-    {
-        Hotkey = value.Hotkey, Theme = value.Theme, ThemeProfile = value.ThemeProfile, Opacity = value.Opacity,
-        LayoutMode = value.LayoutMode, IconSize = value.IconSize, CardWidth = value.CardWidth, CardHeight = value.CardHeight, TextSize = value.TextSize,
-        ItemSpacing = value.ItemSpacing, RowSpacing = value.RowSpacing, ContentPadding = value.ContentPadding,
-        ShowShortcutBadge = value.ShowShortcutBadge, ShowFullItemName = value.ShowFullItemName, ShowItemTitle = value.ShowItemTitle, GroupLayout = value.GroupLayout,
-        StartWithWindows = value.StartWithWindows,
-        ThemeColors = new ThemeColors { Panel = value.ThemeColors.Panel, PanelBorder = value.ThemeColors.PanelBorder, Surface = value.ThemeColors.Surface, SurfaceBorder = value.ThemeColors.SurfaceBorder, Footer = value.ThemeColors.Footer, TextPrimary = value.ThemeColors.TextPrimary, TextSecondary = value.ThemeColors.TextSecondary, Accent = value.ThemeColors.Accent, Hover = value.ThemeColors.Hover, IconSurface = value.ThemeColors.IconSurface },
-        CustomThemes = value.CustomThemes.Select(profile => new ThemeProfile { Name = profile.Name, Colors = new ThemeColors { Panel = profile.Colors.Panel, PanelBorder = profile.Colors.PanelBorder, Surface = profile.Colors.Surface, SurfaceBorder = profile.Colors.SurfaceBorder, Footer = profile.Colors.Footer, TextPrimary = profile.Colors.TextPrimary, TextSecondary = profile.Colors.TextSecondary, Accent = profile.Colors.Accent, Hover = profile.Colors.Hover, IconSurface = profile.Colors.IconSurface } }).ToList(),
-    };
-
 
     private void ToggleEditMode_Click(object sender, RoutedEventArgs e) => SetEditMode(!_isEditMode, null);
 
@@ -533,83 +911,181 @@ public partial class MainWindow : System.Windows.Window
         _viewModel.StatusText = statusText ?? (enabled ? "编辑模式：右键管理项目和分组" : "就绪");
     }
 
-    private void RefreshGroupTabs()
+    private void GroupNavigation_GroupInvoked(object sender, GroupNavigationEventArgs e)
     {
-        GroupTabs.Children.Clear();
-        foreach (var group in _viewModel.Config.Groups)
-        {
-            var button = new Button
-            {
-                Content = group.Name,
-                Style = (Style)FindResource("TabButton"),
-                Tag = group,
-                FontWeight = group == _viewModel.SelectedGroup ? FontWeights.SemiBold : FontWeights.Normal,
-                Foreground = group == _viewModel.SelectedGroup
-                    ? (System.Windows.Media.Brush)FindResource("TextPrimaryBrush")
-                    : (System.Windows.Media.Brush)FindResource("TextSecondaryBrush"),
-                Background = group == _viewModel.SelectedGroup
-                    ? (System.Windows.Media.Brush)FindResource("AccentBrush")
-                    : System.Windows.Media.Brushes.Transparent,
-            };
-            button.Click += GroupTab_Click;
-            button.MouseEnter += GroupTab_MouseEnter;
-            button.AllowDrop = true;
-            button.DragOver += GroupTab_DragOver;
-            button.Drop += GroupTab_Drop;
-            button.ContextMenu = BuildGroupContextMenu(group);
-            button.PreviewMouseRightButtonDown += Item_PreviewMouseRightButtonDown;
-            button.ContextMenuOpening += (_, _) =>
-            {
-                _isContextMenuActivationPending = false;
-                _openContextMenus++;
-            };
-            GroupTabs.Children.Add(button);
-        }
-    }
-
-    private void GroupTab_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is Button { Tag: Group group })
-        {
-            SelectGroup(group);
-        }
-    }
-
-    private void GroupTab_MouseEnter(object sender, MouseEventArgs e)
-    {
-        if (sender is Button { Tag: Group group } && !_isEditMode && group != _viewModel.SelectedGroup)
-        {
-            SelectGroup(group);
-        }
-    }
-
-    private void GroupTab_DragOver(object sender, DragEventArgs e)
-    {
-        e.Effects = _isEditMode && e.Data.GetDataPresent(typeof(LauncherItem))
-            ? DragDropEffects.Move
-            : DragDropEffects.None;
-        e.Handled = true;
-    }
-
-    private void GroupTab_Drop(object sender, DragEventArgs e)
-    {
-        if (!_isEditMode || sender is not Button { Tag: Group targetGroup } ||
-            e.Data.GetData(typeof(LauncherItem)) is not LauncherItem item || _dragSourceGroup is null)
+        if (_viewModel.Settings.GroupSwitchMode != SettingsOptionValues.GroupSwitchClick)
         {
             return;
         }
 
-        MoveItem(item, _dragSourceGroup, targetGroup, targetGroup.Items.Count);
-        _draggedItem = null;
-        _dragSourceGroup = null;
+        SyncSelectedGroupWithCoordinator();
+        _groupSwitchCoordinator.RequestClick(e.Group);
     }
 
-    private void SelectGroup(Group group)
+    private void GroupNavigation_GroupHovered(object sender, GroupNavigationEventArgs e)
     {
+        if (_isEditMode ||
+            _viewModel.Settings.GroupSwitchMode != SettingsOptionValues.GroupSwitchHover)
+        {
+            return;
+        }
+
+        SyncSelectedGroupWithCoordinator();
+        if (e.IsActive)
+        {
+            _groupSwitchCoordinator.BeginHover(e.Group);
+        }
+        else
+        {
+            _groupSwitchCoordinator.CancelHover(e.Group);
+        }
+    }
+
+    private void GroupNavigation_GroupDragHovered(object sender, GroupNavigationEventArgs e)
+    {
+        if (!_isEditMode || _dragDropCoordinator.StartedWhileFiltering)
+        {
+            return;
+        }
+
+        SyncSelectedGroupWithCoordinator();
+        if (e.IsActive)
+        {
+            _groupSwitchCoordinator.BeginDragHover(e.Group);
+        }
+        else
+        {
+            _groupSwitchCoordinator.CancelDragHover(e.Group);
+        }
+    }
+
+    private void GroupNavigation_GroupDropped(object sender, GroupNavigationEventArgs e)
+    {
+        _groupSwitchCoordinator.EndDrag();
+        if (!_isEditMode || _draggedItem is null || !_dragDropCoordinator.IsActive)
+        {
+            return;
+        }
+
+        _dragDropCoordinator.Drop(
+            _dragDropCoordinator.Generation,
+            e.Group,
+            e.Group.Items,
+            e.Group.Items.Count);
+        _draggedItem = null;
+        RefreshEmptyState();
+    }
+
+    private void GroupSwitchCoordinator_SwitchRequested(
+        object? sender,
+        GroupSwitchRequestedEventArgs e)
+    {
+        if (e.Generation <= _latestGroupSwitchGeneration)
+        {
+            return;
+        }
+
+        _latestGroupSwitchGeneration = e.Generation;
+        SelectGroup(e.Group, e.Generation);
+    }
+
+    private void SyncSelectedGroupWithCoordinator() =>
+        _groupSwitchCoordinator.SelectedGroupId = _viewModel.SelectedGroup?.Id;
+
+    private void GroupNavigation_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _isContextMenuActivationPending = true;
+        Dispatcher.BeginInvoke(
+            DispatcherPriority.ApplicationIdle,
+            () => _isContextMenuActivationPending = false);
+
+        if (FindAncestor<ListBoxItem>(e.OriginalSource as DependencyObject) is not { DataContext: Group group } container)
+        {
+            return;
+        }
+
+        var contextMenu = BuildGroupContextMenu(group);
+        contextMenu.Opened += GroupContextMenu_Opened;
+        container.ContextMenu = contextMenu;
+    }
+
+    private void GroupContextMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        _isContextMenuActivationPending = false;
+        _openContextMenus++;
+    }
+
+    private void SelectGroup(Group group, long generation)
+    {
+        if (string.Equals(_viewModel.SelectedGroup?.Id, group.Id, StringComparison.Ordinal))
+        {
+            SyncSelectedGroupWithCoordinator();
+            return;
+        }
+
+        bool cacheHit = _viewStateSnapshots.ContainsKey((group.Id, _activeLayoutMode));
+        _contentTransitionCancellation?.Cancel();
+        SaveCurrentViewState(_activeLayoutMode);
+        _uiPerformanceTrace.GroupSwitchStarted(group.Id);
+
         _viewModel.SelectedGroup = group;
         _viewModel.SearchText = string.Empty;
-        RefreshGroupTabs();
+        _groupSwitchCoordinator.SelectedGroupId = group.Id;
+        _uiPerformanceTrace.SelectionAcknowledged(group.Id);
         RefreshEmptyState();
+
+        Dispatcher.BeginInvoke(
+            DispatcherPriority.Loaded,
+            () => _ = CompleteGroupSwitchAsync(group, generation, cacheHit));
+    }
+
+    private async Task CompleteGroupSwitchAsync(Group group, long generation, bool cacheHit)
+    {
+        if (generation != _latestGroupSwitchGeneration ||
+            !string.Equals(_viewModel.SelectedGroup?.Id, group.Id, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        AttachVirtualizingPanel();
+        RestoreViewState(reuseOffset: true);
+        _uiPerformanceTrace.ContentStable(
+            group.Id,
+            _wrapPanel?.RealizedIndices.Count ?? ItemList.Items.Count);
+
+        _contentTransitionCancellation?.Dispose();
+        var cancellation = new CancellationTokenSource();
+        _contentTransitionCancellation = cancellation;
+        bool animate = ContentTransitionController.ShouldAnimate(
+            _viewModel.Settings.AnimationMode,
+            _animationPreferenceService.AreAnimationsEnabled,
+            cacheHit);
+
+        try
+        {
+            await _contentTransitionController.PlayAsync(ItemListHost, animate, cancellation.Token);
+        }
+        finally
+        {
+            if (ReferenceEquals(_contentTransitionCancellation, cancellation))
+            {
+                _contentTransitionCancellation = null;
+            }
+
+            cancellation.Dispose();
+        }
+    }
+
+    private void AnimationPreferenceService_PreferenceChanged(object? sender, EventArgs e)
+    {
+        if (string.Equals(
+                _viewModel.Settings.AnimationMode,
+                SettingsOptionValues.AnimationSystem,
+                StringComparison.Ordinal) &&
+            !_animationPreferenceService.AreAnimationsEnabled)
+        {
+            _contentTransitionCancellation?.Cancel();
+        }
     }
 
     private void RefreshEmptyState()
@@ -617,20 +1093,107 @@ public partial class MainWindow : System.Windows.Window
         EmptyPanel.Visibility = _viewModel.VisibleItems.Any() ? Visibility.Collapsed : Visibility.Visible;
     }
 
-    private void LoadIcons()
+    private async Task LoadVisibleIconsAsync(ViewportRange? requestedRange = null)
     {
-        foreach (var item in _viewModel.Config.Groups.SelectMany(group => group.Items))
+        if (_isClosed || !IsVisible || _viewModel.VisibleItems.Count == 0)
         {
-            item.IconImage = _shellIconService.GetIcon(item.Path);
+            return;
         }
+
+        AttachVirtualizingPanel();
+        var viewport = requestedRange ?? GetCurrentIconViewport();
+        var pixelSize = Math.Max(
+            16,
+            (int)Math.Ceiling(_viewModel.Settings.IconSize * VisualTreeHelper.GetDpi(this).DpiScaleX));
+        var themeVariant = _viewModel.Settings.Theme;
+
+        await _iconCoordinator.RefreshAsync(
+            _viewModel.VisibleItems,
+            viewport,
+            pixelSize,
+            themeVariant,
+            default);
+        await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+
+        if (_isClosed || !IsVisible || _viewModel.SelectedGroup is not { } selectedGroup)
+        {
+            return;
+        }
+
+        await _iconCoordinator.PreheatAsync(
+            _viewModel.Config.Groups,
+            selectedGroup.Id,
+            pixelSize,
+            themeVariant,
+            default);
     }
 
-    // 仅在首次需要显示时加载图标：静默启动可跳过，缩短开机驻留时间。
-    public void EnsureIconsLoaded()
+    private ViewportRange GetCurrentIconViewport()
     {
-        if (_iconsLoaded) return;
-        _iconsLoaded = true;
-        LoadIcons();
+        if (_viewModel.VisibleItems.Count == 0)
+        {
+            return ViewportRange.Empty;
+        }
+
+        if (_wrapPanel is { RealizedRange.FirstIndex: >= 0 } panel)
+        {
+            return panel.RealizedRange;
+        }
+
+        if (_activeLayoutMode == "list")
+        {
+            var realizedIndices = new List<int>();
+            CollectRealizedItemIndices(ItemList, realizedIndices);
+            if (realizedIndices.Count > 0)
+            {
+                return new ViewportRange(realizedIndices.Min(), realizedIndices.Max(), 1);
+            }
+        }
+
+        return GetInitialIconViewport();
+    }
+
+    private ViewportRange GetInitialIconViewport()
+    {
+        var itemCount = _viewModel.VisibleItems.Count;
+        var availableWidth = Math.Max(1, ItemList.ActualWidth - ItemList.Padding.Left - ItemList.Padding.Right);
+        var availableHeight = Math.Max(1, ItemList.ActualHeight - ItemList.Padding.Top - ItemList.Padding.Bottom);
+        int firstScreenCount;
+
+        if (_activeLayoutMode == "list")
+        {
+            firstScreenCount = Math.Max(1, (int)Math.Ceiling(availableHeight / Math.Max(1, _viewModel.Settings.CardHeight)));
+        }
+        else
+        {
+            var itemWidth = Math.Max(1, _viewModel.Settings.CardWidth + _viewModel.Settings.ItemSpacing);
+            var itemHeight = Math.Max(1, _viewModel.Settings.CardHeight + _viewModel.Settings.RowSpacing);
+            var columns = Math.Max(1, (int)(availableWidth / itemWidth));
+            var rows = Math.Max(1, (int)Math.Ceiling(availableHeight / itemHeight));
+            firstScreenCount = columns * rows;
+        }
+
+        return new ViewportRange(0, Math.Min(itemCount, firstScreenCount) - 1, Math.Max(1, firstScreenCount));
+    }
+
+    private void CollectRealizedItemIndices(DependencyObject parent, ICollection<int> indices)
+    {
+        for (var childIndex = 0; childIndex < VisualTreeHelper.GetChildrenCount(parent); childIndex++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, childIndex);
+            if (child is ListBoxItem container)
+            {
+                var itemIndex = ItemList.ItemContainerGenerator.IndexFromContainer(container);
+                if (itemIndex >= 0)
+                {
+                    indices.Add(itemIndex);
+                }
+
+                continue;
+            }
+
+            CollectRealizedItemIndices(child, indices);
+        }
     }
 
     private void ItemList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
@@ -659,8 +1222,10 @@ public partial class MainWindow : System.Windows.Window
             ItemList.SelectedItem = launcherItem;
             _dragStartPoint = e.GetPosition(ItemList);
             _draggedItem = launcherItem;
-            _dragSourceGroup = group;
-            _dragSourceIndex = group.Items.IndexOf(launcherItem);
+            _dragDropCoordinator.Begin(
+                launcherItem,
+                group,
+                !string.IsNullOrWhiteSpace(_viewModel.SearchText));
         }
     }
 
@@ -739,7 +1304,7 @@ public partial class MainWindow : System.Windows.Window
         if (sender is not MenuItem { Tag: Group targetGroup } || ItemList.SelectedItem is not LauncherItem item) return;
         var sourceGroup = _viewModel.SelectedGroup;
         if (sourceGroup is null || sourceGroup == targetGroup) return;
-        MoveItem(item, sourceGroup, targetGroup, targetGroup.Items.Count);
+        MoveItemWithCoordinator(item, sourceGroup, targetGroup, targetGroup.Items.Count);
     }
 
     private void DeleteButton_MouseEnter(object sender, MouseEventArgs e)
@@ -839,7 +1404,6 @@ public partial class MainWindow : System.Windows.Window
         _viewModel.Config.Groups.Add(group);
         _viewModel.SelectedGroup = group;
         _viewModel.Save();
-        RefreshGroupTabs();
         RefreshEmptyState();
         CloseNewGroupOverlay();
     }
@@ -869,7 +1433,6 @@ public partial class MainWindow : System.Windows.Window
         group.Name = dialog.GroupName;
         _viewModel.RefreshGroups();
         _viewModel.Save();
-        RefreshGroupTabs();
     }
 
     private void DeleteSelectedGroup_Click(object sender, RoutedEventArgs e)
@@ -892,7 +1455,6 @@ public partial class MainWindow : System.Windows.Window
         _viewModel.SelectedGroup = _viewModel.Config.Groups.ElementAtOrDefault(Math.Min(index, _viewModel.Config.Groups.Count - 1));
         _viewModel.RefreshGroups();
         _viewModel.Save();
-        RefreshGroupTabs();
         RefreshEmptyState();
     }
 
@@ -1006,7 +1568,6 @@ public partial class MainWindow : System.Windows.Window
         }
 
         var item = new LauncherItem { Name = dialog.ItemName, Path = dialog.ItemPath };
-        item.IconImage = _shellIconService.GetIcon(item.Path);
         _viewModel.SelectedGroup.Items.Add(item);
         _viewModel.RefreshVisibleItems();
         _viewModel.Save();
@@ -1032,9 +1593,12 @@ public partial class MainWindow : System.Windows.Window
             return;
         }
 
+        var oldPath = item.Path;
         item.Name = dialog.ItemName;
         item.Path = dialog.ItemPath;
-        item.IconImage = _shellIconService.GetIcon(item.Path);
+        item.IconImage = null;
+        _iconService.Invalidate(oldPath);
+        _iconService.Invalidate(item.Path);
         _viewModel.RefreshVisibleItems();
         _viewModel.Save();
     }
@@ -1100,10 +1664,14 @@ public partial class MainWindow : System.Windows.Window
             return;
         }
 
-        if (_isEditMode && e.Data.GetData(typeof(LauncherItem)) is LauncherItem item)
+        if (_isEditMode && _dragDropCoordinator.IsActive &&
+            CanReorderSelectedGroup() &&
+            e.Data.GetData(typeof(LauncherItem)) is LauncherItem)
         {
+            Point position = e.GetPosition(ItemList);
             UpdateDragGhost(e.GetPosition(this));
-            PreviewItemOrder(item, GetParent<ListBoxItem>(e.OriginalSource as DependencyObject)?.DataContext as LauncherItem);
+            AutoScrollDuringDrag(position);
+            UpdateDragOrder(e);
             e.Effects = DragDropEffects.Move;
             e.Handled = true;
             return;
@@ -1115,27 +1683,24 @@ public partial class MainWindow : System.Windows.Window
 
     private void ItemList_Drop(object sender, DragEventArgs e)
     {
+        _groupSwitchCoordinator.EndDrag();
         if (_viewModel.SelectedGroup is null)
         {
             return;
         }
 
-        if (_isEditMode && e.Data.GetData(typeof(LauncherItem)) is LauncherItem item && _dragSourceGroup is not null)
+        if (_isEditMode && _dragDropCoordinator.IsActive &&
+            CanReorderSelectedGroup() &&
+            e.Data.GetData(typeof(LauncherItem)) is LauncherItem)
         {
-            if (ReferenceEquals(_dragSourceGroup, _viewModel.SelectedGroup) && _previewInsertIndex >= 0)
-            {
-                _previewTargetItem = null;
-                _previewInsertIndex = -1;
-                _viewModel.RefreshVisibleItems();
-                _viewModel.Save();
-                _viewModel.StatusText = "项目顺序已更新";
-            }
-            else
-            {
-                RestorePreviewOrder();
-                MoveItem(item, _dragSourceGroup, _viewModel.SelectedGroup, GetInsertIndex(GetParent<ListBoxItem>(e.OriginalSource as DependencyObject)?.DataContext as LauncherItem));
-            }
-
+            UpdateDragOrder(e);
+            _dragDropCoordinator.Drop(
+                _dragDropCoordinator.Generation,
+                _viewModel.SelectedGroup,
+                _viewModel.VisibleItems,
+                _viewModel.VisibleItems.Count);
+            _draggedItem = null;
+            RefreshEmptyState();
             return;
         }
 
@@ -1144,8 +1709,8 @@ public partial class MainWindow : System.Windows.Window
             return;
         }
 
-        var addedCount = AddPathsToSelectedGroup(paths);
-        _viewModel.StatusText = addedCount == 0 ? "没有可添加的新项目" : $"已添加 {addedCount} 个项目";
+        int addedCount = AddPathsToSelectedGroup(paths);
+        _viewModel.StatusText = addedCount == 0 ? "\u6CA1\u6709\u53EF\u6DFB\u52A0\u7684\u65B0\u9879\u76EE" : $"\u5DF2\u6DFB\u52A0 {addedCount} \u4E2A\u9879\u76EE";
         if (addedCount > 0)
         {
             _viewModel.RefreshVisibleItems();
@@ -1156,12 +1721,13 @@ public partial class MainWindow : System.Windows.Window
 
     private void ItemList_PreviewMouseMove(object sender, MouseEventArgs e)
     {
-        if (!_isEditMode || e.LeftButton != MouseButtonState.Pressed || _draggedItem is null || _dragSourceGroup is null)
+        if (!_isEditMode || e.LeftButton != MouseButtonState.Pressed ||
+            _draggedItem is null || !_dragDropCoordinator.IsActive)
         {
             return;
         }
 
-        var position = e.GetPosition(ItemList);
+        Point position = e.GetPosition(ItemList);
         if (Math.Abs(position.X - _dragStartPoint.X) < SystemParameters.MinimumHorizontalDragDistance &&
             Math.Abs(position.Y - _dragStartPoint.Y) < SystemParameters.MinimumVerticalDragDistance)
         {
@@ -1175,19 +1741,18 @@ public partial class MainWindow : System.Windows.Window
         }
         finally
         {
-            RestorePreviewOrder();
+            _groupSwitchCoordinator.EndDrag();
+            _dragDropCoordinator.Cancel(_dragDropCoordinator.Generation);
             CloseDragGhost();
             _draggedItem = null;
-            _dragSourceGroup = null;
-            _dragSourceIndex = -1;
         }
     }
 
     private void ItemList_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
+        _groupSwitchCoordinator.EndDrag();
+        _dragDropCoordinator.Cancel(_dragDropCoordinator.Generation);
         _draggedItem = null;
-        _dragSourceGroup = null;
-        _dragSourceIndex = -1;
 
         if (!_isEditMode && _viewModel.Settings.OpenItemsOnSingleClick &&
             GetParent<ListBoxItem>(e.OriginalSource as DependencyObject)?.DataContext is LauncherItem item)
@@ -1197,45 +1762,80 @@ public partial class MainWindow : System.Windows.Window
         }
     }
 
-    private void PreviewItemOrder(LauncherItem item, LauncherItem? targetItem)
+    private bool CanReorderSelectedGroup() =>
+        _viewModel.SelectedGroup is not null &&
+        string.IsNullOrWhiteSpace(_viewModel.SearchText) &&
+        !string.Equals(_viewModel.SelectedGroup.SortMode, "frequency", StringComparison.Ordinal);
+
+    private LauncherDragUpdate UpdateDragOrder(DragEventArgs e)
     {
-        if (_dragSourceGroup is null || !ReferenceEquals(_dragSourceGroup, _viewModel.SelectedGroup) || targetItem is null || ReferenceEquals(item, targetItem) || ReferenceEquals(_previewTargetItem, targetItem))
+        if (_viewModel.SelectedGroup is not { } targetGroup)
         {
-            return;
+            return default;
         }
 
-        var currentIndex = _viewModel.SelectedGroup!.Items.IndexOf(item);
-        var targetIndex = _viewModel.SelectedGroup.Items.IndexOf(targetItem);
-        if (currentIndex < 0 || targetIndex < 0)
+        if (_wrapPanel is not null)
         {
-            return;
+            Point point = e.GetPosition(_wrapPanel);
+            Point logicalPoint = new(
+                point.X + _wrapPanel.HorizontalOffset,
+                point.Y + _wrapPanel.VerticalOffset);
+            int columns = Math.Max(1, _wrapPanel.RealizedRange.Columns);
+            var layout = new VirtualizingWrapLayout(
+                _wrapPanel.ItemWidth,
+                _wrapPanel.ItemHeight,
+                _wrapPanel.HorizontalSpacing,
+                _wrapPanel.VerticalSpacing,
+                _wrapPanel.BufferRows);
+            return _dragDropCoordinator.Update(
+                _dragDropCoordinator.Generation,
+                targetGroup,
+                _viewModel.VisibleItems,
+                logicalPoint,
+                layout,
+                columns);
         }
 
-        _viewModel.SelectedGroup.Items.Move(currentIndex, targetIndex);
-        _previewTargetItem = targetItem;
-        _previewInsertIndex = targetIndex;
-    }
-
-    private void RestorePreviewOrder()
-    {
-        if (_draggedItem is not null && _dragSourceGroup is not null && ReferenceEquals(_dragSourceGroup, _viewModel.SelectedGroup))
+        int visibleIndex;
+        if (FindAncestor<ListBoxItem>(e.OriginalSource as DependencyObject) is { DataContext: LauncherItem targetItem } container)
         {
-            var currentIndex = _viewModel.SelectedGroup.Items.IndexOf(_draggedItem);
-            var sourceIndex = _dragSourceGroup.Items.IndexOf(_draggedItem);
-            if (currentIndex >= 0 && sourceIndex >= 0 && currentIndex != sourceIndex)
+            visibleIndex = _viewModel.VisibleItems.IndexOf(targetItem);
+            if (e.GetPosition(container).Y > container.ActualHeight / 2)
             {
-                _viewModel.SelectedGroup.Items.Move(currentIndex, sourceIndex);
+                visibleIndex++;
             }
         }
+        else
+        {
+            visibleIndex = _viewModel.VisibleItems.Count;
+        }
 
-        _previewTargetItem = null;
-        _previewInsertIndex = -1;
+        return _dragDropCoordinator.Update(
+            _dragDropCoordinator.Generation,
+            targetGroup,
+            _viewModel.VisibleItems,
+            visibleIndex);
     }
 
-    private int GetInsertIndex(LauncherItem? targetItem)
+    private void AutoScrollDuringDrag(Point position)
     {
-        var index = targetItem is null ? -1 : _viewModel.SelectedGroup!.Items.IndexOf(targetItem);
-        return index >= 0 ? index : _viewModel.SelectedGroup!.Items.Count;
+        var delta = position.Y < DragAutoScrollEdge
+            ? -DragAutoScrollStep
+            : position.Y > ItemList.ActualHeight - DragAutoScrollEdge
+                ? DragAutoScrollStep
+                : 0;
+        if (delta == 0)
+        {
+            return;
+        }
+
+        if (_wrapPanel is not null)
+        {
+            _wrapPanel.SetVerticalOffset(_wrapPanel.VerticalOffset + delta);
+            return;
+        }
+
+        _itemScrollViewer?.ScrollToVerticalOffset(Math.Max(0, _itemScrollViewer.VerticalOffset + delta));
     }
 
     private void ShowDragGhost(LauncherItem item, Point position)
@@ -1251,15 +1851,15 @@ public partial class MainWindow : System.Windows.Window
                 Width = 82,
                 Padding = new Thickness(8, 6, 8, 7),
                 Background = new SolidColorBrush(Color.FromRgb(51, 58, 72)),
-                BorderBrush = new SolidColorBrush(Color.FromRgb(100, 198, 226)),
+                BorderBrush = (Brush)FindResource("DragIndicatorBrush"),
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(9),
-                Opacity = 0.78,
+                Opacity = 1,
                 Child = new StackPanel
                 {
                     Children =
                     {
-                        new Image { Source = (item.IconImage as System.Windows.Media.ImageSource) ?? _shellIconService.GetIcon(item.Path), Width = 34, Height = 34, HorizontalAlignment = HorizontalAlignment.Center },
+                        new Image { Source = item.IconImage as System.Windows.Media.ImageSource, Width = 34, Height = 34, HorizontalAlignment = HorizontalAlignment.Center },
                         new TextBlock { Text = item.Name, MaxWidth = 66, Margin = new Thickness(0, 5, 0, 0), FontSize = 11, Foreground = Brushes.White, TextAlignment = TextAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis }
                     }
                 }
@@ -1287,25 +1887,15 @@ public partial class MainWindow : System.Windows.Window
         }
     }
 
-    private void MoveItem(LauncherItem item, Group sourceGroup, Group targetGroup, int targetIndex)
+    private void MoveItemWithCoordinator(
+        LauncherItem item,
+        Group sourceGroup,
+        Group targetGroup,
+        int targetIndex)
     {
-        var sourceIndex = sourceGroup.Items.IndexOf(item);
-        if (sourceIndex < 0)
-        {
-            return;
-        }
-
-        if (sourceGroup == targetGroup && sourceIndex < targetIndex)
-        {
-            targetIndex--;
-        }
-
-        sourceGroup.Items.Remove(item);
-        targetIndex = Math.Clamp(targetIndex, 0, targetGroup.Items.Count);
-        targetGroup.Items.Insert(targetIndex, item);
-        _viewModel.RefreshVisibleItems();
-        _viewModel.Save();
-        _viewModel.StatusText = sourceGroup == targetGroup ? "项目顺序已更新" : $"已移至“{targetGroup.Name}”";
+        long generation = _dragDropCoordinator.Begin(item, sourceGroup, isFiltering: false);
+        _dragDropCoordinator.Drop(generation, targetGroup, targetGroup.Items, targetIndex);
+        RefreshEmptyState();
     }
 
     private int AddPathsToSelectedGroup(IEnumerable<string> paths)
@@ -1325,7 +1915,6 @@ public partial class MainWindow : System.Windows.Window
             }
 
             var item = new LauncherItem { Name = Path.GetFileNameWithoutExtension(path), Path = path };
-            item.IconImage = _shellIconService.GetIcon(path);
             _viewModel.SelectedGroup.Items.Insert(0, item);
             addedCount++;
         }

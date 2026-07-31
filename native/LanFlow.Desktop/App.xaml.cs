@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using Forms = System.Windows.Forms;
+using LanFlow.Desktop.Services;
 
 namespace LanFlow.Desktop;
 
@@ -55,6 +56,7 @@ public partial class App : Application
         try
         {
             base.OnStartup(e);
+            ResolveConfigLocationAtStartup();
             CreateTrayIcon();
 
             IsSilentStart = e.Args.Any(a =>
@@ -152,6 +154,50 @@ public partial class App : Application
         catch { }
     }
 
+    private static string DiagnosticLogPath
+    {
+        get
+        {
+            var dir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "LanFlow");
+            try { Directory.CreateDirectory(dir); } catch { }
+            return Path.Combine(dir, "config-diagnostics.log");
+        }
+    }
+
+    private static void WriteDiagnosticLog(string message)
+    {
+        try
+        {
+            var line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}";
+            File.AppendAllText(DiagnosticLogPath, line + Environment.NewLine);
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// 启动时解析配置目录（默认或 locator 指定），确保目录存在并写入诊断日志。
+    /// </summary>
+    private static void ResolveConfigLocationAtStartup()
+    {
+        try
+        {
+            var location = new ConfigLocationService();
+            var resolution = location.Resolve();
+            Directory.CreateDirectory(resolution.DirectoryPath);
+            WriteDiagnosticLog(
+                "Config directory=" + resolution.DirectoryPath +
+                "; isDefault=" + resolution.IsDefault +
+                "; exists=" + File.Exists(resolution.ConfigPath) +
+                "; warning=" + (resolution.Warning ?? "none"));
+        }
+        catch (Exception ex)
+        {
+            WriteDiagnosticLog("ResolveConfigLocationAtStartup failed: " + ex.Message);
+        }
+    }
+
     private static void SafeShowCrash(Exception? ex)
     {
         try
@@ -177,11 +223,6 @@ public partial class App : Application
         if (MainWindow is null)
         {
             return;
-        }
-
-        if (MainWindow is MainWindow mw)
-        {
-            mw.EnsureIconsLoaded();
         }
 
         MainWindow.Show();

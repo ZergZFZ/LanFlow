@@ -1,7 +1,9 @@
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using LanFlow.Core.Collections;
 using LanFlow.Desktop.Models;
 using LanFlow.Desktop.Services;
 
@@ -10,6 +12,7 @@ namespace LanFlow.Desktop.ViewModels;
 public sealed class MainViewModel : INotifyPropertyChanged
 {
     private readonly IConfigStore _configStore;
+    private readonly RangeObservableCollection<LauncherItem> _visibleItems = [];
     private Group? _selectedGroup;
     private string _searchText = string.Empty;
     private string _statusText = "就绪";
@@ -18,7 +21,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         _configStore = configStore;
         Config = _configStore.Load();
+        VisibleItems = new ReadOnlyObservableCollection<LauncherItem>(_visibleItems);
         SelectedGroup = Config.Groups.FirstOrDefault();
+        RefreshVisibleItems();
     }
 
     public AppConfig Config { get; private set; }
@@ -33,7 +38,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             if (_selectedGroup == value) return;
             _selectedGroup = value;
             OnPropertyChanged();
-            OnPropertyChanged(nameof(VisibleItems));
+            RefreshVisibleItems();
             OnPropertyChanged(nameof(SelectedGroupName));
             OnPropertyChanged(nameof(InfoText));
         }
@@ -49,7 +54,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             if (_searchText == value) return;
             _searchText = value;
             OnPropertyChanged();
-            OnPropertyChanged(nameof(VisibleItems));
+            RefreshVisibleItems();
         }
     }
 
@@ -66,14 +71,22 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     // 状态栏/调试信息，Desktop 与 Linux 共用，具体文案由各自 UI 决定如何展示。
     public string InfoText =>
-        $"LanFlow · 主题={(Settings.Theme == "light" ? "light" : "dark")} · 分组数={Config.Groups.Count} · 当前分组={SelectedGroupName}";
+        $"LanFlow · 主题={(Settings.Theme == "light" ? "light" : "dark")} · " +
+        $"布局={LayoutLabel} · 分组切换={GroupSwitchLabel} · 分组数={Config.Groups.Count} · 当前分组={SelectedGroupName}";
 
-    public IEnumerable<LauncherItem> VisibleItems => string.IsNullOrWhiteSpace(SearchText)
-        ? OrderItems(SelectedGroup)
-        : Config.Groups.SelectMany(OrderItems).Where(item =>
-            item.Name.Contains(SearchText, StringComparison.CurrentCultureIgnoreCase) ||
-            item.Path.Contains(SearchText, StringComparison.CurrentCultureIgnoreCase) ||
-            item.Command.Contains(SearchText, StringComparison.CurrentCultureIgnoreCase));
+    private string LayoutLabel => Settings.LayoutMode switch
+    {
+        SettingsOptionValues.CardLayout => "卡片",
+        _ => "网格",
+    };
+
+    private string GroupSwitchLabel => Settings.GroupSwitchMode switch
+    {
+        SettingsOptionValues.GroupSwitchHover => "悬停",
+        _ => "点击",
+    };
+
+    public ReadOnlyObservableCollection<LauncherItem> VisibleItems { get; }
 
     private static IEnumerable<LauncherItem> OrderItems(Group? group) => group is null
         ? []
@@ -83,11 +96,20 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         OnPropertyChanged(nameof(Groups));
         OnPropertyChanged(nameof(SelectedGroupName));
-        OnPropertyChanged(nameof(VisibleItems));
+        RefreshVisibleItems();
         OnPropertyChanged(nameof(InfoText));
     }
 
-    public void RefreshVisibleItems() => OnPropertyChanged(nameof(VisibleItems));
+    public void RefreshVisibleItems()
+    {
+        var query = string.IsNullOrWhiteSpace(SearchText)
+            ? OrderItems(SelectedGroup)
+            : Config.Groups.SelectMany(OrderItems).Where(item =>
+                item.Name.Contains(SearchText, StringComparison.CurrentCultureIgnoreCase) ||
+                item.Path.Contains(SearchText, StringComparison.CurrentCultureIgnoreCase) ||
+                item.Command.Contains(SearchText, StringComparison.CurrentCultureIgnoreCase));
+        _visibleItems.ReplaceRange(query.ToArray());
+    }
 
     public void ApplyAppearance(Settings source, bool persist)
     {
@@ -96,8 +118,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
         settings.ThemeProfile = source.ThemeProfile;
         settings.ThemeColors = source.ThemeColors;
         settings.CustomThemes = source.CustomThemes;
-        settings.Opacity = Math.Clamp(source.Opacity, 0.55, 1.0);
-        settings.LayoutMode = source.LayoutMode == "card" ? "card" : "tile";
+        settings.LayoutMode = source.LayoutMode == SettingsOptionValues.CardLayout
+            ? SettingsOptionValues.CardLayout
+            : SettingsOptionValues.GridLayout;
         settings.IconSize = Math.Clamp(source.IconSize, 24, 72);
         settings.CardWidth = Math.Clamp(source.CardWidth, 48, 320);
         settings.CardHeight = Math.Clamp(source.CardHeight, 48, 240);
@@ -109,7 +132,26 @@ public sealed class MainViewModel : INotifyPropertyChanged
         settings.ShowShortcutBadge = source.ShowShortcutBadge;
         settings.ShowFullItemName = source.ShowFullItemName;
         settings.ShowItemTitle = source.ShowItemTitle;
-        settings.GroupLayout = source.GroupLayout == "top" ? "top" : "left";
+        settings.GroupLayout = source.GroupLayout == SettingsOptionValues.GroupTop
+            ? SettingsOptionValues.GroupTop
+            : SettingsOptionValues.GroupLeft;
+        settings.GroupSwitchMode = source.GroupSwitchMode == SettingsOptionValues.GroupSwitchHover
+            ? SettingsOptionValues.GroupSwitchHover
+            : SettingsOptionValues.GroupSwitchClick;
+        settings.GroupLabelSize = Math.Clamp(source.GroupLabelSize, 28, 52);
+        settings.GroupLabelFontSize = Math.Clamp(source.GroupLabelFontSize, 11, 18);
+        settings.GroupNavigationWidth = Math.Clamp(source.GroupNavigationWidth, 96, 280);
+        settings.TransparencyMode = source.TransparencyMode == SettingsOptionValues.TransparencyWholeWindow
+            ? SettingsOptionValues.TransparencyWholeWindow
+            : SettingsOptionValues.TransparencyLayered;
+        settings.LayeredOpacity = Math.Clamp(source.LayeredOpacity, 0.40, 1.00);
+        settings.WholeWindowOpacity = Math.Clamp(source.WholeWindowOpacity, 0.40, 1.00);
+        settings.Opacity = settings.TransparencyMode == SettingsOptionValues.TransparencyWholeWindow
+            ? settings.WholeWindowOpacity
+            : settings.LayeredOpacity;
+        settings.AnimationMode = source.AnimationMode is SettingsOptionValues.AnimationOn or SettingsOptionValues.AnimationOff
+            ? source.AnimationMode
+            : SettingsOptionValues.AnimationSystem;
         settings.Hotkey = source.Hotkey;
         settings.StartWithWindows = source.StartWithWindows;
         settings.OpenItemsOnSingleClick = source.OpenItemsOnSingleClick;

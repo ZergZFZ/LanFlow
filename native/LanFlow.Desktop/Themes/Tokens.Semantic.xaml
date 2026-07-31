@@ -1,0 +1,32 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <SolidColorBrush x:Key="WindowBackgroundBrush" Color="{StaticResource Color.Neutral.050}" />
+    <SolidColorBrush x:Key="SurfaceBrush" Color="{StaticResource Color.Neutral.000}" />
+    <SolidColorBrush x:Key="ItemHoverBrush" Color="{StaticResource Color.Neutral.050}" />
+    <SolidColorBrush x:Key="ItemSelectedBrush" Color="#245B67D6" />
+    <SolidColorBrush x:Key="PrimaryTextBrush" Color="{StaticResource Color.Neutral.900}" />
+    <SolidColorBrush x:Key="SecondaryTextBrush" Color="{StaticResource Color.Neutral.700}" />
+    <SolidColorBrush x:Key="FocusBorderBrush" Color="{StaticResource Color.Accent.500}" />
+    <SolidColorBrush x:Key="GroupTabSelectedBrush" Color="{StaticResource Color.Accent.500}" />
+    <SolidColorBrush x:Key="WindowBorderBrush" Color="{StaticResource Color.Neutral.100}" />
+    <SolidColorBrush x:Key="MutedSurfaceBrush" Color="{StaticResource Color.Neutral.100}" />
+    <SolidColorBrush x:Key="DividerBrush" Color="{StaticResource Color.Neutral.100}" />
+    <SolidColorBrush x:Key="DangerBrush" Color="{StaticResource Color.Danger.500}" />
+    <SolidColorBrush x:Key="DragIndicatorBrush" Color="{StaticResource Color.Accent.500}" />
+    <SolidColorBrush x:Key="IconSurfaceBrush" Color="{StaticResource Color.Neutral.100}" />
+    <SolidColorBrush x:Key="WarningBrush" Color="#FFF1BD68" />
+    <SolidColorBrush x:Key="ModalScrimBrush" Color="#CC121826" />
+    <SolidColorBrush x:Key="PrimaryOnAccentTextBrush" Color="{StaticResource Color.Neutral.000}" />
+    <Color x:Key="ShadowColor">#FF000000</Color>
+
+    <!-- Compatibility aliases retained until every existing view is migrated. -->
+    <SolidColorBrush x:Key="WindowBackground" Color="{StaticResource Color.Neutral.050}" />
+    <SolidColorBrush x:Key="PanelBackground" Color="{StaticResource Color.Neutral.000}" />
+    <SolidColorBrush x:Key="SidebarBackground" Color="{StaticResource Color.Neutral.100}" />
+    <SolidColorBrush x:Key="BorderBrush" Color="{StaticResource Color.Neutral.100}" />
+    <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource Color.Neutral.900}" />
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource Color.Neutral.700}" />
+    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource Color.Accent.500}" />
+    <SolidColorBrush x:Key="AccentHoverBrush" Color="#FF4C57C3" />
+    <SolidColorBrush x:Key="AccentSoftBrush" Color="#FFE9E8FF" />
+</ResourceDictionary>
