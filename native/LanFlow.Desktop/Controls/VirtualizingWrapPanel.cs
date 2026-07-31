@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
@@ -127,14 +127,29 @@ public sealed class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
             viewport.Height,
             _offset.Y);
 
+        IItemContainerGenerator? generator = ItemContainerGenerator;
         if (owner is null || itemCount == 0)
         {
-            RemoveAllChildren();
+            if (generator is not null)
+            {
+                RemoveAllChildren(generator);
+            }
+            else
+            {
+                _realizedIndices.Clear();
+            }
+
             UpdateRealizedRange(ViewportRange.Empty);
             return viewport;
         }
 
-        IItemContainerGenerator generator = ItemContainerGenerator;
+        if (generator is null)
+        {
+            _realizedIndices.Clear();
+            UpdateRealizedRange(ViewportRange.Empty);
+            return viewport;
+        }
+
         RemoveOutsideRange(generator, range);
         RealizeRange(generator, range);
 
@@ -152,7 +167,11 @@ public sealed class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
     protected override Size ArrangeOverride(Size finalSize)
     {
         var layout = CreateLayout();
-        IItemContainerGenerator generator = ItemContainerGenerator;
+        IItemContainerGenerator? generator = ItemContainerGenerator;
+        if (generator is null)
+        {
+            return finalSize;
+        }
 
         for (int childIndex = 0; childIndex < InternalChildren.Count; childIndex++)
         {
@@ -336,7 +355,7 @@ public sealed class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
         }
     }
 
-    private void RemoveAllChildren()
+    private void RemoveAllChildren(IItemContainerGenerator generator)
     {
         if (InternalChildren.Count == 0)
         {
@@ -344,7 +363,6 @@ public sealed class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
             return;
         }
 
-        IItemContainerGenerator generator = ItemContainerGenerator;
         var position = new GeneratorPosition(0, 0);
         if (generator is IRecyclingItemContainerGenerator recyclingGenerator)
         {
