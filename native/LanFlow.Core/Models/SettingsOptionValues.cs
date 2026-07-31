@@ -3,7 +3,6 @@ namespace LanFlow.Desktop.Models;
 public static class SettingsOptionValues
 {
     public const string GridLayout = "grid";
-    public const string ListLayout = "list";
     public const string CardLayout = "card";
     public const string GroupTop = "top";
     public const string GroupLeft = "left";
@@ -14,4 +13,8 @@ public static class SettingsOptionValues
     public const string AnimationSystem = "system";
     public const string AnimationOn = "on";
     public const string AnimationOff = "off";
+
+    public const int DefaultGroupHoverDelayMs = 100;
+    public const int MinGroupHoverDelayMs = 0;
+    public const int MaxGroupHoverDelayMs = 500;
 }

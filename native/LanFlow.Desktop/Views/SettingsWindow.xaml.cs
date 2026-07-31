@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Threading;
@@ -9,6 +10,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Input;
+using Microsoft.Win32;
 using LanFlow.Desktop.Models;
 using LanFlow.Desktop.Presentation;
 using LanFlow.Desktop.Services;
@@ -19,6 +21,7 @@ public partial class SettingsWindow : Window
 {
     private readonly SettingsWindowViewModel _viewModel;
     private readonly Action? _clearIconCache;
+    private readonly SettingsMaintenanceService? _maintenanceService;
     private static readonly TimeSpan PreviewInterval = TimeSpan.FromMilliseconds(33);
     private readonly UpdateService _updateService = new();
     private readonly Dictionary<string, PreviewThrottle<double>> _previewThrottles = [];
@@ -26,10 +29,11 @@ public partial class SettingsWindow : Window
 
     public UnsavedCloseDecision CloseDecision { get; private set; } = UnsavedCloseDecision.KeepEditing;
 
-    public SettingsWindow(SettingsPreviewSession session, Action? clearIconCache = null)
+    public SettingsWindow(SettingsPreviewSession session, Action? clearIconCache = null, SettingsMaintenanceService? maintenanceService = null)
     {
         _viewModel = new SettingsWindowViewModel(session ?? throw new ArgumentNullException(nameof(session)));
         _clearIconCache = clearIconCache;
+        _maintenanceService = maintenanceService;
 
         InitializeComponent();
         DataContext = _viewModel;
@@ -67,6 +71,7 @@ public partial class SettingsWindow : Window
                      "groupLabelSize",
                      "groupLabelFontSize",
                      "groupNavigationWidth",
+                     "groupHoverDelayMs",
                  })
         {
             _previewThrottles.Add(
@@ -99,9 +104,8 @@ public partial class SettingsWindow : Window
         ThemeProfileBox.Text = Working.ThemeProfile;
 
         GridLayoutRadio.IsChecked = Working.LayoutMode == SettingsOptionValues.GridLayout;
-        ListLayoutRadio.IsChecked = Working.LayoutMode == SettingsOptionValues.ListLayout;
         CardLayoutRadio.IsChecked = Working.LayoutMode == SettingsOptionValues.CardLayout;
-        if (GridLayoutRadio.IsChecked != true && ListLayoutRadio.IsChecked != true && CardLayoutRadio.IsChecked != true)
+        if (GridLayoutRadio.IsChecked != true && CardLayoutRadio.IsChecked != true)
         {
             GridLayoutRadio.IsChecked = true;
         }
@@ -124,6 +128,8 @@ public partial class SettingsWindow : Window
         GroupLabelSizeSlider.Value = Working.GroupLabelSize;
         GroupLabelFontSizeSlider.Value = Working.GroupLabelFontSize;
         GroupNavigationWidthSlider.Value = Working.GroupNavigationWidth;
+        GroupHoverDelaySlider.Value = Working.GroupHoverDelayMs;
+        RefreshConfigLocationPanel();
 
         LayeredTransparencyRadio.IsChecked = Working.TransparencyMode != SettingsOptionValues.TransparencyWholeWindow;
         WholeWindowTransparencyRadio.IsChecked = Working.TransparencyMode == SettingsOptionValues.TransparencyWholeWindow;
@@ -432,7 +438,104 @@ public partial class SettingsWindow : Window
         GroupLabelSizeValue.Text = $"{GroupLabelSizeSlider.Value:0} DIP";
         GroupLabelFontSizeValue.Text = $"{GroupLabelFontSizeSlider.Value:0} pt";
         GroupNavigationWidthValue.Text = $"{GroupNavigationWidthSlider.Value:0} DIP";
+        GroupHoverDelayValue.Text = $"{(int)GroupHoverDelaySlider.Value} ms";
         OpacityPercentBox.Text = (OpacitySlider.Value * 100).ToString("0", CultureInfo.CurrentCulture);
+    }
+
+    private void RefreshConfigLocationPanel()
+    {
+        if (_maintenanceService is null)
+        {
+            ConfigPathText.Text = string.Empty;
+            return;
+        }
+
+        var resolution = _maintenanceService.Resolve();
+        ConfigPathText.Text = resolution.ConfigPath;
+        RestoreConfigLocationButton.IsEnabled = !resolution.IsDefault;
+        if (resolution.Warning is not null)
+        {
+            ConfigLocationStatusText.Text = SettingsMaintenanceMessages.DescribeWarning(resolution.Warning);
+        }
+    }
+
+    private void CopyConfig_Click(object sender, RoutedEventArgs e)
+    {
+        if (_maintenanceService is null) return;
+        try
+        {
+            _maintenanceService.CopyConfigPathToClipboard();
+            ConfigLocationStatusText.Text = "已复制配置文件路径。";
+        }
+        catch (Exception ex)
+        {
+            ConfigLocationStatusText.Text = "复制失败：" + ex.Message;
+        }
+    }
+
+    private void OpenConfig_Click(object sender, RoutedEventArgs e)
+    {
+        if (_maintenanceService is null) return;
+        try
+        {
+            _maintenanceService.OpenConfigLocation();
+        }
+        catch (Exception ex)
+        {
+            ConfigLocationStatusText.Text = "打开失败：" + ex.Message;
+        }
+    }
+
+    private void ChangeConfigLocation_Click(object sender, RoutedEventArgs e)
+    {
+        if (_maintenanceService is null) return;
+
+        var dialog = new OpenFolderDialog
+        {
+            Title = "选择配置文件目录",
+            Multiselect = false,
+            InitialDirectory = _maintenanceService.ConfigDirectory,
+        };
+        if (dialog.ShowDialog(this) != true) return;
+
+        ApplyLocationChange(() => _maintenanceService.ChangeLocation(dialog.FolderName, overwriteExisting: false),
+            () => _maintenanceService.ChangeLocation(dialog.FolderName, overwriteExisting: true));
+    }
+
+    private void RestoreConfigLocation_Click(object sender, RoutedEventArgs e)
+    {
+        if (_maintenanceService is null) return;
+
+        ApplyLocationChange(() => _maintenanceService.RestoreDefaultLocation(overwriteExisting: false),
+            () => _maintenanceService.RestoreDefaultLocation(overwriteExisting: true));
+    }
+
+    private void ApplyLocationChange(
+        Func<ConfigMigrationResult> attempt,
+        Func<ConfigMigrationResult> retryWithOverwrite)
+    {
+        try
+        {
+            var result = attempt();
+            if (result.Status == ConfigMigrationStatus.TargetContainsConfig)
+            {
+                var confirmed = ShowOverwriteConfirmDialog();
+                if (!confirmed)
+                {
+                    ConfigLocationStatusText.Text = SettingsMaintenanceMessages.Describe(result);
+                    return;
+                }
+
+                result = retryWithOverwrite();
+            }
+
+            ConfigLocationStatusText.Text = SettingsMaintenanceMessages.Describe(result);
+            RefreshConfigLocationPanel();
+        }
+        catch (Exception ex)
+        {
+            ConfigLocationStatusText.Text = "操作失败：" + ex.Message;
+        }
     }
 
     private void HotkeyBox_KeyDown(object sender, KeyEventArgs e)
@@ -472,7 +575,13 @@ public partial class SettingsWindow : Window
         FlushPreviewThrottles();
         _ = _viewModel.Apply();
         CloseDecision = UnsavedCloseDecision.ApplyAndClose;
-        DialogResult = true;
+        Close();
+    }
+
+    public void CloseForOwnerShutdown()
+    {
+        CloseDecision = UnsavedCloseDecision.Discard;
+        Close();
     }
 
     private void Window_Closing(object? sender, CancelEventArgs e)
@@ -576,6 +685,74 @@ public partial class SettingsWindow : Window
         dialog.Content = content;
         _ = dialog.ShowDialog();
         return decision;
+    }
+
+    private bool ShowOverwriteConfirmDialog()
+    {
+        var confirmed = false;
+        var dialog = new Window
+        {
+            Title = "更换配置位置",
+            Owner = this,
+            Width = 440,
+            Height = 200,
+            MinWidth = 440,
+            MinHeight = 200,
+            MaxWidth = 440,
+            MaxHeight = 200,
+            ResizeMode = ResizeMode.NoResize,
+            ShowInTaskbar = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+        };
+        dialog.SetResourceReference(BackgroundProperty, "WindowBackgroundBrush");
+        dialog.SetResourceReference(ForegroundProperty, "PrimaryTextBrush");
+
+        var title = new TextBlock
+        {
+            Text = "目标目录已存在 config.json，要覆盖吗？",
+            FontSize = 17,
+            FontWeight = FontWeights.SemiBold,
+            TextWrapping = TextWrapping.Wrap,
+        };
+        var description = new TextBlock
+        {
+            Margin = new Thickness(0, 8, 0, 20),
+            Text = "覆盖前会在目标目录生成带时间戳的备份文件；原目录的配置文件保持不变。",
+            TextWrapping = TextWrapping.Wrap,
+        };
+        description.SetResourceReference(TextBlock.ForegroundProperty, "SecondaryTextBrush");
+
+        var cancelButton = CreateCloseDecisionButton("取消", isDefault: false);
+        cancelButton.IsCancel = true;
+        cancelButton.Click += (_, _) => dialog.DialogResult = false;
+
+        var overwriteButton = CreateCloseDecisionButton("覆盖并备份", isDefault: true);
+        overwriteButton.Click += (_, _) =>
+        {
+            confirmed = true;
+            dialog.DialogResult = true;
+        };
+
+        var buttons = new StackPanel
+        {
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Orientation = Orientation.Horizontal,
+        };
+        buttons.Children.Add(cancelButton);
+        buttons.Children.Add(overwriteButton);
+
+        var content = new Grid { Margin = new Thickness(24) };
+        content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        content.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        content.Children.Add(title);
+        Grid.SetRow(description, 1);
+        content.Children.Add(description);
+        Grid.SetRow(buttons, 2);
+        content.Children.Add(buttons);
+        dialog.Content = content;
+        _ = dialog.ShowDialog();
+        return confirmed;
     }
 
     private Button CreateCloseDecisionButton(string content, bool isDefault)

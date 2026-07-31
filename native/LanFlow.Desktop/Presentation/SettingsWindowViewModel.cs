@@ -69,6 +69,7 @@ public sealed class SettingsWindowViewModel : INotifyPropertyChanged
                 case "groupLabelSize": settings.GroupLabelSize = value; break;
                 case "groupLabelFontSize": settings.GroupLabelFontSize = value; break;
                 case "groupNavigationWidth": settings.GroupNavigationWidth = value; break;
+                case "groupHoverDelayMs": settings.GroupHoverDelayMs = (int)Math.Round(value); break;
                 default: throw new ArgumentOutOfRangeException(nameof(settingKey), settingKey, null);
             }
         });

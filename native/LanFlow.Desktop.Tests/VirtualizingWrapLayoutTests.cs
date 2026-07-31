@@ -111,6 +111,15 @@ public sealed class VirtualizingWrapLayoutTests
             Layout.CalculateExtent(itemCount: 10, viewportWidth: 440));
     }
 
+    [Fact]
+    public void GetItemRect_AppliesIndependentHorizontalAndVerticalSpacing()
+    {
+        var layout = new VirtualizingWrapLayout(100, 80, 8, 12, 0);
+
+        Assert.Equal(new Rect(108, 0, 100, 80), layout.GetItemRect(1, columns: 4));
+        Assert.Equal(new Rect(0, 92, 100, 80), layout.GetItemRect(4, columns: 4));
+    }
+
     [Theory]
     [InlineData(0, 80, 8, 10, 1)]
     [InlineData(100, 0, 8, 10, 1)]

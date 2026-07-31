@@ -75,6 +75,52 @@ public sealed class ConfigStoreTests : IDisposable
         Assert.Equal(0.40, settings.LayeredOpacity, 3);
         Assert.Equal(1.00, settings.WholeWindowOpacity, 3);
     }
+    [Theory]
+    [InlineData("grid", "grid")]
+    [InlineData("card", "card")]
+    [InlineData("tile", "grid")]
+    [InlineData("list", "grid")]
+    [InlineData("", "grid")]
+    [InlineData("unknown-mode", "grid")]
+    public void Load_NormalizesSupportedAndLegacyLayoutModes(string input, string expected)
+    {
+        File.WriteAllText(
+            Path.Combine(_tempDirectory, "config.json"),
+            "{ \"settings\": { \"layoutMode\": \"" + input + "\" }, \"groups\": [] }");
+
+        var layoutMode = new ConfigStore("Alt+Space", _tempDirectory).Load().Settings.LayoutMode;
+
+        Assert.Equal(expected, layoutMode);
+    }
+
+    [Theory]
+    [InlineData(250, 250)]
+    [InlineData(0, 0)]
+    [InlineData(500, 500)]
+    [InlineData(-10, 0)]
+    public void Load_ClampsGroupHoverDelayMsToValidRange(int input, int expected)
+    {
+        File.WriteAllText(
+            Path.Combine(_tempDirectory, "config.json"),
+            "{ \"settings\": { \"groupHoverDelayMs\": " + input + " }, \"groups\": [] }");
+
+        var groupHoverDelayMs = new ConfigStore("Alt+Space", _tempDirectory).Load().Settings.GroupHoverDelayMs;
+
+        Assert.Equal(expected, groupHoverDelayMs);
+    }
+
+    [Fact]
+    public void Load_DefaultsGroupHoverDelayMsWhenMissing()
+    {
+        File.WriteAllText(
+            Path.Combine(_tempDirectory, "config.json"),
+            "{ \"settings\": {}, \"groups\": [] }");
+
+        var groupHoverDelayMs = new ConfigStore("Alt+Space", _tempDirectory).Load().Settings.GroupHoverDelayMs;
+
+        Assert.Equal(SettingsOptionValues.DefaultGroupHoverDelayMs, groupHoverDelayMs);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_tempDirectory)) Directory.Delete(_tempDirectory, true);

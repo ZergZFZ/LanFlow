@@ -71,7 +71,20 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     // 状态栏/调试信息，Desktop 与 Linux 共用，具体文案由各自 UI 决定如何展示。
     public string InfoText =>
-        $"LanFlow · 主题={(Settings.Theme == "light" ? "light" : "dark")} · 分组数={Config.Groups.Count} · 当前分组={SelectedGroupName}";
+        $"LanFlow · 主题={(Settings.Theme == "light" ? "light" : "dark")} · " +
+        $"布局={LayoutLabel} · 分组切换={GroupSwitchLabel} · 分组数={Config.Groups.Count} · 当前分组={SelectedGroupName}";
+
+    private string LayoutLabel => Settings.LayoutMode switch
+    {
+        SettingsOptionValues.CardLayout => "卡片",
+        _ => "网格",
+    };
+
+    private string GroupSwitchLabel => Settings.GroupSwitchMode switch
+    {
+        SettingsOptionValues.GroupSwitchHover => "悬停",
+        _ => "点击",
+    };
 
     public ReadOnlyObservableCollection<LauncherItem> VisibleItems { get; }
 
@@ -105,12 +118,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
         settings.ThemeProfile = source.ThemeProfile;
         settings.ThemeColors = source.ThemeColors;
         settings.CustomThemes = source.CustomThemes;
-        settings.LayoutMode = source.LayoutMode switch
-        {
-            "tile" => SettingsOptionValues.GridLayout,
-            SettingsOptionValues.GridLayout or SettingsOptionValues.ListLayout or SettingsOptionValues.CardLayout => source.LayoutMode,
-            _ => SettingsOptionValues.GridLayout,
-        };
+        settings.LayoutMode = source.LayoutMode == SettingsOptionValues.CardLayout
+            ? SettingsOptionValues.CardLayout
+            : SettingsOptionValues.GridLayout;
         settings.IconSize = Math.Clamp(source.IconSize, 24, 72);
         settings.CardWidth = Math.Clamp(source.CardWidth, 48, 320);
         settings.CardHeight = Math.Clamp(source.CardHeight, 48, 240);

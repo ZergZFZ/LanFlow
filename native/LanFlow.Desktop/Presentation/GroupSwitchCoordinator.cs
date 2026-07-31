@@ -87,7 +87,7 @@ public sealed class GroupSwitchCoordinator : IDisposable
 {
     private readonly object _gate = new();
     private readonly ITimerScheduler _timerScheduler;
-    private readonly TimeSpan _intentDelay;
+    public TimeSpan IntentDelay { get; set; }
     private IDisposable? _hoverTimer;
     private IDisposable? _dragHoverTimer;
     private string? _hoverTargetId;
@@ -106,7 +106,14 @@ public sealed class GroupSwitchCoordinator : IDisposable
             throw new ArgumentOutOfRangeException(nameof(intentDelay));
         }
 
-        _intentDelay = intentDelay;
+        IntentDelay = intentDelay;
+    }
+
+    public void UpdateIntentDelay(Settings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        TimeSpan delay = TimeSpan.FromMilliseconds(Math.Max(0, settings.GroupHoverDelayMs));
+        IntentDelay = delay;
     }
 
     public string? SelectedGroupId
@@ -172,7 +179,7 @@ public sealed class GroupSwitchCoordinator : IDisposable
             var targetId = group.Id;
             _hoverTargetId = targetId;
             _hoverTimer = _timerScheduler.Schedule(
-                _intentDelay,
+                IntentDelay,
                 () => CompleteHover(group, targetId, generation));
         }
     }
@@ -206,7 +213,7 @@ public sealed class GroupSwitchCoordinator : IDisposable
             var targetId = group.Id;
             _dragHoverTargetId = targetId;
             _dragHoverTimer = _timerScheduler.Schedule(
-                _intentDelay,
+                IntentDelay,
                 () => CompleteDragHover(group, targetId, generation));
         }
     }

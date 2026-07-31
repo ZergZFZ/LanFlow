@@ -1,4 +1,4 @@
-﻿using LanFlow.Desktop.Models;
+using LanFlow.Desktop.Models;
 using LanFlow.Desktop.Presentation;
 using Xunit;
 
@@ -51,8 +51,8 @@ public sealed class SettingsPreviewSessionTests
     }
 
     [Theory]
-    [InlineData(SettingsOptionValues.ListLayout, false, false, SettingsOptionValues.ListLayout)]
-    [InlineData(SettingsOptionValues.ListLayout, true, true, SettingsOptionValues.CardLayout)]
+    [InlineData("list", false, false, "list")]
+    [InlineData("list", true, true, SettingsOptionValues.CardLayout)]
     [InlineData(SettingsOptionValues.CardLayout, false, true, SettingsOptionValues.GridLayout)]
     public void LegacyLayoutToggle_OnlyChangesLayoutWhenExplicitlyTriggered(
         string initialLayout,

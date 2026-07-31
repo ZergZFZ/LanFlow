@@ -82,8 +82,6 @@
                     Value="{Binding DataContext.Settings.CardWidth, RelativeSource={RelativeSource AncestorType=ListBox}}" />
             <Setter Property="Height"
                     Value="{Binding DataContext.Settings.CardHeight, RelativeSource={RelativeSource AncestorType=ListBox}}" />
-            <Setter Property="Margin"
-                    Value="{Binding DataContext.Settings.ItemSpacing, RelativeSource={RelativeSource AncestorType=ListBox}, Converter={StaticResource DoubleToUniformThicknessConverter}, ConverterParameter=2}" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Cursor" Value="Hand" />

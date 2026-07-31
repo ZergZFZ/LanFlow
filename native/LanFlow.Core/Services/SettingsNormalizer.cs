@@ -12,5 +12,6 @@ public static class SettingsNormalizer
         settings.GroupNavigationWidth = Math.Clamp(settings.GroupNavigationWidth, 96, 280);
         settings.LayeredOpacity = Math.Clamp(settings.LayeredOpacity, 0.40, 1.00);
         settings.WholeWindowOpacity = Math.Clamp(settings.WholeWindowOpacity, 0.40, 1.00);
+        settings.GroupHoverDelayMs = Math.Clamp(settings.GroupHoverDelayMs, SettingsOptionValues.MinGroupHoverDelayMs, SettingsOptionValues.MaxGroupHoverDelayMs);
     }
 }

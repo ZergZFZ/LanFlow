@@ -1,5 +1,4 @@
 using System.IO;
-using System.Text;
 using System.Text.Json;
 using LanFlow.Desktop.Models;
 
@@ -13,12 +12,6 @@ public interface IConfigStore
 
 public sealed class ConfigStore : IConfigStore
 {
-    private static readonly JsonSerializerOptions SerializerOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        WriteIndented = true,
-    };
-
     private readonly string _configDirectory;
     private readonly string _configPath;
     private readonly string _defaultHotkey;
@@ -34,6 +27,8 @@ public sealed class ConfigStore : IConfigStore
 
     public string ConfigPath => _configPath;
 
+    public string ConfigDirectory => _configDirectory;
+
     public AppConfig Load()
     {
         if (!File.Exists(_configPath))
@@ -44,7 +39,7 @@ public sealed class ConfigStore : IConfigStore
         try
         {
             using var stream = File.OpenRead(_configPath);
-            return Normalize(JsonSerializer.Deserialize<AppConfig>(stream, SerializerOptions) ?? new AppConfig(), isExistingConfig: true);
+            return Normalize(ConfigDocumentSerializer.Deserialize(stream), isExistingConfig: true);
         }
         catch (JsonException)
         {
@@ -78,12 +73,12 @@ public sealed class ConfigStore : IConfigStore
         settings.ThemeColors ??= settings.Theme == "light" ? ThemeColors.Light() : ThemeColors.Dark();
         settings.CustomThemes ??= [];
 
-        settings.LayoutMode = settings.LayoutMode switch
-        {
-            "tile" => SettingsOptionValues.GridLayout,
-            SettingsOptionValues.GridLayout or SettingsOptionValues.ListLayout or SettingsOptionValues.CardLayout => settings.LayoutMode,
-            _ => SettingsOptionValues.GridLayout,
-        };
+            settings.LayoutMode = settings.LayoutMode switch
+            {
+                "tile" or "list" => SettingsOptionValues.GridLayout,
+                SettingsOptionValues.GridLayout or SettingsOptionValues.CardLayout => settings.LayoutMode,
+                _ => SettingsOptionValues.GridLayout,
+            };
         settings.GroupLayout = settings.GroupLayout == SettingsOptionValues.GroupTop
             ? SettingsOptionValues.GroupTop
             : SettingsOptionValues.GroupLeft;
@@ -128,11 +123,10 @@ public sealed class ConfigStore : IConfigStore
         Normalize(config, isExistingConfig: true);
         Directory.CreateDirectory(_configDirectory);
         var temporaryPath = _configPath + ".tmp";
-        var json = JsonSerializer.Serialize(config, SerializerOptions);
 
         try
         {
-            File.WriteAllText(temporaryPath, json, new UTF8Encoding(false));
+            File.WriteAllBytes(temporaryPath, ConfigDocumentSerializer.Serialize(config));
             File.Move(temporaryPath, _configPath, true);
         }
         catch

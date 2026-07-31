@@ -37,6 +37,8 @@ public partial class MainWindow : System.Windows.Window
     private readonly AnimationPreferenceService _animationPreferenceService = new();
     private readonly ContentTransitionController _contentTransitionController = new();
     private readonly MainWindowSettingsCoordinator _settingsCoordinator;
+    private readonly SettingsWindowPlacement _settingsPlacement;
+    private SettingsWindow? _settingsWindow;
     private readonly LauncherDragDropCoordinator _dragDropCoordinator;
     private readonly ShortcutService _shortcutService = new();
     private readonly ImportManifestService _importManifestService;
@@ -78,12 +80,12 @@ public partial class MainWindow : System.Windows.Window
     public MainWindow()
     {
         InitializeComponent();
-        _viewModel = new MainViewModel(new ConfigStore("Alt+Space"));
+        _viewModel = new MainViewModel(CreateConfigStore());
         _importManifestService = new ImportManifestService(_shortcutService);
         _iconCoordinator = new ViewportIconCoordinator(_iconService);
         _groupSwitchCoordinator = new GroupSwitchCoordinator(
             new DispatcherTimerScheduler(Dispatcher),
-            TimeSpan.FromMilliseconds(200));
+            TimeSpan.FromMilliseconds(_viewModel.Settings.GroupHoverDelayMs));
         _dragDropCoordinator = new LauncherDragDropCoordinator(
             _viewModel.RefreshVisibleItems,
             _viewModel.Save,
@@ -91,7 +93,7 @@ public partial class MainWindow : System.Windows.Window
         _settingsCoordinator = new MainWindowSettingsCoordinator(
             _themeResourceUpdater,
             _windowAppearanceController,
-            Resources,
+            Application.Current?.Resources ?? Resources,
             this,
             SurfaceRoot,
             ContentRoot,
@@ -110,10 +112,14 @@ public partial class MainWindow : System.Windows.Window
         ItemList.Loaded += (_, _) =>
         {
             AttachVirtualizingPanel();
+            ScheduleInitialItemRealization();
             _ = LoadVisibleIconsAsync();
         };
         ItemList.SizeChanged += ItemList_SizeChanged;
         _settingsCoordinator.Restore(_viewModel.Settings);
+
+        _settingsPlacement = new SettingsWindowPlacement(new MonitorWorkAreaProvider());
+
         IsVisibleChanged += (_, _) =>
         {
             if (IsVisible)
@@ -146,6 +152,7 @@ public partial class MainWindow : System.Windows.Window
 
     private async void MainWindow_Closed(object? sender, EventArgs e)
     {
+        _settingsWindow?.CloseForOwnerShutdown();
         _isClosed = true;
         ((INotifyCollectionChanged)_viewModel.VisibleItems).CollectionChanged -= VisibleItems_CollectionChanged;
         ItemList.SizeChanged -= ItemList_SizeChanged;
@@ -411,55 +418,90 @@ public partial class MainWindow : System.Windows.Window
             Activate();
         }
     }
+    // 配置目录由 locator 解析：默认 %APPDATA%\LanFlow，或用户自定义位置。
+    private static ConfigStore CreateConfigStore()
+    {
+        var location = new ConfigLocationService();
+        return new ConfigStore("Alt+Space", location.Resolve().DirectoryPath);
+    }
+
+    private static SettingsMaintenanceService CreateMaintenanceService()
+    {
+        var location = new ConfigLocationService();
+        return new SettingsMaintenanceService(
+            new ConfigStore("Alt+Space", location.Resolve().DirectoryPath),
+            new ConfigMigrationService(location),
+            location);
+    }
+
     private void OpenSettings_Click(object sender, RoutedEventArgs e)
     {
+        if (_settingsWindow is not null && _settingsWindow.IsVisible)
+        {
+            _settingsWindow.Activate();
+            return;
+        }
+
         var session = new SettingsPreviewSession(_viewModel.Settings);
         var original = session.Original;
         session.PreviewRequested += (_, settings) => ApplySettingsPreview(settings);
 
         var wasEditMode = _isEditMode;
         SetEditMode(true, "设置中：可同时查看和管理启动项");
-        var settingsWindow = new SettingsWindow(session, _iconService.Clear) { Owner = this };
-        var accepted = false;
-        try
+        var settingsWindow = new SettingsWindow(session, _iconService.Clear, CreateMaintenanceService()) { Owner = this };
+        _settingsWindow = settingsWindow;
+        _settingsPlacement.Apply(settingsWindow, this);
+        settingsWindow.Closed += (_, _) =>
         {
-            _ = settingsWindow.ShowDialog();
-            var closeDecision = settingsWindow.CloseDecision;
-            var completed = SettingsCloseFlow.TryComplete(
-                session,
-                closeDecision,
-                settingsWindow.FlushPendingPreviews,
-                result =>
+            try
             {
-                if (!_hotkeyService.TryRegister(result.Hotkey))
+                var closeDecision = settingsWindow.CloseDecision;
+                var completed = SettingsCloseFlow.TryComplete(
+                    session,
+                    closeDecision,
+                    settingsWindow.FlushPendingPreviews,
+                    result =>
+                    {
+                        if (!_hotkeyService.TryRegister(result.Hotkey))
+                        {
+                            result.Hotkey = original.Hotkey;
+                            _viewModel.StatusText = "快捷键被其他程序占用，已保留原组合键";
+                        }
+
+                        var requestedStartup = result.StartWithWindows;
+                        result.StartWithWindows = _startupService.SetEnabled(requestedStartup) && _startupService.IsEnabled();
+                        if (result.StartWithWindows != requestedStartup)
+                        {
+                            _viewModel.StatusText = "开机启动设置失败，请检查当前用户注册表权限";
+                        }
+
+                        _settingsCoordinator.Apply(result);
+                        return _viewModel.Settings.Clone();
+                    });
+
+                if (!completed)
                 {
-                    result.Hotkey = original.Hotkey;
-                    _viewModel.StatusText = "快捷键被其他程序占用，已保留原组合键";
+                    _settingsCoordinator.Restore(_viewModel.Settings);
+                    SetEditMode(wasEditMode, null);
+                    return;
                 }
 
-                var requestedStartup = result.StartWithWindows;
-                result.StartWithWindows = _startupService.SetEnabled(requestedStartup) && _startupService.IsEnabled();
-                if (result.StartWithWindows != requestedStartup)
-                {
-                    _viewModel.StatusText = "开机启动设置失败，请检查当前用户注册表权限";
-                }
+                SetEditMode(false, "设置已保存");
+            }
+            catch (Exception ex)
+            {
+                _settingsCoordinator.Restore(_viewModel.Settings);
+                _viewModel.StatusText = $"保存失败：{ex.Message}";
+                SetEditMode(wasEditMode, null);
+            }
+            finally
+            {
+                settingsWindow.DisposePreviewThrottles();
+                _settingsWindow = null;
+            }
+        };
 
-                _settingsCoordinator.Apply(result);
-                return _viewModel.Settings.Clone();
-            });
-            accepted = completed && closeDecision == UnsavedCloseDecision.ApplyAndClose;
-        }
-        finally
-        {
-            settingsWindow.DisposePreviewThrottles();
-        }
-
-        if (!accepted)
-        {
-            _settingsCoordinator.Restore(_viewModel.Settings);
-        }
-
-        SetEditMode(accepted ? false : wasEditMode, accepted ? "\u8BBE\u7F6E\u5DF2\u4FDD\u5B58" : null);
+        settingsWindow.Show();
     }
 
     private Settings ApplyWorkingAppearanceSettings(Settings settings)
@@ -471,10 +513,15 @@ public partial class MainWindow : System.Windows.Window
     private Settings PersistAppearanceSettings(Settings settings)
     {
         _viewModel.ApplyAppearance(settings, persist: true);
+        _groupSwitchCoordinator.UpdateIntentDelay(_viewModel.Settings);
         return _viewModel.Settings.Clone();
     }
 
-    private void ApplySettingsPreview(Settings settings) => _settingsCoordinator.Preview(settings);
+    private void ApplySettingsPreview(Settings settings)
+    {
+        _groupSwitchCoordinator.UpdateIntentDelay(settings);
+        _settingsCoordinator.Preview(settings);
+    }
 
     private void ApplyLayoutSettings(Settings settings)
     {
@@ -491,15 +538,18 @@ public partial class MainWindow : System.Windows.Window
             SaveCurrentViewState(_activeLayoutMode);
         }
 
-        bool listMode = requestedLayoutMode == SettingsOptionValues.ListLayout;
+        if (layoutModeChanged)
+        {
+            _iconCoordinator.CancelPending();
+        }
+
         bool cardMode = requestedLayoutMode == SettingsOptionValues.CardLayout;
         ItemList.ItemContainerStyle = (Style)FindResource(
-            listMode ? "LauncherList" : cardMode ? "LauncherCard" : "LauncherTile");
+            cardMode ? "LauncherCard" : "LauncherTile");
         ItemList.ItemTemplate = (DataTemplate)FindResource(
-            listMode || cardMode ? "CardItemTemplate" : "TileItemTemplate");
+            cardMode ? "CardItemTemplate" : "TileItemTemplate");
 
-        var requestedItemsPanel = (ItemsPanelTemplate)FindResource(
-            listMode ? "VirtualizingListItemsPanel" : "VirtualizingWrapItemsPanel");
+        var requestedItemsPanel = (ItemsPanelTemplate)FindResource("VirtualizingWrapItemsPanel");
         if (!ReferenceEquals(ItemList.ItemsPanel, requestedItemsPanel))
         {
             DetachVirtualizingPanel();
@@ -511,6 +561,10 @@ public partial class MainWindow : System.Windows.Window
         {
             AttachVirtualizingPanel();
             RestoreViewState(reuseOffset: !layoutModeChanged);
+            if (layoutModeChanged)
+            {
+                _ = LoadVisibleIconsAsync();
+            }
         });
     }
 
@@ -552,7 +606,9 @@ public partial class MainWindow : System.Windows.Window
     private void ApplyIconSizeSettings(Settings unusedSettings) => _ = LoadVisibleIconsAsync();
 
     private static string NormalizeLayoutMode(string? layoutMode) =>
-        layoutMode is "card" or "list" ? layoutMode : "tile";
+        layoutMode == SettingsOptionValues.CardLayout
+            ? SettingsOptionValues.CardLayout
+            : SettingsOptionValues.GridLayout;
 
     private void VisibleItems_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
@@ -800,6 +856,28 @@ public partial class MainWindow : System.Windows.Window
         Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
         {
             AttachVirtualizingPanel();
+            _ = LoadVisibleIconsAsync();
+        });
+    }
+
+    private void ScheduleInitialItemRealization()
+    {
+        Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () =>
+        {
+            if (_isClosed || !ItemList.IsLoaded)
+            {
+                return;
+            }
+
+            // The initial ItemsSource is populated before the virtualizing panel joins the visual tree.
+            // Synchronize that binding, then emit the same reset that a group change produces so the panel realizes it.
+            AttachVirtualizingPanel();
+            ItemList.GetBindingExpression(ItemsControl.ItemsSourceProperty)?.UpdateTarget();
+            _viewModel.RefreshVisibleItems();
+            ItemList.InvalidateMeasure();
+            ItemList.InvalidateArrange();
+            _wrapPanel?.InvalidateMeasure();
+            _wrapPanel?.InvalidateArrange();
             _ = LoadVisibleIconsAsync();
         });
     }
@@ -1696,7 +1774,7 @@ public partial class MainWindow : System.Windows.Window
             return default;
         }
 
-        if (_activeLayoutMode != SettingsOptionValues.ListLayout && _wrapPanel is not null)
+        if (_wrapPanel is not null)
         {
             Point point = e.GetPosition(_wrapPanel);
             Point logicalPoint = new(
@@ -1751,7 +1829,7 @@ public partial class MainWindow : System.Windows.Window
             return;
         }
 
-        if (_wrapPanel is not null && _activeLayoutMode != SettingsOptionValues.ListLayout)
+        if (_wrapPanel is not null)
         {
             _wrapPanel.SetVerticalOffset(_wrapPanel.VerticalOffset + delta);
             return;

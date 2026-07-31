@@ -182,6 +182,9 @@ public sealed class Settings
     [JsonPropertyName("openItemsOnSingleClick")]
     public bool OpenItemsOnSingleClick { get; set; } = true;
 
+    [JsonPropertyName("groupHoverDelayMs")]
+    public int GroupHoverDelayMs { get; set; } = SettingsOptionValues.DefaultGroupHoverDelayMs;
+
     public Settings Clone() => new()
     {
         Hotkey = Hotkey,
@@ -213,6 +216,7 @@ public sealed class Settings
         AnimationMode = AnimationMode,
         StartWithWindows = StartWithWindows,
         OpenItemsOnSingleClick = OpenItemsOnSingleClick,
+        GroupHoverDelayMs = GroupHoverDelayMs,
     };
 }
 

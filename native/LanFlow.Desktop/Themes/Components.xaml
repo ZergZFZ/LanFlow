@@ -139,6 +139,7 @@
         <Setter Property="Margin" Value="0,2" />
         <Setter Property="Padding" Value="12,10" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="Transparent" />
         <Setter Property="BorderThickness" Value="1" />
@@ -164,7 +165,7 @@
                         </Trigger>
                         <Trigger Property="IsKeyboardFocusWithin" Value="True">
                             <Setter TargetName="CategoryBorder" Property="BorderBrush" Value="{DynamicResource FocusBorderBrush}" />
-                            <Setter TargetName="CategoryBorder" Property="BorderThickness" Value="2" />
+                            <Setter TargetName="CategoryBorder" Property="BorderThickness" Value="1" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
