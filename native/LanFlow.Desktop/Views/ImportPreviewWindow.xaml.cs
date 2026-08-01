@@ -18,6 +18,21 @@ public partial class ImportPreviewWindow : Window
 
     public ImportMergeResult? Result { get; private set; }
 
+    private void DialogHeader_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is System.Windows.Controls.Button)
+        {
+            return;
+        }
+
+        if (e.ButtonState == System.Windows.Input.MouseButtonState.Pressed)
+        {
+            DragMove();
+        }
+    }
+
+    private void Close_Click(object sender, RoutedEventArgs e) => Close();
+
     private void ConfirmImport_Click(object sender, RoutedEventArgs e)
     {
         if (!_preview.CanConfirm) return;

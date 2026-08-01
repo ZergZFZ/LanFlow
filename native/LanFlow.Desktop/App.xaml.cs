@@ -14,6 +14,7 @@ namespace LanFlow.Desktop;
 public partial class App : Application
 {
     private Forms.NotifyIcon? _trayIcon;
+    private Forms.ToolStripMenuItem? _toggleHotkeyMenuItem;
 
     internal bool IsExiting { get; private set; }
 
@@ -105,6 +106,9 @@ public partial class App : Application
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("显示启动器", null, (_, _) => ShowMainWindow());
         menu.Items.Add(new Forms.ToolStripSeparator());
+        _toggleHotkeyMenuItem = new Forms.ToolStripMenuItem("暂停全局快捷键", null, (_, _) => ToggleHotkeyFromTray());
+        menu.Items.Add(_toggleHotkeyMenuItem);
+        menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("退出 LanFlow", null, (_, _) => RequestShutdown());
 
         Icon icon;
@@ -130,6 +134,16 @@ public partial class App : Application
             Visible = true,
         };
         _trayIcon.DoubleClick += (_, _) => ShowMainWindow();
+    }
+
+    private void ToggleHotkeyFromTray()
+    {
+        if (MainWindow is MainWindow mw)
+        {
+            var message = mw.ToggleHotkeyEnabled();
+            _toggleHotkeyMenuItem!.Text = mw.IsHotkeyEnabled ? "暂停全局快捷键" : "恢复全局快捷键";
+            mw.SetStatusText(message);
+        }
     }
 
     private static string CrashLogPath
@@ -229,6 +243,11 @@ public partial class App : Application
         MainWindow.WindowState = WindowState.Normal;
         MainWindow.Activate();
         MainWindow.Focus();
+
+        if (MainWindow is MainWindow mw)
+        {
+            mw.FocusSearch();
+        }
     }
 
     // 首次显示主窗口：规避 “根 Visual 不能具有父级” 的偶发时序竞争。

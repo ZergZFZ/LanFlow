@@ -334,3 +334,4 @@ public sealed class GroupSwitchCoordinator : IDisposable
         ObjectDisposedException.ThrowIf(_isDisposed, this);
     }
 }
+

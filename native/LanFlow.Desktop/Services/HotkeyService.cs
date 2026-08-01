@@ -56,6 +56,36 @@ public sealed class HotkeyService : IDisposable
         return false;
     }
 
+    public bool IsEnabled => _isRegistered;
+
+    // 暂停/恢复全局快捷键：暂停时不影响窗口与托盘其他功能。
+    public bool SetEnabled(bool enabled)
+    {
+        if (_source is null)
+        {
+            return false;
+        }
+
+        if (enabled == _isRegistered)
+        {
+            return true;
+        }
+
+        if (enabled)
+        {
+            _isRegistered = RegisterHotKey(_source.Handle, HotkeyId, _modifiers, _virtualKey);
+            return _isRegistered;
+        }
+
+        if (_isRegistered)
+        {
+            UnregisterHotKey(_source.Handle, HotkeyId);
+        }
+
+        _isRegistered = false;
+        return true;
+    }
+
     public static bool TryNormalize(string value, out string normalized)
     {
         normalized = string.Empty;

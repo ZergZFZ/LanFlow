@@ -6,6 +6,13 @@ namespace LanFlow.Desktop.Models;
 
 public sealed class AppConfig
 {
+    // 配置结构版本：缺失字段按版本 0（旧格式）处理；当前版本为 1。
+    // 版本 1 仅新增顶层字段，不重排、不删改用户已有数据。
+    public const int CurrentVersion = 1;
+
+    [JsonPropertyName("configVersion")]
+    public int ConfigVersion { get; set; }
+
     [JsonPropertyName("groups")]
     public ObservableCollection<Group> Groups { get; set; } = [];
 
@@ -69,6 +76,10 @@ public sealed class LauncherItem : INotifyPropertyChanged
 
     [JsonIgnore]
     public bool IsCommand => Kind == "command";
+
+    // 仅搜索态展示用：搜索结果显示所属分组名；非搜索态为 null。不参与序列化与合并。
+    [JsonIgnore]
+    public string? SearchGroupName { get; set; }
 
     // 平台无关的图标承载：Desktop 塞 System.Windows.Media.ImageSource，Linux 塞 Avalonia.Media.IImage。
     [JsonIgnore]
@@ -185,6 +196,10 @@ public sealed class Settings
     [JsonPropertyName("groupHoverDelayMs")]
     public int GroupHoverDelayMs { get; set; } = SettingsOptionValues.DefaultGroupHoverDelayMs;
 
+    // 上次停留的分组；缺失或找不到时回退到第一个非空分组。非用户主动编辑字段。
+    [JsonPropertyName("lastGroupId")]
+    public string? LastGroupId { get; set; }
+
     public Settings Clone() => new()
     {
         Hotkey = Hotkey,
@@ -217,6 +232,7 @@ public sealed class Settings
         StartWithWindows = StartWithWindows,
         OpenItemsOnSingleClick = OpenItemsOnSingleClick,
         GroupHoverDelayMs = GroupHoverDelayMs,
+        LastGroupId = LastGroupId,
     };
 }
 

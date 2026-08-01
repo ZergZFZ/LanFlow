@@ -52,6 +52,8 @@ public partial class MainWindow : System.Windows.Window
     private CancellationTokenSource? _contentTransitionCancellation;
     private string _activeLayoutMode = "tile";
     private string? _lastSelectedItemId;
+    private string? _configLoadWarning;
+    private bool _configLoadWarningShown;
 
     private sealed record ViewStateSnapshot(
         string? SelectedItemId,
@@ -80,7 +82,9 @@ public partial class MainWindow : System.Windows.Window
     public MainWindow()
     {
         InitializeComponent();
-        _viewModel = new MainViewModel(CreateConfigStore());
+        var configStore = CreateConfigStore();
+        _viewModel = new MainViewModel(configStore);
+        _configLoadWarning = configStore.LastLoadWarning;
         _importManifestService = new ImportManifestService(_shortcutService);
         _iconCoordinator = new ViewportIconCoordinator(_iconService);
         _groupSwitchCoordinator = new GroupSwitchCoordinator(
@@ -132,6 +136,7 @@ public partial class MainWindow : System.Windows.Window
             }
         };
         RefreshEmptyState();
+        Loaded += ShowConfigLoadWarningOnce;
 
         SourceInitialized += (_, _) =>
         {
@@ -148,6 +153,28 @@ public partial class MainWindow : System.Windows.Window
             }
         };
         Closed += MainWindow_Closed;
+    }
+
+    // 配置损坏时只提示一次：给出备份位置，并说明当前使用的是新配置。
+    // 静默启动（开机驻留）时不弹窗，避免打断系统登录流程。
+    private void ShowConfigLoadWarningOnce(object? sender, RoutedEventArgs e)
+    {
+        if (_configLoadWarningShown || _configLoadWarning is null || App.IsSilentStart)
+        {
+            return;
+        }
+
+        _configLoadWarningShown = true;
+        Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () =>
+        {
+            _viewModel.StatusText = "配置文件已损坏，已自动备份并启用新配置";
+            MessageBox.Show(
+                this,
+                _configLoadWarning + "\n\n可在“设置 → 关于”中查看配置位置并恢复备份文件。",
+                "LanFlow 配置提示",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        });
     }
 
     private async void MainWindow_Closed(object? sender, EventArgs e)
@@ -173,7 +200,30 @@ public partial class MainWindow : System.Windows.Window
         Show();
         WindowState = WindowState.Normal;
         Activate();
-        Focus();
+        FocusSearch();
+    }
+
+    // 托盘快捷动作：暂停/恢复全局快捷键。返回切换后的状态文案。
+    public string ToggleHotkeyEnabled()
+    {
+        var next = !_hotkeyService.IsEnabled;
+        if (_hotkeyService.SetEnabled(next))
+        {
+            return next ? "全局快捷键已启用" : "全局快捷键已暂停";
+        }
+
+        return "切换全局快捷键失败";
+    }
+
+    public bool IsHotkeyEnabled => _hotkeyService.IsEnabled;
+
+    public void SetStatusText(string message) => _viewModel.StatusText = message;
+
+    // 主面板激活后直接输入即搜索：把焦点与光标放到搜索框，无需先点击搜索框。
+    public void FocusSearch()
+    {
+        SearchBox.Focus();
+        SearchBox.SelectAll();
     }
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -329,13 +379,63 @@ public partial class MainWindow : System.Windows.Window
 
     private void SearchBox_KeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key != Key.Escape)
+        if (e.Key == Key.Escape)
+        {
+            _viewModel.SearchText = string.Empty;
+            Focus();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Enter)
+        {
+            // 搜索态下 Enter 启动首个命中项（未选中时自动选中第一项）。
+            if (string.IsNullOrWhiteSpace(_viewModel.SearchText))
+            {
+                return;
+            }
+
+            if (ItemList.SelectedItem is null && ItemList.Items.Count > 0)
+            {
+                ItemList.SelectedIndex = 0;
+            }
+
+            LaunchSelectedItem();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Down)
+        {
+            MoveSearchSelection(1);
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Up)
+        {
+            MoveSearchSelection(-1);
+            e.Handled = true;
+        }
+    }
+
+    // 输入过程中同步刷新空状态（搜索无结果 vs 分组为空）。
+    private void SearchBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+    {
+        RefreshEmptyState();
+    }
+
+    // 搜索框内方向键移动结果选择：不改变搜索文本与分组数据。
+    private void MoveSearchSelection(int delta)
+    {
+        if (ItemList.Items.Count == 0)
         {
             return;
         }
 
-        _viewModel.SearchText = string.Empty;
-        Focus();
+        var index = ItemList.SelectedIndex < 0 ? 0 : Math.Clamp(ItemList.SelectedIndex + delta, 0, ItemList.Items.Count - 1);
+        ItemList.SelectedIndex = index;
+        ItemList.ScrollIntoView(ItemList.SelectedItem);
     }
 
     private void ImportManifest_Click(object sender, RoutedEventArgs e)
@@ -422,14 +522,15 @@ public partial class MainWindow : System.Windows.Window
     private static ConfigStore CreateConfigStore()
     {
         var location = new ConfigLocationService();
-        return new ConfigStore("Alt+Space", location.Resolve().DirectoryPath);
+        // 平台默认 Ctrl+Alt+Space：旧 Alt+Space（常被窗口管理器占用）由 ConfigStore 自动迁移。
+        return new ConfigStore(configDirectory: location.Resolve().DirectoryPath);
     }
 
     private static SettingsMaintenanceService CreateMaintenanceService()
     {
         var location = new ConfigLocationService();
         return new SettingsMaintenanceService(
-            new ConfigStore("Alt+Space", location.Resolve().DirectoryPath),
+            new ConfigStore(configDirectory: location.Resolve().DirectoryPath),
             new ConfigMigrationService(location),
             location);
     }
@@ -1032,11 +1133,25 @@ public partial class MainWindow : System.Windows.Window
         _viewModel.SearchText = string.Empty;
         _groupSwitchCoordinator.SelectedGroupId = group.Id;
         _uiPerformanceTrace.SelectionAcknowledged(group.Id);
+        PersistLastGroupSelection();
         RefreshEmptyState();
 
         Dispatcher.BeginInvoke(
             DispatcherPriority.Loaded,
             () => _ = CompleteGroupSwitchAsync(group, generation, cacheHit));
+    }
+
+    // 记住上次停留的分组：保存失败不影响本次切换，仅在状态栏给出提示。
+    private void PersistLastGroupSelection()
+    {
+        try
+        {
+            _viewModel.Save();
+        }
+        catch (Exception ex)
+        {
+            _viewModel.StatusText = "分组切换已生效，但保存失败：" + ex.Message;
+        }
     }
 
     private async Task CompleteGroupSwitchAsync(Group group, long generation, bool cacheHit)
@@ -1090,7 +1205,16 @@ public partial class MainWindow : System.Windows.Window
 
     private void RefreshEmptyState()
     {
-        EmptyPanel.Visibility = _viewModel.VisibleItems.Any() ? Visibility.Collapsed : Visibility.Visible;
+        var hasItems = _viewModel.VisibleItems.Any();
+        EmptyPanel.Visibility = hasItems ? Visibility.Collapsed : Visibility.Visible;
+        if (hasItems)
+        {
+            return;
+        }
+
+        var isSearching = !string.IsNullOrWhiteSpace(_viewModel.SearchText);
+        EmptyGroupHint.Visibility = isSearching ? Visibility.Collapsed : Visibility.Visible;
+        EmptySearchHint.Visibility = isSearching ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private async Task LoadVisibleIconsAsync(ViewportRange? requestedRange = null)
@@ -1271,9 +1395,7 @@ public partial class MainWindow : System.Windows.Window
         menu.Closed += LauncherContextMenu_Closed;
         var itemStyle = (Style)FindResource("LauncherMenuItem");
 
-        var rename = new MenuItem { Header = "编辑名称", Style = itemStyle };
-        rename.Click += RenameSelectedItem_Click;
-        var edit = new MenuItem { Header = "编辑软件", Style = itemStyle };
+        var edit = new MenuItem { Header = "编辑", Style = itemStyle };
         edit.Click += EditSelectedItem_Click;
         var remove = new MenuItem { Header = "从当前分组移除", Style = itemStyle };
         remove.Click += RemoveSelectedItem_Click;
@@ -1292,7 +1414,6 @@ public partial class MainWindow : System.Windows.Window
         }
         if (moveMenu.Items.Count == 0) moveMenu.IsEnabled = false;
 
-        menu.Items.Add(rename);
         menu.Items.Add(edit);
         menu.Items.Add(remove);
         menu.Items.Add(moveMenu);
@@ -1599,24 +1720,6 @@ public partial class MainWindow : System.Windows.Window
         item.IconImage = null;
         _iconService.Invalidate(oldPath);
         _iconService.Invalidate(item.Path);
-        _viewModel.RefreshVisibleItems();
-        _viewModel.Save();
-    }
-
-    private void RenameSelectedItem_Click(object sender, RoutedEventArgs e)
-    {
-        if (_viewModel.SelectedGroup is null || ItemList.SelectedItem is not LauncherItem item)
-        {
-            return;
-        }
-
-        var dialog = new Views.EditItemWindow(item.Name, item.Path, "编辑名称") { Owner = this };
-        if (dialog.ShowDialog() != true)
-        {
-            return;
-        }
-
-        item.Name = dialog.ItemName;
         _viewModel.RefreshVisibleItems();
         _viewModel.Save();
     }

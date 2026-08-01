@@ -60,9 +60,19 @@ public sealed class UpdateService
         var tag = root.GetProperty("tag_name").GetString() ?? string.Empty;
         var body = root.TryGetProperty("body", out var b) ? b.GetString() : null;
         var latest = ParseVersion(tag);
+        if (latest is null)
+        {
+            return new UpdateInfo
+            {
+                HasUpdate = false,
+                CurrentVersion = CurrentVersion.ToString(3),
+                Error = $"无法解析最新版本号：{tag}",
+            };
+        }
 
         string? url = null;
         string? name = null;
+        long? assetSize = null;
         if (root.TryGetProperty("assets", out var assets))
         {
             // 优先匹配当前通道的新格式资产
@@ -77,6 +87,7 @@ public sealed class UpdateService
                 {
                     url = u;
                     name = n;
+                    assetSize = a.TryGetProperty("size", out var s) && s.TryGetInt64(out var size) ? size : null;
                     break;
                 }
             }
@@ -91,25 +102,32 @@ public sealed class UpdateService
                     {
                         url = a.GetProperty("browser_download_url").GetString();
                         name = n;
+                        assetSize = a.TryGetProperty("size", out var s) && s.TryGetInt64(out var size) ? size : null;
                         break;
                     }
                 }
             }
         }
 
-        var hasUpdate = latest is not null && latest > CurrentVersion;
+        var hasUpdate = latest > CurrentVersion;
         return new UpdateInfo
         {
             HasUpdate = hasUpdate,
-            LatestVersion = latest?.ToString(),
+            LatestVersion = latest.ToString(),
             CurrentVersion = CurrentVersion.ToString(3),
             DownloadUrl = url,
             AssetName = name,
+            AssetSize = assetSize,
             ReleaseNotes = body,
         };
     }
 
-    public async Task DownloadAndApplyAsync(string downloadUrl, string assetName, IProgress<double>? progress, CancellationToken ct)
+    public async Task DownloadAndApplyAsync(
+        string downloadUrl,
+        string assetName,
+        long? expectedSize,
+        IProgress<double>? progress,
+        CancellationToken ct)
     {
         var workDir = Path.Combine(Path.GetTempPath(), "LanFlowUpdate_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(workDir);
@@ -117,42 +135,97 @@ public sealed class UpdateService
         Directory.CreateDirectory(payloadDir);
         var downloaded = Path.Combine(workDir, assetName);
 
-        using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
-        client.DefaultRequestHeaders.Add("User-Agent", "LanFlow-Updater");
-        using (var r = await client.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead, ct))
+        try
         {
-            r.EnsureSuccessStatusCode();
-            var total = r.Content.Headers.ContentLength ?? -1L;
-            await using var src = await r.Content.ReadAsStreamAsync(ct);
-            await using var fs = File.Create(downloaded);
-            var buf = new byte[81920];
-            long read = 0;
-            int n;
-            while ((n = await src.ReadAsync(buf, ct)) > 0)
+            using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
+            client.DefaultRequestHeaders.Add("User-Agent", "LanFlow-Updater");
+            using (var r = await client.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead, ct))
             {
-                await fs.WriteAsync(buf.AsMemory(0, n), ct);
-                read += n;
-                if (total > 0)
+                r.EnsureSuccessStatusCode();
+                var total = r.Content.Headers.ContentLength ?? -1L;
+                await using var src = await r.Content.ReadAsStreamAsync(ct);
+                await using var fs = File.Create(downloaded);
+                var buf = new byte[81920];
+                long read = 0;
+                int n;
+                while ((n = await src.ReadAsync(buf, ct)) > 0)
                 {
-                    progress?.Report((double)read / total);
+                    await fs.WriteAsync(buf.AsMemory(0, n), ct);
+                    read += n;
+                    if (total > 0)
+                    {
+                        progress?.Report((double)read / total);
+                    }
                 }
+
+                EnsureDownloadedSize(expectedSize, read, downloaded);
             }
-        }
 
-        // 整理成统一的可覆盖目录：lite 直接得到 LanFlow.exe，full 解压整目录。
-        if (assetName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+            // 整理成统一的可覆盖目录：lite 直接得到 LanFlow.exe，full 解压整目录。
+            if (assetName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+            {
+                ZipFile.ExtractToDirectory(downloaded, payloadDir, true);
+            }
+            else
+            {
+                File.Move(downloaded, Path.Combine(payloadDir, "LanFlow.exe"));
+            }
+
+            if (!IsValidPayload(payloadDir))
+            {
+                throw new InvalidDataException("下载的更新包缺少有效的 LanFlow.exe，已取消更新。");
+            }
+
+            LaunchUpdater(payloadDir);
+
+            // 终止当前进程，交由更新器等待本进程退出后覆盖并重启。
+            Environment.Exit(0);
+        }
+        catch
         {
-            ZipFile.ExtractToDirectory(downloaded, payloadDir, true);
+            TryDeleteDirectory(workDir);
+            throw;
         }
-        else
+    }
+
+    // 下载字节数与 GitHub API 声明的资产大小不一致时，拒绝进入覆盖阶段。
+    // expectedSize 为空（API 未提供）时跳过，避免因旧接口字段缺失阻塞更新。
+    public static void EnsureDownloadedSize(long? expectedSize, long actualSize, string downloadedPath)
+    {
+        if (expectedSize is null || expectedSize.Value < 0)
         {
-            File.Move(downloaded, Path.Combine(payloadDir, "LanFlow.exe"));
+            return;
         }
 
-        LaunchUpdater(payloadDir);
+        if (actualSize != expectedSize.Value)
+        {
+            throw new InvalidDataException(
+                $"下载文件大小不符：预期 {expectedSize.Value} 字节，实际 {actualSize} 字节，已取消更新。");
+        }
+    }
 
-        // 终止当前进程，交由更新器等待本进程退出后覆盖并重启。
-        Environment.Exit(0);
+    // 覆盖前验证 payload 中确实存在可执行的 LanFlow.exe，避免解压不完整导致覆盖出坏安装。
+    public static bool IsValidPayload(string payloadDir)
+    {
+        if (!Directory.Exists(payloadDir))
+        {
+            return false;
+        }
+
+        var exePath = Path.Combine(payloadDir, "LanFlow.exe");
+        return File.Exists(exePath) && new FileInfo(exePath).Length > 0;
+    }
+
+    private static void TryDeleteDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path)) Directory.Delete(path, true);
+        }
+        catch
+        {
+            // 清理失败不掩盖原始异常。
+        }
     }
 
     private static void LaunchUpdater(string payloadDir)
@@ -171,8 +244,19 @@ public sealed class UpdateService
             "  timeout /t 1 /nobreak >nul\r\n" +
             "  goto wait\r\n" +
             ")\r\n" +
+            "rem 覆盖前备份当前可执行文件，覆盖失败时用于回滚\r\n" +
+            "if exist \"%DST%\\LanFlow.exe\" copy /y \"%DST%\\LanFlow.exe\" \"%DST%\\LanFlow.exe.bak\" >nul\r\n" +
             "xcopy /s /y /q \"%SRC%\\*\" \"%DST%\" >nul\r\n" +
+            "if not exist \"%DST%\\LanFlow.exe\" (\r\n" +
+            "  if exist \"%DST%\\LanFlow.exe.bak\" copy /y \"%DST%\\LanFlow.exe.bak\" \"%DST%\\LanFlow.exe\" >nul\r\n" +
+            ")\r\n" +
             "start \"\" \"%DST%\\LanFlow.exe\"\r\n" +
+            "timeout /t 5 /nobreak >nul\r\n" +
+            "tasklist /fi \"IMAGENAME eq LanFlow.exe\" 2>nul | find \"LanFlow.exe\" >nul\r\n" +
+            "if %errorlevel%==1 (\r\n" +
+            "  if exist \"%DST%\\LanFlow.exe.bak\" copy /y \"%DST%\\LanFlow.exe.bak\" \"%DST%\\LanFlow.exe\" >nul\r\n" +
+            "  start \"\" \"%DST%\\LanFlow.exe\"\r\n" +
+            ")\r\n" +
             "rd /s /q \"%SRC%\"\r\n" +
             "del \"%~f0\"\r\n";
         File.WriteAllText(bat, content, System.Text.Encoding.ASCII);
@@ -193,5 +277,7 @@ public sealed class UpdateInfo
     public string CurrentVersion { get; init; } = string.Empty;
     public string? DownloadUrl { get; init; }
     public string? AssetName { get; init; }
+    public long? AssetSize { get; init; }
     public string? ReleaseNotes { get; init; }
+    public string? Error { get; init; }
 }

@@ -18,6 +18,21 @@ public partial class EditGroupWindow : Window
 
     public string GroupName => NameTextBox.Text.Trim();
 
+    private void DialogHeader_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is System.Windows.Controls.Button)
+        {
+            return;
+        }
+
+        if (e.ButtonState == System.Windows.Input.MouseButtonState.Pressed)
+        {
+            DragMove();
+        }
+    }
+
+    private void Close_Click(object sender, RoutedEventArgs e) => Close();
+
     private void Confirm_Click(object sender, RoutedEventArgs e)
     {
         if (string.IsNullOrWhiteSpace(GroupName))

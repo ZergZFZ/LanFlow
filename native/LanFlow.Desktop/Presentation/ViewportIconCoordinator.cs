@@ -359,3 +359,4 @@ public sealed class ViewportIconCoordinator : IDisposable
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
 }
+

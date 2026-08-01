@@ -22,6 +22,22 @@ public partial class EditItemWindow : Window
     public string ItemName => NameTextBox.Text.Trim();
     public string ItemPath => PathTextBox.Text.Trim();
 
+    private void DialogHeader_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        // 标题栏拖拽不拦截关闭按钮等可交互控件。
+        if (e.OriginalSource is System.Windows.Controls.Button)
+        {
+            return;
+        }
+
+        if (e.ButtonState == System.Windows.Input.MouseButtonState.Pressed)
+        {
+            DragMove();
+        }
+    }
+
+    private void Close_Click(object sender, RoutedEventArgs e) => Close();
+
     private void Browse_Click(object sender, RoutedEventArgs e)
     {
         var picker = new Microsoft.Win32.OpenFileDialog

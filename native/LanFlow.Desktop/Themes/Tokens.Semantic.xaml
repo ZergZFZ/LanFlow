@@ -15,6 +15,9 @@
     <SolidColorBrush x:Key="DragIndicatorBrush" Color="{StaticResource Color.Accent.500}" />
     <SolidColorBrush x:Key="IconSurfaceBrush" Color="{StaticResource Color.Neutral.100}" />
     <SolidColorBrush x:Key="WarningBrush" Color="#FFF1BD68" />
+    <SolidColorBrush x:Key="WarningTextBrush" Color="#FFB7791F" />
+    <SolidColorBrush x:Key="ErrorTextBrush" Color="#FFC2410C" />
+    <SolidColorBrush x:Key="DangerTextBrush" Color="#FFB91C1C" />
     <SolidColorBrush x:Key="ModalScrimBrush" Color="#CC121826" />
     <SolidColorBrush x:Key="PrimaryOnAccentTextBrush" Color="{StaticResource Color.Neutral.000}" />
     <Color x:Key="ShadowColor">#FF000000</Color>
@@ -29,4 +32,5 @@
     <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource Color.Accent.500}" />
     <SolidColorBrush x:Key="AccentHoverBrush" Color="#FF4C57C3" />
     <SolidColorBrush x:Key="AccentSoftBrush" Color="#FFE9E8FF" />
+    <SolidColorBrush x:Key="ImportDividerBrush" Color="{StaticResource Color.Neutral.100}" />
 </ResourceDictionary>

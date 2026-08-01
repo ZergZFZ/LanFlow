@@ -215,7 +215,7 @@
         </Style>
         <DataTemplate x:Key="TileItemTemplate">
             <Grid Margin="6" PreviewMouseRightButtonDown="Item_PreviewMouseRightButtonDown" ContextMenuOpening="ItemContextMenu_Opening">
-                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                 <Image x:Name="ItemIcon"
                        Width="{Binding DataContext.Settings.IconSize, RelativeSource={RelativeSource AncestorType=ListBox}}"
                        Height="{Binding DataContext.Settings.IconSize, RelativeSource={RelativeSource AncestorType=ListBox}}"
@@ -236,6 +236,30 @@
                            TextTrimming="CharacterEllipsis"
                            TextWrapping="Wrap"
                            MaxHeight="32" />
+                <TextBlock Grid.Row="2"
+                           Margin="2,2,2,0"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Bottom"
+                           FontSize="10"
+                           Foreground="{DynamicResource SecondaryTextBrush}"
+                           Text="{Binding SearchGroupName}"
+                           TextAlignment="Center"
+                           TextTrimming="CharacterEllipsis"
+                           MaxWidth="80">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Visible" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SearchGroupName}" Value="{x:Null}">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding SearchGroupName}" Value="">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
                 <Button x:Name="ItemDeleteButton" Grid.Row="0" Tag="DeleteItem" Click="DeleteItem_Click" PreviewMouseDoubleClick="ItemDeleteButton_PreviewMouseDoubleClick" MouseEnter="DeleteButton_MouseEnter" MouseLeave="DeleteButton_MouseLeave" ToolTip="删除" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,2,0,0" Width="20" Height="20" FontSize="11" Foreground="{DynamicResource PrimaryOnAccentTextBrush}" Background="{DynamicResource DangerBrush}" Content="&#xE74D;"><Button.Style><Style TargetType="Button" BasedOn="{StaticResource IconButton}"><Setter Property="Visibility" Value="Collapsed" /><Style.Triggers><DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=IsEditMode}" Value="True"><Setter Property="Visibility" Value="Visible" /></DataTrigger></Style.Triggers></Style></Button.Style></Button>
             </Grid>
         </DataTemplate>
@@ -253,15 +277,34 @@
                        VerticalAlignment="Center"
                        Source="{Binding IconImage}"
                        Stretch="Uniform" />
-                <TextBlock x:Name="ItemName"
-                           Grid.Column="1"
-                           Margin="8,0,6,0"
-                           VerticalAlignment="Center"
-                           Foreground="{DynamicResource PrimaryTextBrush}"
-                           Text="{Binding DisplayName}"
-                           FontSize="{Binding DataContext.Settings.TextSize, RelativeSource={RelativeSource AncestorType=ListBox}}"
-                           Visibility="{Binding DataContext.Settings.ShowItemTitle, RelativeSource={RelativeSource AncestorType=ListBox}, Converter={StaticResource BooleanToVisibilityConverter}}"
-                           TextTrimming="CharacterEllipsis" />
+                <StackPanel Grid.Column="1" Margin="8,0,6,0" VerticalAlignment="Center">
+                    <TextBlock x:Name="ItemName"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource PrimaryTextBrush}"
+                               Text="{Binding DisplayName}"
+                               FontSize="{Binding DataContext.Settings.TextSize, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                               Visibility="{Binding DataContext.Settings.ShowItemTitle, RelativeSource={RelativeSource AncestorType=ListBox}, Converter={StaticResource BooleanToVisibilityConverter}}"
+                               TextTrimming="CharacterEllipsis" />
+                    <TextBlock Margin="0,1,0,0"
+                               FontSize="10"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
+                               Text="{Binding SearchGroupName}"
+                               TextTrimming="CharacterEllipsis">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding SearchGroupName}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding SearchGroupName}" Value="">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </StackPanel>
                 <Button x:Name="ItemDeleteButton"
                         Grid.Column="2"
                         Tag="DeleteItem"
@@ -333,9 +376,9 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBox x:Name="SearchBox" Grid.Column="0" Margin="8,0,2,0" Height="38" Background="Transparent" BorderThickness="0" Foreground="{DynamicResource PrimaryTextBrush}" CaretBrush="{DynamicResource PrimaryTextBrush}" FontSize="14" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" KeyDown="SearchBox_KeyDown" />
-                            <TextBlock Grid.Column="1" Margin="0,0,12,0" VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource SecondaryTextBrush}" Text="搜索全部软件" />
-                            <TextBlock Grid.Column="0" Margin="12,0" VerticalAlignment="Center" IsHitTestVisible="False" Foreground="{DynamicResource SecondaryTextBrush}" Text="输入以搜索全部软件…">
+                            <TextBox x:Name="SearchBox" Grid.Column="0" Margin="8,0,2,0" Height="38" Background="Transparent" BorderThickness="0" Foreground="{DynamicResource PrimaryTextBrush}" CaretBrush="{DynamicResource PrimaryTextBrush}" FontSize="14" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" KeyDown="SearchBox_KeyDown" TextChanged="SearchBox_TextChanged" />
+                            <TextBlock Grid.Column="1" Margin="0,0,12,0" VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource SecondaryTextBrush}" Text="搜索已管理项目" />
+                            <TextBlock Grid.Column="0" Margin="12,0" VerticalAlignment="Center" IsHitTestVisible="False" Foreground="{DynamicResource SecondaryTextBrush}" Text="输入以搜索已管理项目…">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="Visibility" Value="Collapsed" />
@@ -439,7 +482,8 @@
             </Thumb>
             <StackPanel x:Name="EmptyPanel" Grid.RowSpan="2" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False" Visibility="Collapsed">
                 <TextBlock HorizontalAlignment="Center" FontSize="34" Foreground="{DynamicResource SecondaryTextBrush}" Text="＋" />
-                <TextBlock Margin="0,8,0,0" HorizontalAlignment="Center" FontSize="14" Foreground="{DynamicResource SecondaryTextBrush}" Text="此分组还没有启动项目，可将文件拖放到这里添加" />
+                <TextBlock x:Name="EmptyGroupHint" Margin="0,8,0,0" HorizontalAlignment="Center" FontSize="14" Foreground="{DynamicResource SecondaryTextBrush}" Text="此分组还没有启动项目，可将文件拖放到这里添加" />
+                <TextBlock x:Name="EmptySearchHint" Margin="0,8,0,0" HorizontalAlignment="Center" FontSize="14" Foreground="{DynamicResource SecondaryTextBrush}" Text="没有匹配的已管理项目" Visibility="Collapsed" />
             </StackPanel>
             </Grid>
         </Border>

@@ -3,38 +3,44 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="编辑项目"
         Width="540"
-        SizeToContent="Height"
-        ResizeMode="NoResize"
-        WindowStartupLocation="CenterOwner">
-    <Border Padding="28" Background="White">
+        WindowStartupLocation="CenterOwner"
+        Style="{StaticResource DialogWindowStyle}">
+    <Border Style="{StaticResource DialogChromeStyle}">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="18" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="12" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="18" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="12" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="22" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="8" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="22" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="8" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="24" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
-            <StackPanel Grid.Row="0">
-                <TextBlock FontSize="20" FontWeight="SemiBold" Text="启动项目" />
-                <TextBlock Margin="0,5,0,0" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Text="填写名称和要打开的应用、文件或文件夹。" />
-            </StackPanel>
-            <TextBlock Grid.Row="2" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Text="显示名称" />
+            <Grid Grid.Row="0" PreviewMouseLeftButtonDown="DialogHeader_MouseLeftButtonDown">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Style="{StaticResource DialogHeaderStyle}" Text="启动项目" />
+                    <TextBlock Style="{StaticResource DialogSubtitleStyle}" Text="填写名称和要打开的应用、文件或文件夹。" />
+                </StackPanel>
+                <Button Grid.Column="1" Style="{StaticResource DialogCloseButtonStyle}" Click="Close_Click" Content="&#xE711;" ToolTip="关闭" />
+            </Grid>
+            <TextBlock Grid.Row="2" Style="{StaticResource DialogFieldLabelStyle}" Text="显示名称" />
             <TextBox x:Name="NameTextBox" Grid.Row="4" />
-            <TextBlock Grid.Row="6" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Text="启动路径" />
+            <TextBlock Grid.Row="6" Style="{StaticResource DialogFieldLabelStyle}" Text="启动路径" />
             <DockPanel Grid.Row="8">
                 <Button DockPanel.Dock="Right" Margin="10,0,0,0" Click="Browse_Click" Content="浏览…" />
                 <TextBox x:Name="PathTextBox" />
             </DockPanel>
             <StackPanel Grid.Row="10" HorizontalAlignment="Right" Orientation="Horizontal">
-                <Button IsCancel="True" Content="取消" />
-                <Button Margin="10,0,0,0" Style="{StaticResource PrimaryButton}" IsDefault="True" Click="Confirm_Click" Content="保存" />
+                <Button MinWidth="72" IsCancel="True" Content="取消" />
+                <Button MinWidth="72" Margin="10,0,0,0" Style="{StaticResource PrimaryButton}" IsDefault="True" Click="Confirm_Click" Content="保存" />
             </StackPanel>
         </Grid>
     </Border>

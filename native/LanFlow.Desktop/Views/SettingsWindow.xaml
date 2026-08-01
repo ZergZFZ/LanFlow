@@ -349,6 +349,7 @@
                                     <Button x:Name="OpenConfigButton" Content="打开所在目录" Click="OpenConfig_Click" Margin="10,0,0,0" AutomationProperties.Name="打开配置所在目录" />
                                     <Button x:Name="ChangeConfigLocationButton" Content="更换位置…" Click="ChangeConfigLocation_Click" Margin="10,0,0,0" AutomationProperties.Name="更换配置位置" />
                                     <Button x:Name="RestoreConfigLocationButton" Content="恢复默认位置" Click="RestoreConfigLocation_Click" Margin="10,0,0,0" AutomationProperties.Name="恢复默认配置位置" />
+                                    <Button x:Name="CreateConfigBackupButton" Content="创建完整备份" Click="CreateConfigBackup_Click" Margin="10,0,0,0" AutomationProperties.Name="创建完整配置备份" />
                                 </StackPanel>
                                 <TextBlock x:Name="ConfigLocationStatusText" Margin="0,10,0,0" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="12" />
                             </StackPanel>

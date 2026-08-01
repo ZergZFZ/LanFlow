@@ -510,6 +510,20 @@ public partial class SettingsWindow : Window
             () => _maintenanceService.RestoreDefaultLocation(overwriteExisting: true));
     }
 
+    private void CreateConfigBackup_Click(object sender, RoutedEventArgs e)
+    {
+        if (_maintenanceService is null) return;
+        try
+        {
+            var backupPath = _maintenanceService.CreateBackup();
+            ConfigLocationStatusText.Text = $"已创建完整配置备份：{backupPath}";
+        }
+        catch (Exception ex)
+        {
+            ConfigLocationStatusText.Text = "创建备份失败：" + ex.Message;
+        }
+    }
+
     private void ApplyLocationChange(
         Func<ConfigMigrationResult> attempt,
         Func<ConfigMigrationResult> retryWithOverwrite)
@@ -792,12 +806,17 @@ public partial class SettingsWindow : Window
         try
         {
             var info = await _updateService.CheckAsync();
+            if (!string.IsNullOrEmpty(info.Error))
+            {
+                CheckUpdateButton.IsEnabled = true;
+                UpdateStatusText.Text = info.Error + "，请稍后重试或前往开源地址手动下载。";
+                return;
+            }
+
             if (!info.HasUpdate)
             {
                 CheckUpdateButton.IsEnabled = true;
-                UpdateStatusText.Text = string.IsNullOrEmpty(info.LatestVersion)
-                    ? "暂时无法获取更新信息，请稍后重试。"
-                    : $"已是最新版本 v{info.CurrentVersion}";
+                UpdateStatusText.Text = $"已是最新版本 v{info.CurrentVersion}";
                 return;
             }
 
@@ -810,7 +829,7 @@ public partial class SettingsWindow : Window
 
             UpdateStatusText.Text = $"发现新版本 v{info.LatestVersion}，正在下载并更新…";
             var progress = new Progress<double>(value => UpdateStatusText.Text = $"正在下载更新… {value:P0}");
-            await _updateService.DownloadAndApplyAsync(info.DownloadUrl, info.AssetName, progress, CancellationToken.None);
+            await _updateService.DownloadAndApplyAsync(info.DownloadUrl, info.AssetName, info.AssetSize, progress, CancellationToken.None);
         }
         catch (Exception ex)
         {

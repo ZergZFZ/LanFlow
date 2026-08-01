@@ -28,9 +28,11 @@ public sealed class ThemeResourceUpdater
 
         // Transitional aliases keep secondary windows and older local styles compatible.
         Set(resources, "PanelBrush", colors.Panel);
+        Set(resources, "PanelBackground", colors.Panel);
         Set(resources, "PanelBorderBrush", colors.PanelBorder);
         Set(resources, "SurfaceBorderBrush", colors.SurfaceBorder);
         Set(resources, "FooterBrush", colors.Footer);
+        Set(resources, "BorderBrush", colors.PanelBorder);
         Set(resources, "TextPrimaryBrush", colors.TextPrimary);
         Set(resources, "TextSecondaryBrush", colors.TextSecondary);
         Set(resources, "AccentBrush", colors.Accent);

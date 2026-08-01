@@ -70,6 +70,38 @@ public sealed class SettingsMaintenanceService
         });
     }
 
+    /// <summary>
+    /// 创建完整配置备份：时间戳命名的只读快照文件，不修改当前配置。
+    /// 返回备份文件路径；失败抛异常由调用方提示。
+    /// </summary>
+    public string CreateBackup()
+    {
+        var resolution = Resolve();
+        string sourcePath = resolution.ConfigPath;
+        if (!File.Exists(sourcePath))
+        {
+            throw new FileNotFoundException("尚未生成配置文件，无需备份。", sourcePath);
+        }
+
+        string directory = resolution.DirectoryPath;
+        Directory.CreateDirectory(directory);
+        var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+        var backupPath = Path.Combine(
+            directory,
+            $"LanFlow-backup-v1-{stamp}.json");
+        var suffix = 2;
+        while (File.Exists(backupPath))
+        {
+            backupPath = Path.Combine(
+                directory,
+                $"LanFlow-backup-v1-{stamp}-{suffix++}.json");
+        }
+
+        File.Copy(sourcePath, backupPath, overwrite: false);
+        File.SetAttributes(backupPath, FileAttributes.ReadOnly);
+        return backupPath;
+    }
+
     private AppConfig LoadConfig() => _configStore.Load();
 }
 

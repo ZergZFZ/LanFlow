@@ -24,6 +24,21 @@ public partial class ColorPickerWindow : Window
 
     public string SelectedColor { get; private set; } = "#FFFFFF";
 
+    private void DialogHeader_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is System.Windows.Controls.Button)
+        {
+            return;
+        }
+
+        if (e.ButtonState == MouseButtonState.Pressed)
+        {
+            DragMove();
+        }
+    }
+
+    private void Close_Click(object sender, RoutedEventArgs e) => Close();
+
     private void Spectrum_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         Spectrum.CaptureMouse();

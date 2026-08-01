@@ -41,6 +41,7 @@ public sealed class ShellIconService : IIconService
     private readonly object _cacheGate = new();
     private readonly Dictionary<IconCacheKey, LinkedListNode<CacheEntry>> _cache = new();
     private readonly LinkedList<CacheEntry> _lru = new();
+    private readonly Dictionary<int, int> _sizeCounts = [];
     private readonly CancellationTokenSource _shutdown = new();
     private readonly Task[] _workers;
     private int _disposeState;
@@ -132,6 +133,7 @@ public sealed class ShellIconService : IIconService
         {
             _cache.Clear();
             _lru.Clear();
+            _sizeCounts.Clear();
         }
 
         foreach (var pair in _inflight.ToArray())
@@ -292,12 +294,25 @@ public sealed class ShellIconService : IIconService
                 return;
             }
 
+            // 单一尺寸配额：缩放/显示器切换产生的多尺寸副本不应挤占全部缓存，
+            // 为当前高频尺寸（通常即当前 DPI 下的图标尺寸）保留空间。
+            var sizeQuota = Math.Max(8, _capacity / 2);
+            if (_sizeCounts.TryGetValue(key.PixelSize, out var sizeCount) &&
+                sizeCount >= sizeQuota)
+            {
+                EvictOldestWithSize(key.PixelSize);
+            }
+
             var node = _lru.AddFirst(new CacheEntry(key, image));
             _cache[key] = node;
+            _sizeCounts[key.PixelSize] = _sizeCounts.TryGetValue(key.PixelSize, out var current)
+                ? current + 1
+                : 1;
             while (_cache.Count > _capacity && _lru.Last is { } oldest)
             {
                 _lru.RemoveLast();
                 _cache.Remove(oldest.Value.Key);
+                DecrementSizeCount(oldest.Value.Key.PixelSize);
             }
         }
     }
@@ -306,6 +321,41 @@ public sealed class ShellIconService : IIconService
     {
         if (!_cache.Remove(key, out var node)) return;
         _lru.Remove(node);
+        DecrementSizeCount(key.PixelSize);
+    }
+
+    // 从 LRU 尾端向前找到属于该尺寸的最旧条目并移除，为该尺寸的新条目腾出配额。
+    private void EvictOldestWithSize(int pixelSize)
+    {
+        for (var current = _lru.Last; current is not null; current = current.Previous)
+        {
+            if (current.Value.Key.PixelSize != pixelSize)
+            {
+                continue;
+            }
+
+            _cache.Remove(current.Value.Key);
+            _lru.Remove(current);
+            DecrementSizeCount(pixelSize);
+            return;
+        }
+    }
+
+    private void DecrementSizeCount(int pixelSize)
+    {
+        if (!_sizeCounts.TryGetValue(pixelSize, out var count))
+        {
+            return;
+        }
+
+        if (count <= 1)
+        {
+            _sizeCounts.Remove(pixelSize);
+        }
+        else
+        {
+            _sizeCounts[pixelSize] = count - 1;
+        }
     }
 
     private static long GetVersionStamp(string path)

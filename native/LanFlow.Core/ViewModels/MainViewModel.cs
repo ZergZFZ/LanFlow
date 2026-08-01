@@ -22,7 +22,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _configStore = configStore;
         Config = _configStore.Load();
         VisibleItems = new ReadOnlyObservableCollection<LauncherItem>(_visibleItems);
-        SelectedGroup = Config.Groups.FirstOrDefault();
+        SelectedGroup = RestoreLastGroup();
         RefreshVisibleItems();
     }
 
@@ -37,6 +37,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             if (_selectedGroup == value) return;
             _selectedGroup = value;
+            Config.Settings.LastGroupId = value?.Id;
             OnPropertyChanged();
             RefreshVisibleItems();
             OnPropertyChanged(nameof(SelectedGroupName));
@@ -102,13 +103,27 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public void RefreshVisibleItems()
     {
-        var query = string.IsNullOrWhiteSpace(SearchText)
+        // 先清除旧的分组标注，再填充搜索结果；避免非搜索态残留上次搜索的分组名。
+        foreach (var item in Config.Groups.SelectMany(group => group.Items))
+        {
+            item.SearchGroupName = null;
+        }
+
+        IEnumerable<LauncherItem> query = string.IsNullOrWhiteSpace(SearchText)
             ? OrderItems(SelectedGroup)
-            : Config.Groups.SelectMany(OrderItems).Where(item =>
-                item.Name.Contains(SearchText, StringComparison.CurrentCultureIgnoreCase) ||
-                item.Path.Contains(SearchText, StringComparison.CurrentCultureIgnoreCase) ||
-                item.Command.Contains(SearchText, StringComparison.CurrentCultureIgnoreCase));
+            : SearchWorkspace();
         _visibleItems.ReplaceRange(query.ToArray());
+    }
+
+    private List<LauncherItem> SearchWorkspace()
+    {
+        var matches = WorkspaceSearch.Search(Config, SearchText);
+        foreach (var match in matches)
+        {
+            match.Item.SearchGroupName = match.Group.Name;
+        }
+
+        return matches.Select(match => match.Item).ToList();
     }
 
     public void ApplyAppearance(Settings source, bool persist)
@@ -177,9 +192,33 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _configStore.Save(config);
         Config = config;
         _selectedGroup = selectedGroupId is null
-            ? Config.Groups.FirstOrDefault()
+            ? FirstNonEmptyGroup()
             : Config.Groups.FirstOrDefault(group => string.Equals(group.Id, selectedGroupId, StringComparison.Ordinal))
-              ?? Config.Groups.FirstOrDefault();
+              ?? FirstNonEmptyGroup();
+        Config.Settings.LastGroupId = _selectedGroup?.Id;
+    }
+
+    // 启动与配置替换时默认选中第一个非空分组，避免打开就停在空分组上
+    // （空分组会显示“此分组还没有启动项目”，容易被误认为界面空白）。
+    private Group? FirstNonEmptyGroup() =>
+        Config.Groups.FirstOrDefault(group => group.Items.Count > 0)
+        ?? Config.Groups.FirstOrDefault();
+
+    // 优先恢复上次停留的分组；找不到或该分组为空时回退到第一个非空分组。
+    private Group? RestoreLastGroup()
+    {
+        var lastId = Config.Settings.LastGroupId;
+        if (!string.IsNullOrWhiteSpace(lastId))
+        {
+            var last = Config.Groups.FirstOrDefault(group =>
+                string.Equals(group.Id, lastId, StringComparison.Ordinal));
+            if (last is not null && last.Items.Count > 0)
+            {
+                return last;
+            }
+        }
+
+        return FirstNonEmptyGroup();
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
