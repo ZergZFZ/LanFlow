@@ -23,6 +23,9 @@ public sealed class GroupNavigationEventArgs : RoutedEventArgs
     public Group Group { get; }
 
     public bool IsActive { get; }
+
+    // 分组排序拖拽的目标分组；非排序场景为 null。
+    public Group? TargetGroup { get; init; }
 }
 
 public partial class GroupNavigationControl : UserControl
@@ -71,6 +74,13 @@ public partial class GroupNavigationControl : UserControl
             typeof(GroupNavigationControl),
             new PropertyMetadata(132d));
 
+    public static readonly DependencyProperty IsEditModeProperty =
+        DependencyProperty.Register(
+            nameof(IsEditMode),
+            typeof(bool),
+            typeof(GroupNavigationControl),
+            new PropertyMetadata(false));
+
     public static readonly RoutedEvent GroupInvokedEvent =
         EventManager.RegisterRoutedEvent(
             nameof(GroupInvoked),
@@ -98,6 +108,18 @@ public partial class GroupNavigationControl : UserControl
             RoutingStrategy.Bubble,
             typeof(EventHandler<GroupNavigationEventArgs>),
             typeof(GroupNavigationControl));
+
+    // 编辑模式下分组标签拖拽排序请求：source 为目标插入位置前的分组，
+    // 由 MainWindow 依据目标分组计算插入索引并调整 Groups 顺序。
+    public static readonly RoutedEvent GroupReorderRequestedEvent =
+        EventManager.RegisterRoutedEvent(
+            nameof(GroupReorderRequested),
+            RoutingStrategy.Bubble,
+            typeof(EventHandler<GroupNavigationEventArgs>),
+            typeof(GroupNavigationControl));
+
+    private Group? _dragSourceGroup;
+    private ListBoxItem? _dragSourceItem;
 
     public GroupNavigationControl()
     {
@@ -140,6 +162,12 @@ public partial class GroupNavigationControl : UserControl
         set => SetValue(GroupNavigationWidthProperty, value);
     }
 
+    public bool IsEditMode
+    {
+        get => (bool)GetValue(IsEditModeProperty);
+        set => SetValue(IsEditModeProperty, value);
+    }
+
     public event EventHandler<GroupNavigationEventArgs> GroupInvoked
     {
         add => AddHandler(GroupInvokedEvent, value);
@@ -164,11 +192,67 @@ public partial class GroupNavigationControl : UserControl
         remove => RemoveHandler(GroupDroppedEvent, value);
     }
 
+    public event EventHandler<GroupNavigationEventArgs> GroupReorderRequested
+    {
+        add => AddHandler(GroupReorderRequestedEvent, value);
+        remove => RemoveHandler(GroupReorderRequestedEvent, value);
+    }
+
     private void GroupItem_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        if (IsEditMode && sender is ListBoxItem { DataContext: Group group } container)
+        {
+            // 编辑模式：按住分组标签进入拖拽排序；先记录源，避免点击即切换。
+            _dragSourceGroup = group;
+            _dragSourceItem = container;
+            _dragStartPoint = e.GetPosition(GroupList);
+            e.Handled = true;
+            return;
+        }
+
         RaiseGroupEvent(sender, GroupInvokedEvent);
         e.Handled = true;
     }
+
+    private void GroupItem_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (!IsEditMode ||
+            _dragSourceGroup is null ||
+            e.LeftButton != MouseButtonState.Pressed ||
+            sender is not ListBoxItem)
+        {
+            return;
+        }
+
+        if (sender is not ListBoxItem container || !ReferenceEquals(container, _dragSourceItem))
+        {
+            return;
+        }
+
+        var position = e.GetPosition(GroupList);
+        if (Math.Abs(position.X - _dragStartPoint.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(position.Y - _dragStartPoint.Y) < SystemParameters.MinimumVerticalDragDistance)
+        {
+            return;
+        }
+
+        var source = _dragSourceGroup;
+        _dragSourceGroup = null;
+        _dragSourceItem = null;
+        try
+        {
+            DragDrop.DoDragDrop(
+                GroupList,
+                new DataObject(typeof(Group), source),
+                DragDropEffects.Move);
+        }
+        finally
+        {
+            ClearReorderIndicator();
+        }
+    }
+
+    private Point _dragStartPoint;
 
     private void GroupItem_MouseEnter(object sender, MouseEventArgs e) =>
         RaiseGroupEvent(sender, GroupHoveredEvent, isActive: true);
@@ -179,21 +263,73 @@ public partial class GroupNavigationControl : UserControl
     private void GroupItem_DragEnter(object sender, DragEventArgs e) =>
         RaiseGroupEvent(sender, GroupDragHoveredEvent, isActive: true);
 
-    private void GroupItem_DragLeave(object sender, DragEventArgs e) =>
-        RaiseGroupEvent(sender, GroupDragHoveredEvent, isActive: false);
-
     private void GroupItem_DragOver(object sender, DragEventArgs e)
     {
+        if (IsEditMode && e.Data.GetDataPresent(typeof(Group)))
+        {
+            e.Effects = DragDropEffects.Move;
+            UpdateReorderIndicator(sender, e);
+            e.Handled = true;
+            return;
+        }
+
         e.Effects = e.Data.GetDataPresent(typeof(LauncherItem))
             ? DragDropEffects.Move
             : DragDropEffects.None;
         e.Handled = true;
     }
 
+    private void GroupItem_DragLeave(object sender, DragEventArgs e)
+    {
+        if (IsEditMode && e.Data.GetDataPresent(typeof(Group)))
+        {
+            ClearReorderIndicator();
+        }
+
+        RaiseGroupEvent(sender, GroupDragHoveredEvent, isActive: false);
+    }
+
     private void GroupItem_Drop(object sender, DragEventArgs e)
     {
+        if (IsEditMode && e.Data.GetData(typeof(Group)) is Group source &&
+            sender is ListBoxItem { DataContext: Group target })
+        {
+            RaiseEvent(new GroupNavigationEventArgs(
+                GroupReorderRequestedEvent,
+                this,
+                source,
+                isActive: true)
+            {
+                // 目标分组通过扩展信息传给 MainWindow；排序逻辑在 MainWindow。
+                TargetGroup = target,
+            });
+            ClearReorderIndicator();
+            e.Handled = true;
+            return;
+        }
+
         RaiseGroupEvent(sender, GroupDroppedEvent);
         e.Handled = true;
+    }
+
+    private void UpdateReorderIndicator(object sender, DragEventArgs e)
+    {
+        if (sender is ListBoxItem container)
+        {
+            container.Tag = "reorder-target";
+        }
+    }
+
+    private void ClearReorderIndicator()
+    {
+        foreach (var item in GroupList.Items)
+        {
+            if (GroupList.ItemContainerGenerator.ContainerFromItem(item) is ListBoxItem container &&
+                container.Tag as string == "reorder-target")
+            {
+                container.Tag = null;
+            }
+        }
     }
 
     private void RaiseGroupEvent(

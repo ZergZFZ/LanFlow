@@ -1072,7 +1072,7 @@ public partial class MainWindow : System.Windows.Window
         _isEditMode = enabled;
         IsEditMode = enabled;
         EditHint.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
-        _viewModel.StatusText = statusText ?? (enabled ? "编辑模式：右键管理项目和分组" : "就绪");
+        _viewModel.StatusText = statusText ?? (enabled ? "编辑模式：拖拽分组排序，右键管理项目和分组" : "就绪");
     }
 
     private void GroupNavigation_GroupInvoked(object sender, GroupNavigationEventArgs e)
@@ -1138,6 +1138,29 @@ public partial class MainWindow : System.Windows.Window
             e.Group.Items.Count);
         _draggedItem = null;
         RefreshEmptyState();
+    }
+
+    // 编辑模式下分组标签拖拽排序：把 source 移到 target 前/后并保存。
+    private void GroupNavigation_GroupReorderRequested(object sender, GroupNavigationEventArgs e)
+    {
+        if (!_isEditMode || e.Group is not { } source || e.TargetGroup is not { } target)
+        {
+            return;
+        }
+
+        var groups = _viewModel.Config.Groups;
+        var sourceIndex = groups.IndexOf(source);
+        var targetIndex = groups.IndexOf(target);
+        if (sourceIndex < 0 || targetIndex < 0 || sourceIndex == targetIndex)
+        {
+            return;
+        }
+
+        groups.Move(sourceIndex, targetIndex);
+        _groupSwitchCoordinator.SelectedGroupId = _viewModel.SelectedGroup?.Id;
+        _viewModel.RefreshGroups();
+        _viewModel.Save();
+        _viewModel.StatusText = "分组顺序已更新";
     }
 
     private void GroupSwitchCoordinator_SwitchRequested(

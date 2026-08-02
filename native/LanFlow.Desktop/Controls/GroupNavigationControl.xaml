@@ -37,6 +37,7 @@
             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
             <Setter Property="AllowDrop" Value="True" />
             <EventSetter Event="PreviewMouseLeftButtonDown" Handler="GroupItem_PreviewMouseLeftButtonDown" />
+            <EventSetter Event="PreviewMouseMove" Handler="GroupItem_PreviewMouseMove" />
             <EventSetter Event="MouseEnter" Handler="GroupItem_MouseEnter" />
             <EventSetter Event="MouseLeave" Handler="GroupItem_MouseLeave" />
             <EventSetter Event="DragEnter" Handler="GroupItem_DragEnter" />
@@ -52,15 +53,27 @@
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="7">
-                            <TextBlock Text="{Binding Name}"
-                                       VerticalAlignment="Center"
-                                       Foreground="{TemplateBinding Foreground}"
-                                       FontSize="{Binding GroupLabelFontSize, RelativeSource={RelativeSource AncestorType={x:Type local:GroupNavigationControl}}}"
-                                       TextTrimming="CharacterEllipsis"
-                                       ToolTip="{Binding Name}"
-                                       AutomationProperties.Name="{Binding Name}" />
+                            <Grid>
+                                <TextBlock Text="{Binding Name}"
+                                           VerticalAlignment="Center"
+                                           Foreground="{TemplateBinding Foreground}"
+                                           FontSize="{Binding GroupLabelFontSize, RelativeSource={RelativeSource AncestorType={x:Type local:GroupNavigationControl}}}"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTip="{Binding Name}"
+                                           AutomationProperties.Name="{Binding Name}" />
+                                <Border x:Name="ReorderIndicator"
+                                        Height="2"
+                                        VerticalAlignment="Bottom"
+                                        Margin="4,0,4,0"
+                                        CornerRadius="1"
+                                        Background="{DynamicResource FocusBorderBrush}"
+                                        Visibility="Collapsed" />
+                            </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
+                            <Trigger Property="Tag" Value="reorder-target">
+                                <Setter TargetName="ReorderIndicator" Property="Visibility" Value="Visible" />
+                            </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource ItemHoverBrush}" />
                                 <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
@@ -85,7 +98,8 @@
         </Style>
     </UserControl.Resources>
 
-    <ListBox ItemsSource="{Binding ItemsSource, ElementName=Root}"
+    <ListBox x:Name="GroupList"
+             ItemsSource="{Binding ItemsSource, ElementName=Root}"
              SelectedItem="{Binding SelectedItem, ElementName=Root, Mode=TwoWay}"
              Style="{StaticResource GroupListStyle}"
              ItemContainerStyle="{StaticResource GroupItemStyle}"

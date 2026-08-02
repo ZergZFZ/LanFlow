@@ -409,6 +409,8 @@
                     GroupHovered="GroupNavigation_GroupHovered"
                     GroupDragHovered="GroupNavigation_GroupDragHovered"
                     GroupDropped="GroupNavigation_GroupDropped"
+                    GroupReorderRequested="GroupNavigation_GroupReorderRequested"
+                    IsEditMode="{Binding IsEditMode, RelativeSource={RelativeSource AncestorType=Window}}"
                     PreviewMouseRightButtonDown="GroupNavigation_PreviewMouseRightButtonDown" />
                 <Border x:Name="GroupSeparator" Grid.Row="2" Grid.Column="1" Margin="5,12,5,0" Background="{DynamicResource WindowBorderBrush}" CornerRadius="1" />
 
