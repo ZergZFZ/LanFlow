@@ -15,6 +15,7 @@ public partial class App : Application
 {
     private Forms.NotifyIcon? _trayIcon;
     private Forms.ToolStripMenuItem? _toggleHotkeyMenuItem;
+    private readonly SingleInstanceGuard _singleInstanceGuard = new();
 
     internal bool IsExiting { get; private set; }
 
@@ -42,6 +43,21 @@ public partial class App : Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
+        // 单实例检查：已有实例时唤醒或退出，避免重复托盘/热键。
+        IsSilentStart = e.Args.Any(a =>
+            string.Equals(a, "--silent", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(a, "/silent", StringComparison.OrdinalIgnoreCase));
+        if (!_singleInstanceGuard.TryAcquire(ShowMainWindow))
+        {
+            if (!IsSilentStart)
+            {
+                _singleInstanceGuard.NotifyExistingShow();
+            }
+
+            Shutdown();
+            return;
+        }
+
         // 捕获 UI 线程未处理异常，避免右键菜单等渲染异常直接静默退出（闪退）。
         DispatcherUnhandledException += (_, args) =>
         {
@@ -59,10 +75,6 @@ public partial class App : Application
             base.OnStartup(e);
             ResolveConfigLocationAtStartup();
             CreateTrayIcon();
-
-            IsSilentStart = e.Args.Any(a =>
-                string.Equals(a, "--silent", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(a, "/silent", StringComparison.OrdinalIgnoreCase));
 
             var mainWindow = new MainWindow();
             MainWindow = mainWindow;
@@ -98,6 +110,7 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _trayIcon?.Dispose();
+        _singleInstanceGuard.Dispose();
         base.OnExit(e);
     }
 
