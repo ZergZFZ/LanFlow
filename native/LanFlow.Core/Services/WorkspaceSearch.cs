@@ -28,7 +28,8 @@ public static class WorkspaceSearch
             }
         }
 
-        // 优先级：名称前缀 > 名称包含 > 路径/命令包含；同级按使用频次降序，再按名称稳定排序。
+        // 优先级：名称前缀 > 拼音首字母前缀 > 名称包含 > 拼音首字母包含 > 路径/命令包含；
+        // 同级按使用频次降序，再按名称稳定排序。
         return matches
             .OrderByDescending(match => match.Score)
             .ThenByDescending(match => match.Item.UseCount)
@@ -40,6 +41,17 @@ public static class WorkspaceSearch
     {
         if (item.Name.StartsWith(text, StringComparison.OrdinalIgnoreCase))
         {
+            score = 5;
+            return true;
+        }
+
+        // 查询本身是英文/数字时才尝试拼音首字母匹配，避免中文查询误触发。
+        var initials = IsAsciiQuery(text) ? PinyinInitialService.ToInitials(item.Name) : null;
+        var queryInitials = IsAsciiQuery(text) ? PinyinInitialService.ToInitials(text) : null;
+        if (initials is not null &&
+            queryInitials is not null &&
+            initials.StartsWith(queryInitials, StringComparison.Ordinal))
+        {
             score = 4;
             return true;
         }
@@ -50,15 +62,36 @@ public static class WorkspaceSearch
             return true;
         }
 
-        if (item.Path.Contains(text, StringComparison.OrdinalIgnoreCase) ||
-            item.Command.Contains(text, StringComparison.OrdinalIgnoreCase))
+        if (initials is not null &&
+            queryInitials is not null &&
+            initials.Contains(queryInitials, StringComparison.Ordinal))
         {
             score = 2;
             return true;
         }
 
+        if (item.Path.Contains(text, StringComparison.OrdinalIgnoreCase) ||
+            item.Command.Contains(text, StringComparison.OrdinalIgnoreCase))
+        {
+            score = 1;
+            return true;
+        }
+
         score = 0;
         return false;
+    }
+
+    private static bool IsAsciiQuery(string text)
+    {
+        foreach (var ch in text)
+        {
+            if (ch > 0x7F)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 }
 
