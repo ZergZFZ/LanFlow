@@ -600,6 +600,14 @@ public partial class SettingsWindow : Window
         Close();
     }
 
+    // 取消 = 放弃未保存修改并立即关闭，不进入“未保存设置”二次确认；
+    // 右上角 X / Esc 仍由 Window_Closing 走确认流程。
+    private void Cancel_Click(object sender, RoutedEventArgs e)
+    {
+        CloseDecision = UnsavedCloseDecision.Discard;
+        Close();
+    }
+
     private void Window_Closing(object? sender, CancelEventArgs e)
     {
         FlushPreviewThrottles();

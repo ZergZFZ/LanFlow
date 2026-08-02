@@ -146,6 +146,21 @@ public partial class App : Application
         }
     }
 
+    // 热键多次注册失败后的托盘提示：静默自启时用户看不到主窗口状态栏。
+    public void NotifyHotkeyRegistrationFailed()
+    {
+        if (_trayIcon is null)
+        {
+            return;
+        }
+
+        _trayIcon.ShowBalloonTip(
+            4000,
+            "LanFlow",
+            "全局快捷键注册失败，请在设置中更换组合键。",
+            Forms.ToolTipIcon.Warning);
+    }
+
     private static string CrashLogPath
     {
         get

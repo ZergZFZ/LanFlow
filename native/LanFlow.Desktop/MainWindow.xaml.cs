@@ -50,6 +50,8 @@ public partial class MainWindow : System.Windows.Window
     private ScrollViewer? _itemScrollViewer;
     private bool _isClosed;
     private CancellationTokenSource? _contentTransitionCancellation;
+    private System.Windows.Threading.DispatcherTimer? _hotkeyRetryTimer;
+    private int _hotkeyRetryAttempts;
     private string _activeLayoutMode = "tile";
     private string? _lastSelectedItemId;
     private string? _configLoadWarning;
@@ -147,12 +149,71 @@ public partial class MainWindow : System.Windows.Window
 
             _windowAppearanceController.EnableNativeShadow(this);
 
-            if (!_hotkeyService.Register(this, ShowFromHotkey, _viewModel.Settings.Hotkey))
-            {
-                _viewModel.StatusText = $"全局快捷键 {_viewModel.Settings.Hotkey} 注册失败";
-            }
+            RegisterHotkeyWithRetry();
         };
         Closed += MainWindow_Closed;
+    }
+
+    // 开机自启阶段系统可能尚未就绪或热键被临时占用，注册失败后延迟重试，
+    // 避免“重启后快捷键无效、手动重启才恢复”。
+    private void RegisterHotkeyWithRetry()
+    {
+        if (_hotkeyService.Register(this, ShowFromHotkey, _viewModel.Settings.Hotkey))
+        {
+            return;
+        }
+
+        _hotkeyRetryAttempts = 0;
+        ScheduleHotkeyRetry();
+    }
+
+    private void ScheduleHotkeyRetry()
+    {
+        if (_hotkeyRetryAttempts >= 3)
+        {
+            NotifyHotkeyRegistrationFailed();
+            return;
+        }
+
+        _hotkeyRetryAttempts++;
+        var delay = _hotkeyRetryAttempts switch
+        {
+            1 => TimeSpan.FromSeconds(1),
+            2 => TimeSpan.FromSeconds(3),
+            _ => TimeSpan.FromSeconds(8),
+        };
+
+        _hotkeyRetryTimer?.Stop();
+        _hotkeyRetryTimer = new System.Windows.Threading.DispatcherTimer
+        {
+            Interval = delay,
+        };
+        _hotkeyRetryTimer.Tick += (_, _) =>
+        {
+            _hotkeyRetryTimer.Stop();
+            if (_isClosed)
+            {
+                return;
+            }
+
+            if (_hotkeyService.Register(this, ShowFromHotkey, _viewModel.Settings.Hotkey))
+            {
+                _hotkeyRetryTimer = null;
+                return;
+            }
+
+            ScheduleHotkeyRetry();
+        };
+        _hotkeyRetryTimer.Start();
+    }
+
+    private void NotifyHotkeyRegistrationFailed()
+    {
+        _viewModel.StatusText = $"全局快捷键 {_viewModel.Settings.Hotkey} 注册失败，请更换组合键";
+        if (Application.Current is App app)
+        {
+            app.NotifyHotkeyRegistrationFailed();
+        }
     }
 
     // 配置损坏时只提示一次：给出备份位置，并说明当前使用的是新配置。
@@ -186,6 +247,8 @@ public partial class MainWindow : System.Windows.Window
         DetachVirtualizingPanel();
         _groupSwitchCoordinator.SwitchRequested -= GroupSwitchCoordinator_SwitchRequested;
         _animationPreferenceService.PreferenceChanged -= AnimationPreferenceService_PreferenceChanged;
+        _hotkeyRetryTimer?.Stop();
+        _hotkeyRetryTimer = null;
         _contentTransitionCancellation?.Cancel();
         _contentTransitionCancellation?.Dispose();
         _animationPreferenceService.Dispose();

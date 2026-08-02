@@ -19,6 +19,11 @@ public sealed class HotkeyService : IDisposable
     private uint _modifiers;
     private uint _virtualKey;
     private bool _isRegistered;
+    private int _lastErrorCode;
+
+    // 最近一次 RegisterHotKey/UnregisterHotKey 的 Win32 错误码（GetLastError）。
+    // 0 表示最近一次调用成功或尚未调用；供诊断“开机自启注册失败”使用。
+    public int LastErrorCode => _lastErrorCode;
 
     public bool Register(Window window, Action onTriggered, string hotkey = "Alt+Space")
     {
@@ -28,7 +33,7 @@ public sealed class HotkeyService : IDisposable
         _source.AddHook(WindowProcedure);
         _modifiers = modifiers;
         _virtualKey = virtualKey;
-        _isRegistered = RegisterHotKey(_source.Handle, HotkeyId, modifiers, virtualKey);
+        _isRegistered = TryRegisterHotKey(_source.Handle, HotkeyId, modifiers, virtualKey);
         return _isRegistered;
     }
 
@@ -42,7 +47,7 @@ public sealed class HotkeyService : IDisposable
         var hadOldRegistration = _isRegistered;
         if (hadOldRegistration) UnregisterHotKey(_source.Handle, HotkeyId);
 
-        if (RegisterHotKey(_source.Handle, HotkeyId, modifiers, virtualKey))
+        if (TryRegisterHotKey(_source.Handle, HotkeyId, modifiers, virtualKey))
         {
             _modifiers = modifiers;
             _virtualKey = virtualKey;
@@ -50,7 +55,7 @@ public sealed class HotkeyService : IDisposable
             return true;
         }
 
-        _isRegistered = hadOldRegistration && RegisterHotKey(_source.Handle, HotkeyId, oldModifiers, oldVirtualKey);
+        _isRegistered = hadOldRegistration && TryRegisterHotKey(_source.Handle, HotkeyId, oldModifiers, oldVirtualKey);
         _modifiers = oldModifiers;
         _virtualKey = oldVirtualKey;
         return false;
@@ -73,13 +78,13 @@ public sealed class HotkeyService : IDisposable
 
         if (enabled)
         {
-            _isRegistered = RegisterHotKey(_source.Handle, HotkeyId, _modifiers, _virtualKey);
+            _isRegistered = TryRegisterHotKey(_source.Handle, HotkeyId, _modifiers, _virtualKey);
             return _isRegistered;
         }
 
         if (_isRegistered)
         {
-            UnregisterHotKey(_source.Handle, HotkeyId);
+            TryUnregisterHotKey(_source.Handle, HotkeyId);
         }
 
         _isRegistered = false;
@@ -125,7 +130,7 @@ public sealed class HotkeyService : IDisposable
     public void Dispose()
     {
         if (_source is null) return;
-        if (_isRegistered) UnregisterHotKey(_source.Handle, HotkeyId);
+        if (_isRegistered) TryUnregisterHotKey(_source.Handle, HotkeyId);
         _source.RemoveHook(WindowProcedure);
         _source = null;
         _onTriggered = null;
@@ -145,4 +150,25 @@ public sealed class HotkeyService : IDisposable
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
+    private bool TryRegisterHotKey(IntPtr hwnd, int id, uint modifiers, uint virtualKey)
+    {
+        _lastErrorCode = 0;
+        var result = RegisterHotKey(hwnd, id, modifiers, virtualKey);
+        if (!result)
+        {
+            _lastErrorCode = Marshal.GetLastWin32Error();
+        }
+
+        return result;
+    }
+
+    private void TryUnregisterHotKey(IntPtr hwnd, int id)
+    {
+        _lastErrorCode = 0;
+        if (!UnregisterHotKey(hwnd, id))
+        {
+            _lastErrorCode = Marshal.GetLastWin32Error();
+        }
+    }
 }

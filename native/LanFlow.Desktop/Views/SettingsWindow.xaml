@@ -402,7 +402,7 @@
                            Foreground="{DynamicResource SecondaryTextBrush}"
                            FontSize="12" />
                 <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
-                    <Button Content="取消" IsCancel="True" />
+                    <Button Content="取消" IsCancel="True" Click="Cancel_Click" />
                     <Button x:Name="SaveButton"
                             Margin="8,0,0,0"
                             Content="保存设置"
