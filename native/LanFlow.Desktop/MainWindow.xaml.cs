@@ -522,7 +522,7 @@ public partial class MainWindow : System.Windows.Window
     private static ConfigStore CreateConfigStore()
     {
         var location = new ConfigLocationService();
-        // 平台默认 Ctrl+Alt+Space：旧 Alt+Space（常被窗口管理器占用）由 ConfigStore 自动迁移。
+        // 平台默认 Alt+Space；用户显式保存的热键在 ConfigStore 中不再被改写。
         return new ConfigStore(configDirectory: location.Resolve().DirectoryPath);
     }
 
@@ -1174,7 +1174,8 @@ public partial class MainWindow : System.Windows.Window
         bool animate = ContentTransitionController.ShouldAnimate(
             _viewModel.Settings.AnimationMode,
             _animationPreferenceService.AreAnimationsEnabled,
-            cacheHit);
+            cacheHit,
+            _viewModel.Settings.GroupTransitionAnimation);
 
         try
         {

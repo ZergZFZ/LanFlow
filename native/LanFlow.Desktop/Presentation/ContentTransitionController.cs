@@ -14,8 +14,15 @@ public sealed class ContentTransitionController
     public static bool ShouldAnimate(
         string? animationMode,
         bool systemAnimationsEnabled,
-        bool cacheHit)
+        bool cacheHit,
+        bool groupTransitionAnimation)
     {
+        // 用户关闭“分组切换过渡动画”时，即使缓存命中也不播放，避免图标跳动。
+        if (!groupTransitionAnimation)
+        {
+            return false;
+        }
+
         if (!cacheHit)
         {
             return false;

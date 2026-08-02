@@ -167,6 +167,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         settings.AnimationMode = source.AnimationMode is SettingsOptionValues.AnimationOn or SettingsOptionValues.AnimationOff
             ? source.AnimationMode
             : SettingsOptionValues.AnimationSystem;
+        settings.GroupTransitionAnimation = source.GroupTransitionAnimation;
         settings.Hotkey = source.Hotkey;
         settings.StartWithWindows = source.StartWithWindows;
         settings.OpenItemsOnSingleClick = source.OpenItemsOnSingleClick;

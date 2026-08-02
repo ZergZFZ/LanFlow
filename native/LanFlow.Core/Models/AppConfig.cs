@@ -187,6 +187,10 @@ public sealed class Settings
     [JsonPropertyName("animationMode")]
     public string AnimationMode { get; set; } = SettingsOptionValues.AnimationSystem;
 
+    // 分组切换时的内容过渡动画（透明度/位移）。默认关闭，避免切换时图标跳动。
+    [JsonPropertyName("groupTransitionAnimation")]
+    public bool GroupTransitionAnimation { get; set; }
+
     [JsonPropertyName("startWithWindows")]
     public bool StartWithWindows { get; set; }
 
@@ -229,6 +233,7 @@ public sealed class Settings
         LayeredOpacity = LayeredOpacity,
         WholeWindowOpacity = WholeWindowOpacity,
         AnimationMode = AnimationMode,
+        GroupTransitionAnimation = GroupTransitionAnimation,
         StartWithWindows = StartWithWindows,
         OpenItemsOnSingleClick = OpenItemsOnSingleClick,
         GroupHoverDelayMs = GroupHoverDelayMs,

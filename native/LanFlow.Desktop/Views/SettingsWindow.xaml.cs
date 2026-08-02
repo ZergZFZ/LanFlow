@@ -137,6 +137,7 @@ public partial class SettingsWindow : Window
 
         SingleClickOpenRadio.IsChecked = Working.OpenItemsOnSingleClick;
         DoubleClickOpenRadio.IsChecked = !Working.OpenItemsOnSingleClick;
+        GroupTransitionAnimationCheck.IsChecked = Working.GroupTransitionAnimation;
         SystemAnimationRadio.IsChecked = Working.AnimationMode == SettingsOptionValues.AnimationSystem;
         OnAnimationRadio.IsChecked = Working.AnimationMode == SettingsOptionValues.AnimationOn;
         OffAnimationRadio.IsChecked = Working.AnimationMode == SettingsOptionValues.AnimationOff;
@@ -364,6 +365,7 @@ public partial class SettingsWindow : Window
                 case "showItemTitle": settings.ShowItemTitle = value; break;
                 case "showFullItemName": settings.ShowFullItemName = value; break;
                 case "showShortcutBadge": settings.ShowShortcutBadge = value; break;
+                case "groupTransitionAnimation": settings.GroupTransitionAnimation = value; break;
                 case "startWithWindows": settings.StartWithWindows = value; break;
             }
         });

@@ -22,7 +22,7 @@ public sealed class ConfigStore : IConfigStore
     // 调用方（如 MainWindow）在启动后检查并提示，避免“配置损坏被静默重置”造成数据丢失。
     public string? LastLoadWarning { get; private set; }
 
-    public ConfigStore(string defaultHotkey = "Ctrl+Alt+Space", string? configDirectory = null)
+    public ConfigStore(string defaultHotkey = "Alt+Space", string? configDirectory = null)
     {
         _defaultHotkey = defaultHotkey;
         _configDirectory = configDirectory ?? Path.Combine(
@@ -133,13 +133,9 @@ public sealed class ConfigStore : IConfigStore
         {
             config.ConfigVersion = AppConfig.CurrentVersion;
         }
-        // 空热键用平台默认值；若仍是旧默认 Alt+Space（常被窗口管理器占用），
-        // 一键迁移到平台默认，避免全局热键静默失效。
+        // 空热键用平台默认值。用户显式保存的热键（含 Alt+Space）一律保留，
+        // 不再静默改写，避免“保存生效、重启后变回默认”的困惑。
         if (string.IsNullOrWhiteSpace(settings.Hotkey))
-        {
-            settings.Hotkey = _defaultHotkey;
-        }
-        else if (settings.Hotkey.Equals("Alt+Space", StringComparison.OrdinalIgnoreCase))
         {
             settings.Hotkey = _defaultHotkey;
         }
