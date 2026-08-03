@@ -9,6 +9,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using System.Threading.Tasks;
+using Microsoft.Win32;
 using LanFlow.Desktop.Controls;
 using LanFlow.Desktop.Diagnostics;
 using LanFlow.Desktop.Presentation;
@@ -52,6 +53,7 @@ public partial class MainWindow : System.Windows.Window
     private CancellationTokenSource? _contentTransitionCancellation;
     private System.Windows.Threading.DispatcherTimer? _hotkeyRetryTimer;
     private int _hotkeyRetryAttempts;
+    private bool _hotkeyFailureNotified;
     private string _activeLayoutMode = "tile";
     private string? _lastSelectedItemId;
     private string? _configLoadWarning;
@@ -151,37 +153,43 @@ public partial class MainWindow : System.Windows.Window
 
             RegisterHotkeyWithRetry();
         };
+        SystemEvents.SessionSwitch += OnSessionSwitch;
+        SystemEvents.PowerModeChanged += OnPowerModeChanged;
         Closed += MainWindow_Closed;
     }
 
-    // 开机自启阶段系统可能尚未就绪或热键被临时占用，注册失败后延迟重试，
-    // 避免“重启后快捷键无效、手动重启才恢复”。
+    // 开机自启阶段系统可能尚未就绪或热键被临时占用，注册失败后延迟重试；
+    // 被占用（1409）时无限退避重试直到成功，避免“重启后快捷键无效、手动重启才恢复”。
     private void RegisterHotkeyWithRetry()
     {
         if (_hotkeyService.Register(this, ShowFromHotkey, _viewModel.Settings.Hotkey))
         {
+            LogHotkeyDiagnostic("registered");
+            OnHotkeyRegistrationRecovered();
             return;
         }
 
+        LogHotkeyDiagnostic("register-failed:error=" + _hotkeyService.LastErrorCode);
         _hotkeyRetryAttempts = 0;
         ScheduleHotkeyRetry();
     }
 
     private void ScheduleHotkeyRetry()
     {
-        if (_hotkeyRetryAttempts >= 3)
+        if (_isClosed || _hotkeyService.IsPaused)
         {
-            NotifyHotkeyRegistrationFailed();
             return;
         }
 
-        _hotkeyRetryAttempts++;
-        var delay = _hotkeyRetryAttempts switch
+        // 只有“组合键被占用”(1409)值得持续重试；其他错误（配置/句柄）重试无意义，提示一次即止。
+        if (!HotkeyRetryPolicy.IsRetryableFailure(_hotkeyService.LastErrorCode))
         {
-            1 => TimeSpan.FromSeconds(1),
-            2 => TimeSpan.FromSeconds(3),
-            _ => TimeSpan.FromSeconds(8),
-        };
+            NotifyHotkeyRegistrationFailed(retryable: false);
+            return;
+        }
+
+        var delay = HotkeyRetryPolicy.NextDelayAfterFailure(_hotkeyRetryAttempts);
+        _hotkeyRetryAttempts++;
 
         _hotkeyRetryTimer?.Stop();
         _hotkeyRetryTimer = new System.Windows.Threading.DispatcherTimer
@@ -191,7 +199,7 @@ public partial class MainWindow : System.Windows.Window
         _hotkeyRetryTimer.Tick += (_, _) =>
         {
             _hotkeyRetryTimer.Stop();
-            if (_isClosed)
+            if (_isClosed || _hotkeyService.IsPaused)
             {
                 return;
             }
@@ -199,7 +207,15 @@ public partial class MainWindow : System.Windows.Window
             if (_hotkeyService.Register(this, ShowFromHotkey, _viewModel.Settings.Hotkey))
             {
                 _hotkeyRetryTimer = null;
+                LogHotkeyDiagnostic("registered-after-retry");
+                OnHotkeyRegistrationRecovered();
                 return;
+            }
+
+            // 首次重试仍失败：告知用户正在后台自动重试，避免静默模式下毫无反馈。
+            if (_hotkeyRetryAttempts == 1)
+            {
+                NotifyHotkeyRegistrationFailed(retryable: true);
             }
 
             ScheduleHotkeyRetry();
@@ -207,13 +223,74 @@ public partial class MainWindow : System.Windows.Window
         _hotkeyRetryTimer.Start();
     }
 
-    private void NotifyHotkeyRegistrationFailed()
+    private void NotifyHotkeyRegistrationFailed(bool retryable)
     {
-        _viewModel.StatusText = $"全局快捷键 {_viewModel.Settings.Hotkey} 注册失败，请更换组合键";
+        if (_hotkeyFailureNotified)
+        {
+            return;
+        }
+
+        _hotkeyFailureNotified = true;
+        _viewModel.StatusText = retryable
+            ? $"全局快捷键 {_viewModel.Settings.Hotkey} 注册失败，正在后台自动重试，冲突解除后会自动恢复"
+            : $"全局快捷键 {_viewModel.Settings.Hotkey} 注册失败，请更换组合键";
         if (Application.Current is App app)
         {
             app.NotifyHotkeyRegistrationFailed();
         }
+    }
+
+    private void OnHotkeyRegistrationRecovered()
+    {
+        _hotkeyRetryAttempts = 0;
+        if (!_hotkeyFailureNotified)
+        {
+            return;
+        }
+
+        _hotkeyFailureNotified = false;
+        _viewModel.StatusText = $"全局快捷键 {_viewModel.Settings.Hotkey} 已恢复";
+        if (Application.Current is App app)
+        {
+            app.NotifyHotkeyRecovered();
+        }
+    }
+
+    // 会话解锁/电源恢复时补偿检查：若注册曾失败且当前未被占用或暂停，立即重新尝试。
+    private void OnSessionSwitch(object sender, SessionSwitchEventArgs e)
+    {
+        if (e.Reason is not (SessionSwitchReason.SessionUnlock or SessionSwitchReason.SessionLogon))
+        {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(() => RecheckHotkeyRegistration("session-unlock"));
+    }
+
+    private void OnPowerModeChanged(object sender, PowerModeChangedEventArgs e)
+    {
+        if (e.Mode != PowerModes.Resume)
+        {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(() => RecheckHotkeyRegistration("power-resume"));
+    }
+
+    private void RecheckHotkeyRegistration(string reason)
+    {
+        if (_isClosed || _hotkeyService.IsPaused || _hotkeyService.IsEnabled)
+        {
+            return;
+        }
+
+        LogHotkeyDiagnostic("recheck:" + reason);
+        RegisterHotkeyWithRetry();
+    }
+
+    private void LogHotkeyDiagnostic(string message)
+    {
+        App.WriteDiagnosticLog("hotkey:" + message);
     }
 
     // 配置损坏时只提示一次：给出备份位置，并说明当前使用的是新配置。
@@ -249,6 +326,8 @@ public partial class MainWindow : System.Windows.Window
         _animationPreferenceService.PreferenceChanged -= AnimationPreferenceService_PreferenceChanged;
         _hotkeyRetryTimer?.Stop();
         _hotkeyRetryTimer = null;
+        SystemEvents.SessionSwitch -= OnSessionSwitch;
+        SystemEvents.PowerModeChanged -= OnPowerModeChanged;
         _contentTransitionCancellation?.Cancel();
         _contentTransitionCancellation?.Dispose();
         _animationPreferenceService.Dispose();

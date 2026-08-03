@@ -159,7 +159,8 @@ public partial class App : Application
         }
     }
 
-    // 热键多次注册失败后的托盘提示：静默自启时用户看不到主窗口状态栏。
+    // 热键注册失败后的托盘提示：静默自启时用户看不到主窗口状态栏；
+    // 占用型失败会在后台持续重试，因此文案告知“会自动恢复”，不再要求用户改键。
     public void NotifyHotkeyRegistrationFailed()
     {
         if (_trayIcon is null)
@@ -170,8 +171,23 @@ public partial class App : Application
         _trayIcon.ShowBalloonTip(
             4000,
             "LanFlow",
-            "全局快捷键注册失败，请在设置中更换组合键。",
+            "全局快捷键注册失败，正在后台自动重试；冲突解除后将自动恢复。",
             Forms.ToolTipIcon.Warning);
+    }
+
+    // 后台重试成功后告知用户已恢复，避免“以为还坏着”而手动重启。
+    public void NotifyHotkeyRecovered()
+    {
+        if (_trayIcon is null)
+        {
+            return;
+        }
+
+        _trayIcon.ShowBalloonTip(
+            4000,
+            "LanFlow",
+            "全局快捷键已恢复。",
+            Forms.ToolTipIcon.Info);
     }
 
     private static string CrashLogPath
@@ -208,7 +224,7 @@ public partial class App : Application
         }
     }
 
-    private static void WriteDiagnosticLog(string message)
+    internal static void WriteDiagnosticLog(string message)
     {
         try
         {

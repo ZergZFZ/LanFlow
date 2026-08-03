@@ -14,26 +14,70 @@ public sealed class HotkeyService : IDisposable
     private const uint ModShift = 0x0004;
     private const uint ModWin = 0x0008;
 
+    // RegisterHotKey 失败错误码：组合键已被当前进程的其他线程或其他进程占用。
+    // 这是唯一值得无限重试的失败原因——冲突方释放后即可注册成功。
+    public const int ErrorHotkeyAlreadyRegistered = 1409;
+
     private HwndSource? _source;
+    private HwndSource? _registeredSource;
     private Action? _onTriggered;
     private uint _modifiers;
     private uint _virtualKey;
     private bool _isRegistered;
+    private bool _hookAdded;
+    private bool _isPaused;
     private int _lastErrorCode;
 
     // 最近一次 RegisterHotKey/UnregisterHotKey 的 Win32 错误码（GetLastError）。
     // 0 表示最近一次调用成功或尚未调用；供诊断“开机自启注册失败”使用。
     public int LastErrorCode => _lastErrorCode;
 
+    /// <summary>
+    /// 用户通过托盘“暂停全局快捷键”后为 true：重试循环必须尊重暂停状态，不能自动恢复。
+    /// </summary>
+    public bool IsPaused => _isPaused;
+
     public bool Register(Window window, Action onTriggered, string hotkey = "Alt+Space")
     {
-        _source = PresentationSource.FromVisual(window) as HwndSource;
-        if (_source is null || !TryParse(hotkey, out var modifiers, out var virtualKey)) return false;
+        var source = PresentationSource.FromVisual(window) as HwndSource;
+        if (source is null || !TryParse(hotkey, out var modifiers, out var virtualKey))
+        {
+            return false;
+        }
+
         _onTriggered = onTriggered;
-        _source.AddHook(WindowProcedure);
+
+        // 窗口句柄被重建（例如关闭后重新显示）时，旧注册随旧句柄一并销毁，必须重新注册。
+        if (!ReferenceEquals(source, _registeredSource))
+        {
+            _isRegistered = false;
+            _registeredSource = source;
+            _hookAdded = false;
+        }
+
+        // 钩子只挂一次：反复 Register（重试、窗口重建）不能叠加多个 WindowProcedure。
+        if (!_hookAdded)
+        {
+            source.AddHook(WindowProcedure);
+            _hookAdded = true;
+        }
+
+        _source = source;
         _modifiers = modifiers;
         _virtualKey = virtualKey;
-        _isRegistered = TryRegisterHotKey(_source.Handle, HotkeyId, modifiers, virtualKey);
+
+        if (_isPaused)
+        {
+            return false;
+        }
+
+        // 同一句柄、同一组合键已注册成功时幂等返回，避免重复 RegisterHotKey 触发 1409。
+        if (_isRegistered)
+        {
+            return true;
+        }
+
+        _isRegistered = TryRegisterHotKey(source.Handle, HotkeyId, modifiers, virtualKey);
         return _isRegistered;
     }
 
@@ -52,6 +96,8 @@ public sealed class HotkeyService : IDisposable
             _modifiers = modifiers;
             _virtualKey = virtualKey;
             _isRegistered = true;
+            // 设置里显式更换快捷键视为“启用”动作，清除托盘暂停状态。
+            _isPaused = false;
             return true;
         }
 
@@ -71,17 +117,19 @@ public sealed class HotkeyService : IDisposable
             return false;
         }
 
-        if (enabled == _isRegistered)
-        {
-            return true;
-        }
-
         if (enabled)
         {
+            _isPaused = false;
+            if (_isRegistered)
+            {
+                return true;
+            }
+
             _isRegistered = TryRegisterHotKey(_source.Handle, HotkeyId, _modifiers, _virtualKey);
             return _isRegistered;
         }
 
+        _isPaused = true;
         if (_isRegistered)
         {
             TryUnregisterHotKey(_source.Handle, HotkeyId);
@@ -133,8 +181,11 @@ public sealed class HotkeyService : IDisposable
         if (_isRegistered) TryUnregisterHotKey(_source.Handle, HotkeyId);
         _source.RemoveHook(WindowProcedure);
         _source = null;
+        _registeredSource = null;
         _onTriggered = null;
         _isRegistered = false;
+        _isPaused = false;
+        _hookAdded = false;
     }
 
     private IntPtr WindowProcedure(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
