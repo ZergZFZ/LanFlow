@@ -5,6 +5,18 @@ using System.Windows.Interop;
 
 namespace LanFlow.Desktop.Services;
 
+/// <summary>
+/// 热键注册失败的类别：决定该失败是否值得后台重试。
+/// </summary>
+public enum HotkeyRegistrationFailure
+{
+    None,
+    Win32,
+    SourceNotReady,
+    InvalidHotkey,
+    Paused,
+}
+
 public sealed class HotkeyService : IDisposable
 {
     private const int HotkeyId = 1;
@@ -27,6 +39,7 @@ public sealed class HotkeyService : IDisposable
     private bool _hookAdded;
     private bool _isPaused;
     private int _lastErrorCode;
+    private HotkeyRegistrationFailure _failureKind;
 
     // 最近一次 RegisterHotKey/UnregisterHotKey 的 Win32 错误码（GetLastError）。
     // 0 表示最近一次调用成功或尚未调用；供诊断“开机自启注册失败”使用。
@@ -37,11 +50,26 @@ public sealed class HotkeyService : IDisposable
     /// </summary>
     public bool IsPaused => _isPaused;
 
+    /// <summary>
+    /// 最近一次 Register 的失败类别（成功时为 None）。
+    /// </summary>
+    public HotkeyRegistrationFailure LastFailureKind => _failureKind;
+
     public bool Register(Window window, Action onTriggered, string hotkey = "Alt+Space")
     {
-        var source = PresentationSource.FromVisual(window) as HwndSource;
-        if (source is null || !TryParse(hotkey, out var modifiers, out var virtualKey))
+        // 静默启动（EnsureHandle 且窗口未显示）时 PresentationSource.FromVisual 长期为 null，
+        // 但句柄已存在，HwndSource.FromHwnd 可立即取到源；两者互补才能覆盖所有启动路径。
+        var source = PresentationSource.FromVisual(window) as HwndSource
+                     ?? HwndSource.FromHwnd(new WindowInteropHelper(window).Handle);
+        if (source is null)
         {
+            _failureKind = HotkeyRegistrationFailure.SourceNotReady;
+            return false;
+        }
+
+        if (!TryParse(hotkey, out var modifiers, out var virtualKey))
+        {
+            _failureKind = HotkeyRegistrationFailure.InvalidHotkey;
             return false;
         }
 
@@ -68,16 +96,24 @@ public sealed class HotkeyService : IDisposable
 
         if (_isPaused)
         {
+            _failureKind = HotkeyRegistrationFailure.Paused;
             return false;
         }
 
         // 同一句柄、同一组合键已注册成功时幂等返回，避免重复 RegisterHotKey 触发 1409。
         if (_isRegistered)
         {
+            _failureKind = HotkeyRegistrationFailure.None;
             return true;
         }
 
+        _failureKind = HotkeyRegistrationFailure.Win32;
         _isRegistered = TryRegisterHotKey(source.Handle, HotkeyId, modifiers, virtualKey);
+        if (_isRegistered)
+        {
+            _failureKind = HotkeyRegistrationFailure.None;
+        }
+
         return _isRegistered;
     }
 
@@ -91,6 +127,7 @@ public sealed class HotkeyService : IDisposable
         var hadOldRegistration = _isRegistered;
         if (hadOldRegistration) UnregisterHotKey(_source.Handle, HotkeyId);
 
+        _failureKind = HotkeyRegistrationFailure.Win32;
         if (TryRegisterHotKey(_source.Handle, HotkeyId, modifiers, virtualKey))
         {
             _modifiers = modifiers;
@@ -98,12 +135,18 @@ public sealed class HotkeyService : IDisposable
             _isRegistered = true;
             // 设置里显式更换快捷键视为“启用”动作，清除托盘暂停状态。
             _isPaused = false;
+            _failureKind = HotkeyRegistrationFailure.None;
             return true;
         }
 
         _isRegistered = hadOldRegistration && TryRegisterHotKey(_source.Handle, HotkeyId, oldModifiers, oldVirtualKey);
         _modifiers = oldModifiers;
         _virtualKey = oldVirtualKey;
+        if (_isRegistered)
+        {
+            _failureKind = HotkeyRegistrationFailure.None;
+        }
+
         return false;
     }
 
@@ -122,10 +165,17 @@ public sealed class HotkeyService : IDisposable
             _isPaused = false;
             if (_isRegistered)
             {
+                _failureKind = HotkeyRegistrationFailure.None;
                 return true;
             }
 
+            _failureKind = HotkeyRegistrationFailure.Win32;
             _isRegistered = TryRegisterHotKey(_source.Handle, HotkeyId, _modifiers, _virtualKey);
+            if (_isRegistered)
+            {
+                _failureKind = HotkeyRegistrationFailure.None;
+            }
+
             return _isRegistered;
         }
 

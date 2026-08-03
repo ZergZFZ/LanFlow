@@ -169,7 +169,9 @@ public partial class MainWindow : System.Windows.Window
             return;
         }
 
-        LogHotkeyDiagnostic("register-failed:error=" + _hotkeyService.LastErrorCode);
+        LogHotkeyDiagnostic(
+            "register-failed:kind=" + _hotkeyService.LastFailureKind +
+            ":error=" + _hotkeyService.LastErrorCode);
         _hotkeyRetryAttempts = 0;
         ScheduleHotkeyRetry();
     }
@@ -181,8 +183,11 @@ public partial class MainWindow : System.Windows.Window
             return;
         }
 
-        // 只有“组合键被占用”(1409)值得持续重试；其他错误（配置/句柄）重试无意义，提示一次即止。
-        if (!HotkeyRetryPolicy.IsRetryableFailure(_hotkeyService.LastErrorCode))
+        // 只有“被占用”(1409)或“窗口源未就绪”值得持续重试；
+        // 其他错误（配置/暂停）重试无意义，提示一次即止。
+        if (!HotkeyRetryPolicy.IsRetryableFailure(
+                _hotkeyService.LastFailureKind,
+                _hotkeyService.LastErrorCode))
         {
             NotifyHotkeyRegistrationFailed(retryable: false);
             return;

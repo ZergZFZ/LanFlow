@@ -23,14 +23,20 @@ public class HotkeyRetryPolicyTests
     }
 
     [Theory]
-    [InlineData(1409, true)]   // ERROR_HOTKEY_ALREADY_REGISTERED：冲突解除后即可成功，值得无限重试
-    [InlineData(0, false)]     // 尚未失败 / 调用成功
-    [InlineData(1408, false)]  // ERROR_INVALID_WINDOW_HANDLE：确定性错误
-    [InlineData(87, false)]    // ERROR_INVALID_PARAMETER：确定性错误
-    [InlineData(5, false)]     // ERROR_ACCESS_DENIED：确定性错误
-    public void IsRetryableFailure_OnlyConflictIsRetryable(int errorCode, bool expected)
+    [InlineData(HotkeyRegistrationFailure.Win32, 1409, true)]     // 被占用：冲突解除后即可成功
+    [InlineData(HotkeyRegistrationFailure.SourceNotReady, 0, true)] // 静默启动窗口源未就绪：可稍后重试
+    [InlineData(HotkeyRegistrationFailure.Win32, 0, false)]        // Win32 失败但无错误码：非占用
+    [InlineData(HotkeyRegistrationFailure.Win32, 1408, false)]     // ERROR_INVALID_WINDOW_HANDLE
+    [InlineData(HotkeyRegistrationFailure.Win32, 87, false)]       // ERROR_INVALID_PARAMETER
+    [InlineData(HotkeyRegistrationFailure.InvalidHotkey, 0, false)]
+    [InlineData(HotkeyRegistrationFailure.Paused, 0, false)]
+    [InlineData(HotkeyRegistrationFailure.None, 0, false)]
+    public void IsRetryableFailure_OnlyTransientCausesAreRetryable(
+        HotkeyRegistrationFailure failureKind,
+        int errorCode,
+        bool expected)
     {
-        Assert.Equal(expected, HotkeyRetryPolicy.IsRetryableFailure(errorCode));
+        Assert.Equal(expected, HotkeyRetryPolicy.IsRetryableFailure(failureKind, errorCode));
     }
 
     [Fact]

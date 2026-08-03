@@ -35,8 +35,11 @@ public static class HotkeyRetryPolicy
     }
 
     /// <summary>
-    /// 只有“组合键被占用”（1409）值得继续重试；其余失败是确定性问题，重试不会变好。
+    /// 值得继续重试的失败：组合键被占用（1409，冲突方释放后可成功），
+    /// 或窗口源尚未就绪（静默启动瞬间，句柄可用后可成功）。
+    /// 其余失败（热键字符串非法、用户暂停等）是确定性问题，重试不会变好。
     /// </summary>
-    public static bool IsRetryableFailure(int lastErrorCode)
-        => lastErrorCode == ErrorHotkeyAlreadyRegistered;
+    public static bool IsRetryableFailure(HotkeyRegistrationFailure failureKind, int lastErrorCode)
+        => failureKind == HotkeyRegistrationFailure.SourceNotReady
+           || (failureKind == HotkeyRegistrationFailure.Win32 && lastErrorCode == ErrorHotkeyAlreadyRegistered);
 }
