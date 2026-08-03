@@ -88,6 +88,12 @@ public partial class MainWindow : System.Windows.Window
         InitializeComponent();
         var configStore = CreateConfigStore();
         _viewModel = new MainViewModel(configStore);
+        // 开机启动时把 Run 值排到最前，避免每次开机最后启动；幂等，已在最前时不写注册表。
+        if (_viewModel.Settings.StartWithWindows)
+        {
+            _startupService.EnsureRunValueOrdered();
+        }
+
         _configLoadWarning = configStore.LastLoadWarning;
         _importManifestService = new ImportManifestService(_shortcutService);
         _iconCoordinator = new ViewportIconCoordinator(_iconService);
