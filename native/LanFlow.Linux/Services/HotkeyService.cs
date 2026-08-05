@@ -30,7 +30,7 @@ public sealed class HotkeyService : IDisposable
     /// <summary>最近一次注册的结果说明（用于界面提示）。</summary>
     public string LastError { get; private set; } = string.Empty;
 
-    public bool Register(Window window, Action onTriggered, string hotkey = "Ctrl+Alt+Space")
+    public bool Register(Window window, Action onTriggered, string hotkey = "Ctrl+Alt+L")
     {
         _onTriggered = onTriggered;
         if (!TryParse(hotkey, out var modifiers, out var keycode, out _))
@@ -61,7 +61,7 @@ public sealed class HotkeyService : IDisposable
         _keycode = keycode;
         if (!Grab())
         {
-            LastError = "热键被占用（可能被窗口管理器占用），请在设置中更换，例如 Ctrl+Alt+Space";
+            LastError = "热键被占用（XGrabKey 返回非零），请更换为其他组合键";
             return false;
         }
 
@@ -97,7 +97,7 @@ public sealed class HotkeyService : IDisposable
         _keycode = keycode;
         if (!Grab())
         {
-            LastError = "热键被占用（可能被窗口管理器占用），请在设置中更换，例如 Ctrl+Alt+Space";
+            LastError = "热键被占用（XGrabKey 返回非零），请更换为其他组合键";
             return false;
         }
 

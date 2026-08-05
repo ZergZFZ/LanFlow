@@ -100,6 +100,7 @@
                 <TextBlock x:Name="InfoText" Grid.Row="0" Grid.Column="0" Text="{Binding InfoText}" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" VerticalAlignment="Center" />
                 <TextBlock x:Name="StatusText" Grid.Row="1" Grid.Column="0" Text="{Binding StatusText}" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" />
                 <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                    <Button x:Name="AddFileButton" Content="添加文件" Click="OnAddItem" />
                     <Button x:Name="EditToggleButton" Content="编辑" Click="OnToggleEdit" />
                     <Button x:Name="AddGroupButton" Content="添加分组" IsVisible="{DynamicResource EditMode}" Click="OnAddGroup" />
                     <Button x:Name="RenameGroupButton" Content="重命名分组" IsVisible="{DynamicResource EditMode}" Click="OnRenameGroup" />

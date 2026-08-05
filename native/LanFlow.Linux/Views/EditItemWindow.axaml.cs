@@ -45,50 +45,65 @@ public sealed partial class EditItemWindow : Window
 
     private async void OnBrowsePath(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        try
         {
-            Title = "选择程序或快捷方式",
-            AllowMultiple = false,
-        });
-
-        var file = files.Count > 0 ? files[0] : null;
-        if (file is null)
-        {
-            return;
-        }
-
-        var path = file.Path.LocalPath;
-        PathBox.Text = path;
-
-        if (path.EndsWith(".desktop", System.StringComparison.OrdinalIgnoreCase))
-        {
-            var (name, _, _) = ShellIconService.ParseDesktop(path);
-            if (string.IsNullOrWhiteSpace(NameBox.Text) && !string.IsNullOrWhiteSpace(name))
+            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
             {
-                NameBox.Text = name;
+                Title = "选择程序或快捷方式",
+                AllowMultiple = false,
+            });
+
+            var file = files.Count > 0 ? files[0] : null;
+            if (file is null)
+            {
+                return;
             }
+
+            var path = file.Path.LocalPath;
+            PathBox.Text = path;
+
+            if (path.EndsWith(".desktop", System.StringComparison.OrdinalIgnoreCase))
+            {
+                var (name, _, _) = ShellIconService.ParseDesktop(path);
+                if (string.IsNullOrWhiteSpace(NameBox.Text) && !string.IsNullOrWhiteSpace(name))
+                {
+                    NameBox.Text = name;
+                }
+            }
+        }
+        catch (System.Exception ex)
+        {
+            // UOS 上文件选择器门户(DBus portal)可能缺失，异常必须有日志而不是静默崩溃
+            System.Console.WriteLine("[取证] 文件选择器(路径)打开失败: " + ex);
         }
     }
 
     private async void OnBrowseIcon(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        try
         {
-            Title = "选择图标",
-            AllowMultiple = false,
-            FileTypeFilter = new[]
+            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
             {
-                new FilePickerFileType("图像")
+                Title = "选择图标",
+                AllowMultiple = false,
+                FileTypeFilter = new[]
                 {
-                    Patterns = new[] { "*.png", "*.jpg", "*.jpeg", "*.bmp", "*.ico", "*.webp" },
+                    new FilePickerFileType("图像")
+                    {
+                        Patterns = new[] { "*.png", "*.jpg", "*.jpeg", "*.bmp", "*.ico", "*.webp" },
+                    },
                 },
-            },
-        });
+            });
 
-        var file = files.Count > 0 ? files[0] : null;
-        if (file is not null)
+            var file = files.Count > 0 ? files[0] : null;
+            if (file is not null)
+            {
+                IconBox.Text = file.Path.LocalPath;
+            }
+        }
+        catch (System.Exception ex)
         {
-            IconBox.Text = file.Path.LocalPath;
+            System.Console.WriteLine("[取证] 文件选择器(图标)打开失败: " + ex);
         }
     }
 

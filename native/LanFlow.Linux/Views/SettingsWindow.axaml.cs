@@ -57,6 +57,44 @@ public sealed partial class SettingsWindow : Window
 
         LayoutBox.SelectionChanged += OnLayoutChanged;
         InitializeState();
+
+        // 第三轮取证件（缺陷板 v2 §3.2）：窗口打开 500ms 后 dump 关键控件尺寸
+        Opened += (_, _) =>
+        {
+            var timer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+            timer.Tick += (_, _) =>
+            {
+                timer.Stop();
+                DumpLayoutForensics();
+            };
+            timer.Start();
+        };
+    }
+
+    /// <summary>第三轮取证件：dump 行为区五开关与热键框。Bounds 为零即 D1 未修复的直接证据。</summary>
+    private void DumpLayoutForensics()
+    {
+        try
+        {
+            Console.WriteLine($"[取证] SettingsWindow Bounds={Bounds}");
+            foreach (var control in new Control?[]
+            {
+                OpenSingleClickToggle, ShowBadgeToggle, ShowFullToggle, ShowTitleToggle, StartupToggle, HotkeyBox,
+            })
+            {
+                if (control is null)
+                {
+                    Console.WriteLine("[取证] SettingsWindow: 控件引用为 null");
+                    continue;
+                }
+
+                Console.WriteLine($"[取证] SettingsWindow {control.Name} type={control.GetType().Name} Bounds={control.Bounds} DesiredSize={control.DesiredSize} IsVisible={control.IsVisible}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("[取证] SettingsWindow dump 失败: " + ex);
+        }
     }
 
     public Action? OnApplied { get; set; }
@@ -218,7 +256,7 @@ public sealed partial class SettingsWindow : Window
         }
         else
         {
-            HotkeyHint.Text = "格式无效，示例：Ctrl+Alt+Space / Ctrl+Shift+A";
+            HotkeyHint.Text = "格式无效，示例：Ctrl+Alt+L / Ctrl+Shift+A";
         }
     }
 

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.IO;
+using System.Linq;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using LanFlow.Desktop.Models;
@@ -24,9 +25,9 @@ public sealed class ShellIconService
     {
         try
         {
-            if (!string.IsNullOrWhiteSpace(item.Icon) && File.Exists(item.Icon) && !item.Icon.EndsWith(".svg", true, null))
+            if (!string.IsNullOrWhiteSpace(item.Icon) && File.Exists(item.Icon))
             {
-                return new Bitmap(item.Icon);
+                return LoadImage(item.Icon);
             }
 
             if (string.IsNullOrWhiteSpace(item.Path))
@@ -113,9 +114,9 @@ public sealed class ShellIconService
             return null;
         }
 
-        if (Path.IsPathRooted(icon) && File.Exists(icon) && !icon.EndsWith(".svg", true, null))
+        if (Path.IsPathRooted(icon) && File.Exists(icon))
         {
-            return new Bitmap(icon);
+            return LoadImage(icon);
         }
 
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -129,25 +130,74 @@ public sealed class ShellIconService
 
         foreach (var root in roots)
         {
-            var candidates = new[]
+            if (!Directory.Exists(root))
             {
-                Path.Combine(root, "hicolor", "48x48", "apps", icon + ".png"),
-                Path.Combine(root, "hicolor", "64x64", "apps", icon + ".png"),
-                Path.Combine(root, "hicolor", "96x96", "apps", icon + ".png"),
-                Path.Combine(root, "hicolor", "128x128", "apps", icon + ".png"),
-                Path.Combine(root, "apps", icon + ".png"),
-                Path.Combine(root, icon + ".png"),
-            };
+                continue;
+            }
 
-            foreach (var candidate in candidates)
+            // 遍历所有主题子目录（hicolor / bloom / 其它），hicolor 优先。
+            // Deepin/UOS 实际图标多在 bloom 等主题里，且多为 SVG，故不能只查 hicolor 的 png。
+            foreach (var dir in Directory.EnumerateDirectories(root)
+                         .OrderByDescending(d => Path.GetFileName(d).Equals("hicolor", StringComparison.OrdinalIgnoreCase)))
             {
-                if (File.Exists(candidate) && !candidate.EndsWith(".svg", true, null))
+                var hit = FindInDir(dir, icon);
+                if (hit != null)
                 {
-                    return new Bitmap(candidate);
+                    return hit;
                 }
+            }
+
+            // 根目录直接放置的图标（pixmaps、app-install 等）
+            var rootHit = FindInDir(root, icon);
+            if (rootHit != null)
+            {
+                return rootHit;
             }
         }
 
         return null;
+    }
+
+    private static IImage? FindInDir(string dir, string icon)
+    {
+        var candidates = new[]
+        {
+            Path.Combine(dir, "scalable", "apps", icon + ".svg"),
+            Path.Combine(dir, "48x48", "apps", icon + ".png"),
+            Path.Combine(dir, "64x64", "apps", icon + ".png"),
+            Path.Combine(dir, "96x96", "apps", icon + ".png"),
+            Path.Combine(dir, "128x128", "apps", icon + ".png"),
+            Path.Combine(dir, "apps", icon + ".svg"),
+            Path.Combine(dir, "apps", icon + ".png"),
+            Path.Combine(dir, icon + ".png"),
+            Path.Combine(dir, icon + ".svg"),
+        };
+
+        foreach (var candidate in candidates)
+        {
+            if (File.Exists(candidate))
+            {
+                return LoadImage(candidate);
+            }
+        }
+
+        return null;
+    }
+
+    private static IImage? LoadImage(string path)
+    {
+        try
+        {
+            if (path.EndsWith(".svg", StringComparison.OrdinalIgnoreCase))
+            {
+                return new Avalonia.Svg.Skia.SvgImage { Source = Avalonia.Svg.Skia.SvgSource.Load(path) };
+            }
+
+            return new Bitmap(path);
+        }
+        catch
+        {
+            return null;
+        }
     }
 }

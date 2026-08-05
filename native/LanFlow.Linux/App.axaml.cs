@@ -10,7 +10,7 @@ using LanFlow.Desktop;
 using LanFlow.Desktop.Models;
 using LanFlow.Desktop.Services;
 
-namespace LanFlow.Linux;
+namespace LanFlow.Desktop;
 
 public class App : Application
 {

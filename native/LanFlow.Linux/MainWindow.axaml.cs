@@ -31,11 +31,13 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        _viewModel = new MainViewModel(new ConfigStore("Ctrl+Alt+Space"));
+        _viewModel = new MainViewModel(new ConfigStore("Ctrl+Alt+L"));
         DataContext = _viewModel;
 
-        // 关键：让窗口以 32 位 ARGB 视觉创建，运行时调整 Opacity 才不会触发 X11 窗口重建而卡死
-        TransparencyLevelHint = new[] { WindowTransparencyLevel.Transparent };
+        // Linux/X11 下避免使用 Transparent 级别的 TransparencyLevelHint，
+        // 否则调整窗口大小会触发 X11 窗口 visual 重建导致卡死。
+        // 使用 None 作为安全回退。
+        TransparencyLevelHint = new[] { WindowTransparencyLevel.None };
         App.ApplyThemeColors(_viewModel.Settings);
         ApplyMetrics(_viewModel.Settings);
         Opacity = _viewModel.Settings.Opacity;
@@ -43,6 +45,37 @@ public sealed partial class MainWindow : Window
         ReloadItems();
 
         Closing += OnClosing;
+
+        // 第三轮取证件（缺陷板 v2 §3.3）：窗口打开 500ms 后 dump 分组栏渲染结果
+        Opened += (_, _) =>
+        {
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+            timer.Tick += (_, _) =>
+            {
+                timer.Stop();
+                DumpLayoutForensics();
+            };
+            timer.Start();
+        };
+    }
+
+    /// <summary>第三轮取证件：dump 主窗口与分组栏尺寸。若计数为 0 或 Bounds 为零，日志可直接点名根因。</summary>
+    private void DumpLayoutForensics()
+    {
+        try
+        {
+            Console.WriteLine($"[取证] MainWindow Bounds={Bounds}, GroupTabs.Children.Count={GroupTabs.Children.Count}");
+            var index = 0;
+            foreach (var child in GroupTabs.Children)
+            {
+                Console.WriteLine($"[取证] GroupTabs[{index}] type={child.GetType().Name} Bounds={child.Bounds} IsVisible={child.IsVisible}");
+                index++;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("[取证] MainWindow dump 失败: " + ex);
+        }
     }
 
     public void EnableHotkey()
@@ -51,9 +84,13 @@ public sealed partial class MainWindow : Window
         var registered = _hotkey.Register(this, () => Dispatcher.UIThread.Post(ToggleVisibility), _viewModel.Settings.Hotkey);
         if (!registered)
         {
-            _viewModel.StatusText = string.IsNullOrEmpty(_hotkey.LastError)
-                ? "全局热键不可用"
-                : _hotkey.LastError;
+            var message = string.IsNullOrEmpty(_hotkey.LastError) ? "全局热键不可用" : _hotkey.LastError;
+            _viewModel.StatusText = message;
+            Console.WriteLine("[LanFlow] 全局热键注册失败: " + message);
+        }
+        else
+        {
+            Console.WriteLine("[LanFlow] 全局热键注册成功: " + _viewModel.Settings.Hotkey);
         }
     }
 
@@ -108,7 +145,10 @@ public sealed partial class MainWindow : Window
         Opacity = _viewModel.Settings.Opacity;
         BuildGroupTabs();
         ReloadItems();
-        _hotkey?.TryRegister(_viewModel.Settings.Hotkey);
+        if (_hotkey?.TryRegister(_viewModel.Settings.Hotkey) == false)
+        {
+            Console.WriteLine("[LanFlow] 热键重注册失败: " + _hotkey.LastError);
+        }
     }
 
     private void ApplyMetrics(Settings settings)
@@ -143,43 +183,51 @@ public sealed partial class MainWindow : Window
     private void BuildGroupTabs()
     {
         GroupTabs.Children.Clear();
+        Console.WriteLine($"[LanFlow] 渲染分组栏: {_viewModel.Groups.Count()} 个分组");
         foreach (var group in _viewModel.Groups)
         {
-            var isSelected = group == _viewModel.SelectedGroup;
-            var border = new Border
+            try
             {
-                CornerRadius = new CornerRadius(6),
-                Padding = new Thickness(10, 6),
-                Cursor = new Cursor(StandardCursorType.Hand),
-                Background = (SolidColorBrush)(isSelected ? Resources["AccentBrush"]! : Resources["SurfaceBrush"]!),
-                BorderBrush = (SolidColorBrush)Resources["SurfaceBorderBrush"]!,
-                BorderThickness = new Thickness(1),
-            };
-            border.Child = new TextBlock
-            {
-                Text = group.Name,
-                Foreground = (SolidColorBrush)Resources["TextPrimaryBrush"]!,
-                FontSize = 13,
-            };
-            border.PointerPressed += (_, _) => SelectGroup(group);
-
-            DragDrop.SetAllowDrop(border, true);
-            border.AddHandler(DragDrop.DragOverEvent, (s, ev) =>
-            {
-                if (ev is DragEventArgs dragOverArgs)
+                var isSelected = group == _viewModel.SelectedGroup;
+                var border = new Border
                 {
-                    OnGroupTabDragOver(s, dragOverArgs);
-                }
-            });
-            border.AddHandler(DragDrop.DropEvent, (s, ev) =>
-            {
-                if (ev is DragEventArgs dragEventArgs)
+                    CornerRadius = new CornerRadius(6),
+                    Padding = new Thickness(10, 6),
+                    Cursor = new Cursor(StandardCursorType.Hand),
+                    Background = (SolidColorBrush)(isSelected ? Resources["AccentBrush"]! : Resources["SurfaceBrush"]!),
+                    BorderBrush = (SolidColorBrush)Resources["SurfaceBorderBrush"]!,
+                    BorderThickness = new Thickness(1),
+                };
+                border.Child = new TextBlock
                 {
-                    OnGroupTabDrop(group, dragEventArgs);
-                }
-            });
+                    Text = group.Name,
+                    Foreground = (SolidColorBrush)Resources["TextPrimaryBrush"]!,
+                    FontSize = 13,
+                };
+                border.PointerPressed += (_, _) => SelectGroup(group);
 
-            GroupTabs.Children.Add(border);
+                DragDrop.SetAllowDrop(border, true);
+                border.AddHandler(DragDrop.DragOverEvent, (s, ev) =>
+                {
+                    if (ev is DragEventArgs dragOverArgs)
+                    {
+                        OnGroupTabDragOver(s, dragOverArgs);
+                    }
+                });
+                border.AddHandler(DragDrop.DropEvent, (s, ev) =>
+                {
+                    if (ev is DragEventArgs dragEventArgs)
+                    {
+                        OnGroupTabDrop(group, dragEventArgs);
+                    }
+                });
+
+                GroupTabs.Children.Add(border);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[LanFlow] 分组「" + group.Name + "」渲染失败: " + ex);
+            }
         }
     }
 
@@ -309,9 +357,11 @@ public sealed partial class MainWindow : Window
         if (e.Data.Contains(DataFormats.FileNames))
         {
             var paths = e.Data.Get(DataFormats.FileNames) as IEnumerable<string>;
-            if (paths is not null)
+            var list = paths?.ToList() ?? new List<string>();
+            Console.WriteLine($"[LanFlow] 主区收到外部拖入 {list.Count} 个文件");
+            if (list.Count > 0)
             {
-                DropFiles(paths, _viewModel.SelectedGroup);
+                DropFiles(list, _viewModel.SelectedGroup);
             }
 
             e.DragEffects = DragDropEffects.Copy;
@@ -369,9 +419,11 @@ public sealed partial class MainWindow : Window
         if (e.Data.Contains(DataFormats.FileNames))
         {
             var paths = e.Data.Get(DataFormats.FileNames) as IEnumerable<string>;
-            if (paths is not null)
+            var list = paths?.ToList() ?? new List<string>();
+            Console.WriteLine($"[LanFlow] 分组标签「{targetGroup.Name}」收到外部拖入 {list.Count} 个文件");
+            if (list.Count > 0)
             {
-                DropFiles(paths, targetGroup);
+                DropFiles(list, targetGroup);
             }
 
             e.DragEffects = DragDropEffects.Copy;
@@ -516,6 +568,8 @@ public sealed partial class MainWindow : Window
 
         try
         {
+            var target = item.IsCommand && !string.IsNullOrWhiteSpace(item.Command) ? item.Command : item.Path;
+            Console.WriteLine("[LanFlow] 启动: " + item.DisplayName + " -> " + target);
             if (item.IsCommand && !string.IsNullOrWhiteSpace(item.Command))
             {
                 _launcher.LaunchCommand(item.Command);
@@ -532,6 +586,7 @@ public sealed partial class MainWindow : Window
         catch (Exception ex)
         {
             _viewModel.StatusText = "启动失败：" + ex.Message;
+            Console.WriteLine("[LanFlow] 启动失败: " + item.DisplayName + " -> " + ex);
         }
     }
 

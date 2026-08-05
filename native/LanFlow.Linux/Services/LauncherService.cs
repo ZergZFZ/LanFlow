@@ -31,6 +31,15 @@ public sealed class LauncherService
 
         if (path.EndsWith(".desktop", StringComparison.OrdinalIgnoreCase))
         {
+            // .desktop 不能直接 xdg-open：UOS 默认把它关联到文本编辑器，会打开文本文件。
+            // 必须解析 Exec 字段后实际执行；解析失败才回退 xdg-open。
+            var (_, exec, _) = ShellIconService.ParseDesktop(path);
+            if (!string.IsNullOrWhiteSpace(exec))
+            {
+                LaunchCommand(exec);
+                return;
+            }
+
             Run("xdg-open", path);
             return;
         }

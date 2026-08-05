@@ -1,6 +1,7 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             x:Class="LanFlow.Linux.App"
+             xmlns:views="clr-namespace:LanFlow.Desktop.Views"
+             x:Class="LanFlow.Desktop.App"
              RequestedThemeVariant="Dark">
     <Application.Resources>
         <SolidColorBrush x:Key="PanelBrush" Color="#171B28" />
@@ -101,6 +102,15 @@
             <Setter Property="BorderBrush" Value="{DynamicResource SurfaceBorderBrush}" />
             <Setter Property="CornerRadius" Value="6" />
             <Setter Property="Height" Value="34" />
+        </Style>
+
+        <Style Selector="UserControl">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Padding" Value="0" />
+        </Style>
+
+        <Style Selector="views|LabelToggle">
+            <Setter Property="Background" Value="Transparent" />
         </Style>
     </Application.Styles>
 </Application>
