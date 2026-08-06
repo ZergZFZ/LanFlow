@@ -56,6 +56,7 @@ public sealed partial class SettingsWindow : Window
         }
 
         LayoutBox.SelectionChanged += OnLayoutChanged;
+        HotkeyBox.KeyDown += OnHotkeyBoxKeyDown;
         InitializeState();
 
         // 第三轮取证件（缺陷板 v2 §3.2）：窗口打开 500ms 后 dump 关键控件尺寸
@@ -245,6 +246,61 @@ public sealed partial class SettingsWindow : Window
 
     private void OnLayoutChanged(object? sender, SelectionChangedEventArgs e) =>
         CardSizeRow.IsVisible = LayoutBox.SelectedIndex == 1;
+
+    /// <summary>热键框"按键即录入"：按住修饰键再按值键直接生成组合键文本，免手动输入。</summary>
+    private void OnHotkeyBoxKeyDown(object? sender, Avalonia.Input.KeyEventArgs e)
+    {
+        // 纯修饰键：拦截但不录入，等待真正的值键
+        if (e.Key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt
+            or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin)
+        {
+            e.Handled = true;
+            return;
+        }
+
+        var mods = e.KeyModifiers;
+        if (mods == KeyModifiers.None)
+        {
+            return; // 无修饰键时放行，保留手动编辑
+        }
+
+        var token = TokenFromKey(e.Key);
+        if (token is null)
+        {
+            return;
+        }
+
+        var parts = new List<string>();
+        if (mods.HasFlag(KeyModifiers.Control)) parts.Add("Ctrl");
+        if (mods.HasFlag(KeyModifiers.Alt)) parts.Add("Alt");
+        if (mods.HasFlag(KeyModifiers.Shift)) parts.Add("Shift");
+        if (mods.HasFlag(KeyModifiers.Meta)) parts.Add("Win");
+        parts.Add(token);
+
+        HotkeyBox.Text = string.Join("+", parts);
+        HotkeyBox.CaretIndex = HotkeyBox.Text.Length;
+        e.Handled = true;
+    }
+
+    private static string? TokenFromKey(Key key) => key switch
+    {
+        >= Key.A and <= Key.Z => key.ToString(),
+        >= Key.D0 and <= Key.D9 => ((int)(key - Key.D0)).ToString(),
+        >= Key.NumPad0 and <= Key.NumPad9 => ((int)(key - Key.NumPad0)).ToString(),
+        >= Key.F1 and <= Key.F24 => key.ToString(),
+        Key.Space => "Space",
+        Key.Enter or Key.Return => "Enter",
+        Key.Escape => "Esc",
+        Key.Back => "Backspace",
+        Key.Delete => "Delete",
+        Key.Insert => "Insert",
+        Key.Home => "Home",
+        Key.End => "End",
+        Key.Prior => "PageUp",
+        Key.Next => "PageDown",
+        Key.Up or Key.Down or Key.Left or Key.Right => key.ToString(),
+        _ => null,
+    };
 
     private void OnApplyHotkey(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {

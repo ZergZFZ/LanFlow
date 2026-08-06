@@ -26,9 +26,24 @@ public sealed class HotkeyService : IDisposable
     private uint _modifiers;
     private int _keycode;
     private volatile bool _running;
+    private int _lastGrabErrorCode;
 
     /// <summary>最近一次注册的结果说明（用于界面提示）。</summary>
     public string LastError { get; private set; } = string.Empty;
+
+    // X11 错误回调：被动抓取冲突以异步 BadAccess 协议错误上报，必须用错误处理器捕获，
+    // 不能依赖 XGrabKey 返回值（其成功返回 1）。委托存静态字段防 GC。
+    private delegate int XErrorHandler(IntPtr display, IntPtr errorEvent);
+    private static readonly XErrorHandler _errorHandler = OnXError;
+    private static readonly IntPtr _errorHandlerPtr = Marshal.GetFunctionPointerForDelegate(_errorHandler);
+    private static volatile int _xErrorCode;
+
+    private static int OnXError(IntPtr display, IntPtr errorEvent)
+    {
+        // XErrorEvent.error_code 在 64 位下偏移 24
+        _xErrorCode = Marshal.ReadByte(errorEvent, 24);
+        return 0;
+    }
 
     public bool Register(Window window, Action onTriggered, string hotkey = "Ctrl+Alt+L")
     {
@@ -61,7 +76,7 @@ public sealed class HotkeyService : IDisposable
         _keycode = keycode;
         if (!Grab())
         {
-            LastError = "热键被占用（XGrabKey 返回非零），请更换为其他组合键";
+            LastError = DescribeGrabFailure();
             return false;
         }
 
@@ -83,21 +98,13 @@ public sealed class HotkeyService : IDisposable
             return false;
         }
 
-        try
-        {
-            var root = XDefaultRootWindow(_display);
-            XUngrabKey(_display, _keycode, 0, root);
-        }
-        catch
-        {
-            // ignore
-        }
+        UngrabCurrent();
 
         _modifiers = modifiers;
         _keycode = keycode;
         if (!Grab())
         {
-            LastError = "热键被占用（XGrabKey 返回非零），请更换为其他组合键";
+            LastError = DescribeGrabFailure();
             return false;
         }
 
@@ -122,7 +129,8 @@ public sealed class HotkeyService : IDisposable
         return true;
     }
 
-    // 返回 true 表示至少有一种修饰符变体抓取成功
+    // 返回 true 表示至少有一种修饰符变体抓取成功。
+    // 判定依据是"XSync 后是否收到 X11 协议错误"，而非 XGrabKey 返回值。
     private bool Grab()
     {
         var root = XDefaultRootWindow(_display);
@@ -134,18 +142,66 @@ public sealed class HotkeyService : IDisposable
             _modifiers | LockMask | Mod2Mask,
         };
 
+        var previous = XSetErrorHandler(_errorHandlerPtr);
         var anySuccess = false;
-        foreach (var m in variants)
+        _lastGrabErrorCode = 0;
+        try
         {
-            // XGrabKey 返回 0 表示成功；非 0（如 AlreadyGrabbed）表示被其它客户端占用
-            if (XGrabKey(_display, _keycode, m, root, false, 1, 1) == 0)
+            foreach (var m in variants)
             {
-                anySuccess = true;
+                _xErrorCode = 0;
+                XGrabKey(_display, _keycode, m, root, false, 1, 1);
+                XSync(_display, false); // 强制投递异步错误（如 BadAccess）
+                if (_xErrorCode == 0)
+                {
+                    anySuccess = true;
+                }
+                else
+                {
+                    _lastGrabErrorCode = _xErrorCode;
+                    Console.WriteLine($"[LanFlow] XGrabKey mod=0x{m:X} 失败，X11 错误码={_xErrorCode}");
+                }
             }
         }
+        finally
+        {
+            XSetErrorHandler(previous);
+        }
 
-        XSync(_display, false);
         return anySuccess;
+    }
+
+    private string DescribeGrabFailure()
+        // BadAccess = 10：真被其它客户端占用；其它错误码多为映射/参数问题
+        => _lastGrabErrorCode == 10
+            ? "热键被占用，请更换为其他组合键"
+            : $"热键注册失败（X11 错误码 {_lastGrabErrorCode}），请更换为其他组合键";
+
+    private void UngrabCurrent()
+    {
+        if (_display == IntPtr.Zero || _keycode == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var root = XDefaultRootWindow(_display);
+            foreach (var m in new[]
+            {
+                _modifiers,
+                _modifiers | LockMask,
+                _modifiers | Mod2Mask,
+                _modifiers | LockMask | Mod2Mask,
+            })
+            {
+                XUngrabKey(_display, _keycode, m, root);
+            }
+        }
+        catch
+        {
+            // ignore
+        }
     }
 
     private void StartLoop()
@@ -192,15 +248,7 @@ public sealed class HotkeyService : IDisposable
             return;
         }
 
-        try
-        {
-            var root = XDefaultRootWindow(_display);
-            XUngrabKey(_display, _keycode, 0, root);
-        }
-        catch
-        {
-            // ignore
-        }
+        UngrabCurrent();
 
         try
         {
@@ -356,4 +404,7 @@ public sealed class HotkeyService : IDisposable
 
     [DllImport("libX11")]
     private static extern int XSync(IntPtr display, bool discard);
+
+    [DllImport("libX11")]
+    private static extern IntPtr XSetErrorHandler(IntPtr handler);
 }
