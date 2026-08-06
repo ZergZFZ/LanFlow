@@ -180,6 +180,22 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// D1 根因修复：应用级画刷定义在 App.axaml / ApplyThemeColors（Application.Resources），
+    /// 窗口本地 Resources 字典取不到（返回 null 导致分组标签隐形）。
+    /// TryGetResource 会沿资源树向上解析到 Application。
+    /// </summary>
+    private SolidColorBrush? GetBrush(string key)
+    {
+        if (this.TryGetResource(key, out var value) && value is SolidColorBrush brush)
+        {
+            return brush;
+        }
+
+        // 兜底：窗口资源父链未挂到 Application 时（个别宿主/时序下），直接读应用级字典
+        return Application.Current?.Resources[key] as SolidColorBrush;
+    }
+
     private void BuildGroupTabs()
     {
         GroupTabs.Children.Clear();
@@ -194,14 +210,14 @@ public sealed partial class MainWindow : Window
                     CornerRadius = new CornerRadius(6),
                     Padding = new Thickness(10, 6),
                     Cursor = new Cursor(StandardCursorType.Hand),
-                    Background = (SolidColorBrush)(isSelected ? Resources["AccentBrush"]! : Resources["SurfaceBrush"]!),
-                    BorderBrush = (SolidColorBrush)Resources["SurfaceBorderBrush"]!,
+                    Background = isSelected ? GetBrush("AccentBrush") : GetBrush("SurfaceBrush"),
+                    BorderBrush = GetBrush("SurfaceBorderBrush"),
                     BorderThickness = new Thickness(1),
                 };
                 border.Child = new TextBlock
                 {
                     Text = group.Name,
-                    Foreground = (SolidColorBrush)Resources["TextPrimaryBrush"]!,
+                    Foreground = GetBrush("TextPrimaryBrush"),
                     FontSize = 13,
                 };
                 border.PointerPressed += (_, _) => SelectGroup(group);

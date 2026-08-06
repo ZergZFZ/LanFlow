@@ -6,6 +6,13 @@ namespace LanFlow.Desktop.Views;
 
 public partial class LabelToggle : UserControl
 {
+    public LabelToggle()
+    {
+        // D1 根因修复：缺少此构造函数时自身 AXAML 不会加载，Content 为 null，
+        // 控件尺寸为 0，设置页五个开关整体隐形。
+        InitializeComponent();
+    }
+
     public static readonly StyledProperty<string> TitleProperty =
         AvaloniaProperty.Register<LabelToggle, string>(nameof(Title), string.Empty);
 
