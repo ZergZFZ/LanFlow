@@ -47,18 +47,16 @@ internal sealed class Program
     [STAThread]
     public static void Main(string[] args)
     {
-        // 第三轮取证件（缺陷板 v2 §3.4）：全局异常捕获，防止静默失败无日志
+        // 第三轮取证件（缺陷板 v2 §3.4）：全局异常捕获，防止静默失败无日志。
+        // 警告：不要在这里碰 Dispatcher.UIThread——Avalonia 初始化前访问它会以
+        // NullDispatcherImpl 固化调度器，MainLoop 直接抛 PlatformNotSupportedException（D9）。
+        // UI 线程钩子改在 App.OnFrameworkInitializationCompleted 里订阅。
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
             Console.WriteLine("[取证] AppDomain未处理异常: " + e.ExceptionObject);
         System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (_, e) =>
         {
             Console.WriteLine("[取证] 未观察Task异常: " + e.Exception);
             e.SetObserved();
-        };
-        Avalonia.Threading.Dispatcher.UIThread.UnhandledException += (_, e) =>
-        {
-            Console.WriteLine("[取证] UI线程未处理异常: " + e.Exception);
-            e.Handled = true; // 记录后保活，避免静默崩溃丢失证据
         };
 
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);

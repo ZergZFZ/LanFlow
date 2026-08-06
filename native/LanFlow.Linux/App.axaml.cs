@@ -6,6 +6,7 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using Avalonia.Threading;
 using LanFlow.Desktop;
 using LanFlow.Desktop.Models;
 using LanFlow.Desktop.Services;
@@ -23,6 +24,14 @@ public class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        // 第三轮取证件（缺陷板 v2 §3.4）：UI 线程异常捕获。
+        // 必须在 Avalonia 初始化完成后订阅（此处）——在 Program.Main 提前订阅会触发 D9。
+        Dispatcher.UIThread.UnhandledException += (_, e) =>
+        {
+            Console.WriteLine("[取证] UI线程未处理异常: " + e.Exception);
+            e.Handled = true; // 记录后保活，避免静默崩溃丢失证据
+        };
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var mainWindow = new MainWindow();
