@@ -13,10 +13,10 @@
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.3.18" />
     <PackageReference Include="Avalonia.Desktop" Version="11.3.18" />
-    <PackageReference Include="Avalonia.Svg.Skia" Version="11.3.0" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.18" />
-    <!-- 显式钉住 Linux 原生 Skia：Avalonia.Svg.Skia 传递来的 2.88.9 与托管 3.116.1 不兼容（UOS 启动崩溃 D7） -->
-    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="3.116.1" />
+    <!-- 注意（D7/D8 教训）：暂不引入 Avalonia.Svg.Skia——它会把托管 SkiaSharp 抬到 3.116，
+         其传递的 2.88.9 原生库随即错配（D7），而 3.116 原生库又要求 glibc 2.29（UOS 为 2.28，D8）。
+         SVG 图标支持待过河后单独恢复。 -->
   </ItemGroup>
 
   <ItemGroup>

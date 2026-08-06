@@ -177,7 +177,13 @@ public sealed class ShellIconService
         {
             if (File.Exists(candidate))
             {
-                return LoadImage(candidate);
+                var image = LoadImage(candidate);
+                if (image != null)
+                {
+                    return image;
+                }
+
+                // 加载失败（如 SVG 暂不支持）时继续找下一个候选，别提前空手而归
             }
         }
 
@@ -190,7 +196,9 @@ public sealed class ShellIconService
         {
             if (path.EndsWith(".svg", StringComparison.OrdinalIgnoreCase))
             {
-                return new Avalonia.Svg.Skia.SvgImage { Source = Avalonia.Svg.Skia.SvgSource.Load(path) };
+                // SVG 渲染暂禁用（D8 修复）：Avalonia.Svg.Skia 会把托管 SkiaSharp 抬到 3.116，
+                // 与 UOS glibc 2.28 环境不兼容，待过河后恢复
+                return null;
             }
 
             return new Bitmap(path);
