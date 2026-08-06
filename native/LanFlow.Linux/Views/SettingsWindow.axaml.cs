@@ -56,7 +56,9 @@ public sealed partial class SettingsWindow : Window
         }
 
         LayoutBox.SelectionChanged += OnLayoutChanged;
-        HotkeyBox.KeyDown += OnHotkeyBoxKeyDown;
+        // 隧道阶段拦截（handledEventsToo），先于 TextBox 自身按键处理，保证组合键能被捕获
+        HotkeyBox.AddHandler(InputElement.KeyDownEvent, OnHotkeyBoxKeyDown,
+            Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
         InitializeState();
 
         // 第三轮取证件（缺陷板 v2 §3.2）：窗口打开 500ms 后 dump 关键控件尺寸

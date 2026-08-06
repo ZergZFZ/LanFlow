@@ -7,12 +7,17 @@ using Avalonia.Controls;
 namespace LanFlow.Desktop.Services;
 
 /// <summary>
-/// Linux（X11）全局热键：通过 libX11 的 XGrabKey 在根窗口上注册被动抓取，
-/// 独立线程读取 XNextEvent 触发回调。Wayland 会话或缺少 X11 时静默降级（注册失败）。
+/// Linux（X11）全局热键。
+/// 单线程模型：所有 Xlib 调用（XOpenDisplay / XGrabKey / XNextEvent / XSync）都发生在
+/// 专用循环线程上，UI 线程仅通过请求/应答（ManualResetEventSlim）与之通信。
+/// Xlib 的 Display 不是线程安全的，绝不能两个线程并发操作同一个 Display
+/// （round3.6 曾因 UI 线程与事件循环并发操作同一 Display，点「确定」重注册时死锁卡死）。
+/// 被动抓取冲突以异步 BadAccess 协议错误上报，用 XSetErrorHandler+XSync 捕获判定。
 /// </summary>
 public sealed class HotkeyService : IDisposable
 {
     private const int KeyPress = 2;
+    private const uint AnyModifier = 1 << 7;
     private const uint ControlMask = 1 << 2;
     private const uint ShiftMask = 1 << 0;
     private const uint LockMask = 1 << 1;   // CapsLock
@@ -20,19 +25,27 @@ public sealed class HotkeyService : IDisposable
     private const uint Mod2Mask = 1 << 4;   // NumLock
     private const uint Mod4Mask = 1 << 6;   // Win / Super
 
-    private IntPtr _display;
     private Thread? _thread;
     private Action? _onTriggered;
-    private uint _modifiers;
-    private int _keycode;
     private volatile bool _running;
+
+    // 仅循环线程使用的 Display
+    private IntPtr _display;
+
+    // UI 线程与循环线程之间的请求/应答
+    private readonly object _gate = new();
+    private uint _reqModifiers;
+    private int _reqKeycode;
+    private volatile bool _regrabPending;
+    private bool _lastGrabOk;
     private int _lastGrabErrorCode;
+    private readonly ManualResetEventSlim _regrabSignal = new(false);
+    private readonly ManualResetEventSlim _grabDone = new(false);
 
     /// <summary>最近一次注册的结果说明（用于界面提示）。</summary>
     public string LastError { get; private set; } = string.Empty;
 
-    // X11 错误回调：被动抓取冲突以异步 BadAccess 协议错误上报，必须用错误处理器捕获，
-    // 不能依赖 XGrabKey 返回值（其成功返回 1）。委托存静态字段防 GC。
+    // X11 错误回调：被动抓取冲突以异步 BadAccess 协议错误上报。委托存静态字段防 GC。
     private delegate int XErrorHandler(IntPtr display, IntPtr errorEvent);
     private static readonly XErrorHandler _errorHandler = OnXError;
     private static readonly IntPtr _errorHandlerPtr = Marshal.GetFunctionPointerForDelegate(_errorHandler);
@@ -54,62 +67,189 @@ public sealed class HotkeyService : IDisposable
             return false;
         }
 
-        if (_display == IntPtr.Zero)
-        {
-            try
-            {
-                _display = XOpenDisplay(null);
-            }
-            catch
-            {
-                _display = IntPtr.Zero;
-            }
-        }
-
-        if (_display == IntPtr.Zero)
-        {
-            LastError = "X11 会话不可用，全局热键已停用";
-            return false;
-        }
-
-        _modifiers = modifiers;
-        _keycode = keycode;
-        if (!Grab())
-        {
-            LastError = DescribeGrabFailure();
-            return false;
-        }
-
-        StartLoop();
-        return true;
+        return RequestGrab(modifiers, keycode);
     }
 
     public bool TryRegister(string hotkey)
     {
-        if (_display == IntPtr.Zero)
-        {
-            LastError = "X11 会话不可用，全局热键已停用";
-            return false;
-        }
-
         if (!TryParse(hotkey, out var modifiers, out var keycode, out _))
         {
             LastError = "热键格式无效：" + hotkey;
             return false;
         }
 
-        UngrabCurrent();
+        return RequestGrab(modifiers, keycode);
+    }
 
-        _modifiers = modifiers;
-        _keycode = keycode;
-        if (!Grab())
+    /// <summary>把抓取请求发给循环线程并等待结果（UI 线程不直接碰 Xlib）。</summary>
+    private bool RequestGrab(uint modifiers, int keycode)
+    {
+        EnsureLoop();
+
+        lock (_gate)
         {
-            LastError = DescribeGrabFailure();
+            _reqModifiers = modifiers;
+            _reqKeycode = keycode;
+            _regrabPending = true;
+        }
+
+        _grabDone.Reset();
+        _regrabSignal.Set();
+
+        if (!_grabDone.Wait(3000))
+        {
+            LastError = "热键注册超时（X11 会话不可用？）";
             return false;
         }
 
-        return true;
+        lock (_gate)
+        {
+            if (_lastGrabOk)
+            {
+                return true;
+            }
+
+            LastError = DescribeGrabFailure();
+            return false;
+        }
     }
+
+    private void EnsureLoop()
+    {
+        if (_thread != null && _thread.IsAlive)
+        {
+            return;
+        }
+
+        _running = true;
+        _thread = new Thread(Loop)
+        {
+            IsBackground = true,
+            Name = "LanFlowHotkey",
+        };
+        _thread.Start();
+    }
+
+    /// <summary>循环线程：独占 Display，负责抓取与读取事件。</summary>
+    private void Loop()
+    {
+        try
+        {
+            _display = XOpenDisplay(null);
+        }
+        catch
+        {
+            _display = IntPtr.Zero;
+        }
+
+        if (_display == IntPtr.Zero)
+        {
+            FailPending("X11 会话不可用，全局热键已停用");
+            return;
+        }
+
+        var previous = XSetErrorHandler(_errorHandlerPtr);
+        try
+        {
+            while (_running)
+            {
+                if (_regrabPending)
+                {
+                    uint mods;
+                    int kc;
+                    lock (_gate)
+                    {
+                        mods = _reqModifiers;
+                        kc = _reqKeycode;
+                        _regrabPending = false;
+                    }
+
+                    bool ok = DoGrab(mods, kc);
+                    lock (_gate)
+                    {
+                        _lastGrabOk = ok;
+                    }
+
+                    _grabDone.Set();
+                }
+
+                // 轮询事件，避免 XNextEvent 阻塞导致无法响应重抓取请求
+                if (XPending(_display) > 0)
+                {
+                    XEvent e;
+                    XNextEvent(_display, out e);
+                    if (e.type == KeyPress)
+                    {
+                        _onTriggered?.Invoke();
+                    }
+                }
+                else
+                {
+                    Thread.Sleep(10);
+                }
+            }
+        }
+        finally
+        {
+            XSetErrorHandler(previous);
+            XCloseDisplay(_display);
+            _display = IntPtr.Zero;
+        }
+    }
+
+    private void FailPending(string message)
+    {
+        lock (_gate)
+        {
+            _lastGrabOk = false;
+        }
+
+        LastError = message;
+        _grabDone.Set();
+    }
+
+    /// <summary>在循环线程上执行抓取：先清掉本客户端全部被动抓取，再逐变体抓取并以错误回路判定。</summary>
+    private bool DoGrab(uint modifiers, int keycode)
+    {
+        var root = XDefaultRootWindow(_display);
+
+        // 清空本客户端之前的所有被动抓取，避免换键残留
+        XUngrabKey(_display, 0, AnyModifier, root);
+
+        var variants = new[]
+        {
+            modifiers,
+            modifiers | LockMask,
+            modifiers | Mod2Mask,
+            modifiers | LockMask | Mod2Mask,
+        };
+
+        var anySuccess = false;
+        _lastGrabErrorCode = 0;
+        foreach (var m in variants)
+        {
+            _xErrorCode = 0;
+            XGrabKey(_display, keycode, m, root, false, 1, 1);
+            XSync(_display, false); // 强制投递异步错误（如 BadAccess）
+            if (_xErrorCode == 0)
+            {
+                anySuccess = true;
+            }
+            else
+            {
+                _lastGrabErrorCode = _xErrorCode;
+                Console.WriteLine($"[LanFlow] XGrabKey mod=0x{m:X} 失败，X11 错误码={_xErrorCode}");
+            }
+        }
+
+        return anySuccess;
+    }
+
+    private string DescribeGrabFailure()
+        // BadAccess = 10：真被其它客户端占用；其它错误码多为映射/参数问题
+        => _lastGrabErrorCode == 10
+            ? "热键被占用，请更换为其他组合键"
+            : $"热键注册失败（X11 错误码 {_lastGrabErrorCode}），请更换为其他组合键";
 
     public static bool TryNormalize(string value, out string normalized)
     {
@@ -129,137 +269,10 @@ public sealed class HotkeyService : IDisposable
         return true;
     }
 
-    // 返回 true 表示至少有一种修饰符变体抓取成功。
-    // 判定依据是"XSync 后是否收到 X11 协议错误"，而非 XGrabKey 返回值。
-    private bool Grab()
-    {
-        var root = XDefaultRootWindow(_display);
-        var variants = new[]
-        {
-            _modifiers,
-            _modifiers | LockMask,
-            _modifiers | Mod2Mask,
-            _modifiers | LockMask | Mod2Mask,
-        };
-
-        var previous = XSetErrorHandler(_errorHandlerPtr);
-        var anySuccess = false;
-        _lastGrabErrorCode = 0;
-        try
-        {
-            foreach (var m in variants)
-            {
-                _xErrorCode = 0;
-                XGrabKey(_display, _keycode, m, root, false, 1, 1);
-                XSync(_display, false); // 强制投递异步错误（如 BadAccess）
-                if (_xErrorCode == 0)
-                {
-                    anySuccess = true;
-                }
-                else
-                {
-                    _lastGrabErrorCode = _xErrorCode;
-                    Console.WriteLine($"[LanFlow] XGrabKey mod=0x{m:X} 失败，X11 错误码={_xErrorCode}");
-                }
-            }
-        }
-        finally
-        {
-            XSetErrorHandler(previous);
-        }
-
-        return anySuccess;
-    }
-
-    private string DescribeGrabFailure()
-        // BadAccess = 10：真被其它客户端占用；其它错误码多为映射/参数问题
-        => _lastGrabErrorCode == 10
-            ? "热键被占用，请更换为其他组合键"
-            : $"热键注册失败（X11 错误码 {_lastGrabErrorCode}），请更换为其他组合键";
-
-    private void UngrabCurrent()
-    {
-        if (_display == IntPtr.Zero || _keycode == 0)
-        {
-            return;
-        }
-
-        try
-        {
-            var root = XDefaultRootWindow(_display);
-            foreach (var m in new[]
-            {
-                _modifiers,
-                _modifiers | LockMask,
-                _modifiers | Mod2Mask,
-                _modifiers | LockMask | Mod2Mask,
-            })
-            {
-                XUngrabKey(_display, _keycode, m, root);
-            }
-        }
-        catch
-        {
-            // ignore
-        }
-    }
-
-    private void StartLoop()
-    {
-        if (_running)
-        {
-            return;
-        }
-
-        _running = true;
-        _thread = new Thread(Loop)
-        {
-            IsBackground = true,
-            Name = "LanFlowHotkey",
-        };
-        _thread.Start();
-    }
-
-    private void Loop()
-    {
-        while (_running && _display != IntPtr.Zero)
-        {
-            try
-            {
-                XEvent e;
-                XNextEvent(_display, out e);
-                if (e.type == KeyPress)
-                {
-                    _onTriggered?.Invoke();
-                }
-            }
-            catch
-            {
-                break;
-            }
-        }
-    }
-
     public void Unregister()
     {
         _running = false;
-        if (_display == IntPtr.Zero)
-        {
-            return;
-        }
-
-        UngrabCurrent();
-
-        try
-        {
-            XCloseDisplay(_display);
-        }
-        catch
-        {
-            // ignore
-        }
-
-        _display = IntPtr.Zero;
+        _regrabSignal.Set(); // 唤醒循环线程使其退出
     }
 
     public void Dispose() => Unregister();
@@ -313,6 +326,8 @@ public sealed class HotkeyService : IDisposable
         var keyToken = tokens[^1];
         var keysymName = ToKeysymName(keyToken);
 
+        // keycode 查询用临时连接（仅 XStringToKeysym/XKeysymToKeycode，瞬间关闭，不与循环线程并发）。
+        // 非 Linux 环境无 libX11 会抛 DllNotFoundException，须捕获并降级为 false。
         IntPtr display;
         try
         {
@@ -332,6 +347,10 @@ public sealed class HotkeyService : IDisposable
         {
             var keysym = XStringToKeysym(keysymName);
             keycode = XKeysymToKeycode(display, keysym);
+        }
+        catch
+        {
+            return false;
         }
         finally
         {
@@ -392,6 +411,9 @@ public sealed class HotkeyService : IDisposable
 
     [DllImport("libX11")]
     private static extern int XNextEvent(IntPtr display, out XEvent eventReturn);
+
+    [DllImport("libX11")]
+    private static extern int XPending(IntPtr display);
 
     [DllImport("libX11")]
     private static extern IntPtr XStringToKeysym(string s);
