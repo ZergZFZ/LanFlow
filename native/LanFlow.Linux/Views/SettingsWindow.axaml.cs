@@ -252,9 +252,11 @@ public sealed partial class SettingsWindow : Window
     /// <summary>热键框"按键即录入"：按住修饰键再按值键直接生成组合键文本，免手动输入。</summary>
     private void OnHotkeyBoxKeyDown(object? sender, Avalonia.Input.KeyEventArgs e)
     {
-        // 纯修饰键：拦截但不录入，等待真正的值键
-        if (e.Key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt
-            or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin)
+        // 纯修饰键：拦截但不录入，等待真正的值键（物理键判断，X11 下更可靠）
+        if (e.PhysicalKey is PhysicalKey.ControlLeft or PhysicalKey.ControlRight
+            or PhysicalKey.AltLeft or PhysicalKey.AltRight
+            or PhysicalKey.ShiftLeft or PhysicalKey.ShiftRight
+            or PhysicalKey.MetaLeft or PhysicalKey.MetaRight)
         {
             e.Handled = true;
             return;
@@ -266,7 +268,8 @@ public sealed partial class SettingsWindow : Window
             return; // 无修饰键时放行，保留手动编辑
         }
 
-        var token = TokenFromKey(e.Key);
+        // 物理键优先（X11 组合键的逻辑 keysym 会被修饰键污染），逻辑键兜底
+        var token = TokenFromPhysicalKey(e.PhysicalKey) ?? TokenFromKey(e.Key);
         if (token is null)
         {
             return;
@@ -282,6 +285,32 @@ public sealed partial class SettingsWindow : Window
         HotkeyBox.Text = string.Join("+", parts);
         HotkeyBox.CaretIndex = HotkeyBox.Text.Length;
         e.Handled = true;
+    }
+
+    private static string? TokenFromPhysicalKey(PhysicalKey pk)
+    {
+        var s = pk.ToString();
+        if (s.Length == 1 && s[0] >= 'A' && s[0] <= 'Z') return s;                      // 字母
+        if (s.StartsWith("Digit") && s.Length == 6) return s.Substring(5);              // 主键盘数字
+        if (s.Length > 1 && s[0] == 'F' && int.TryParse(s.Substring(1), out _)) return s; // F 键
+        return pk switch
+        {
+            PhysicalKey.Space => "Space",
+            PhysicalKey.Enter => "Enter",
+            PhysicalKey.Escape => "Esc",
+            PhysicalKey.Backspace => "Backspace",
+            PhysicalKey.Delete => "Delete",
+            PhysicalKey.Insert => "Insert",
+            PhysicalKey.Home => "Home",
+            PhysicalKey.End => "End",
+            PhysicalKey.PageUp => "PageUp",
+            PhysicalKey.PageDown => "PageDown",
+            PhysicalKey.ArrowUp => "Up",
+            PhysicalKey.ArrowDown => "Down",
+            PhysicalKey.ArrowLeft => "Left",
+            PhysicalKey.ArrowRight => "Right",
+            _ => null,
+        };
     }
 
     private static string? TokenFromKey(Key key) => key switch

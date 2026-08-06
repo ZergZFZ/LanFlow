@@ -180,7 +180,15 @@ public sealed class HotkeyService : IDisposable
                     XNextEvent(_display, out e);
                     if (e.type == KeyPress)
                     {
-                        _onTriggered?.Invoke();
+                        Console.WriteLine("[LanFlow][hotkey] 收到 KeyPress，触发回调");
+                        try
+                        {
+                            _onTriggered?.Invoke();
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine("[LanFlow][hotkey] 回调异常: " + ex.Message);
+                        }
                     }
                 }
                 else
@@ -212,6 +220,8 @@ public sealed class HotkeyService : IDisposable
     private bool DoGrab(uint modifiers, int keycode)
     {
         var root = XDefaultRootWindow(_display);
+
+        Console.WriteLine($"[LanFlow][hotkey] DoGrab keycode={keycode} mod=0x{modifiers:X}");
 
         // 清空本客户端之前的所有被动抓取，避免换键残留
         XUngrabKey(_display, 0, AnyModifier, root);
