@@ -226,12 +226,19 @@ public sealed class HotkeyService : IDisposable
         // 清空本客户端之前的所有被动抓取，避免换键残留
         XUngrabKey(_display, 0, AnyModifier, root);
 
+        // 变体覆盖 Lock(Caps)/Mod2(NumLock)/Shift 的任意组合。
+        // Shift 不再作为强制修饰符：不同布局上符号键的上档层级不同
+        // （美式要 Shift，其它布局可能不要），把 Shift 放进变体让服务器按实际层级匹配。
         var variants = new[]
         {
             modifiers,
             modifiers | LockMask,
             modifiers | Mod2Mask,
             modifiers | LockMask | Mod2Mask,
+            modifiers | ShiftMask,
+            modifiers | ShiftMask | LockMask,
+            modifiers | ShiftMask | Mod2Mask,
+            modifiers | ShiftMask | LockMask | Mod2Mask,
         };
 
         var anySuccess = false;
@@ -335,13 +342,12 @@ public sealed class HotkeyService : IDisposable
 
         var keyToken = tokens[^1];
 
-        // 符号键（美式布局上档字符）隐式携带 Shift：把它们解析到基础键 keycode，并补上 ShiftMask，
-        // 否则 XGrabKey 会用错误的修饰符去抓取（如 | 需 Shift+反斜杠）。
+        // 符号键解析到基础键 keysym（如 | → bar）拿 keycode；不在这里强制 Shift，
+        // 上档层级交由 DoGrab 的 Shift 变体覆盖，兼容不同键盘布局。
         string keysymName;
         if (keyToken.Length == 1 && _shiftSymbols.TryGetValue(keyToken[0], out var shiftedSymbol))
         {
             keysymName = shiftedSymbol.Sym;
-            modifiers |= ShiftMask;
         }
         else
         {
