@@ -404,7 +404,23 @@ public sealed partial class MainWindow : Window
 
     private void OnItemPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (!_editMode || sender is not Control control)
+        if (sender is not Control control)
+        {
+            return;
+        }
+
+        // 右键：弹出项目菜单（B4-1），不进入编辑/拖拽流程
+        if (e.GetCurrentPoint(this).Properties.IsRightButtonPressed)
+        {
+            if (control.DataContext is LauncherItem ctxItem)
+            {
+                ShowItemContextMenu(control, ctxItem);
+            }
+
+            return;
+        }
+
+        if (!_editMode)
         {
             return;
         }
@@ -700,11 +716,14 @@ public sealed partial class MainWindow : Window
 
     private void OnDeleteItem(object? sender, RoutedEventArgs e)
     {
-        if (sender is not Control control || control.DataContext is not LauncherItem item)
+        if (sender is Control control && control.DataContext is LauncherItem item)
         {
-            return;
+            DeleteItem(item);
         }
+    }
 
+    private void DeleteItem(LauncherItem item)
+    {
         var group = _viewModel.SelectedGroup;
         if (group is null)
         {
@@ -715,6 +734,61 @@ public sealed partial class MainWindow : Window
         _viewModel.Save();
         ReloadItems();
         _viewModel.StatusText = "已删除项目";
+    }
+
+    // B4-1：项目右键菜单。Avalonia 的 ContextMenu 内 MenuItem 不支持 XAML 事件绑定，
+    // 因此在 code-behind 动态构建菜单并挂 Click。
+    private void ShowItemContextMenu(Control control, LauncherItem item)
+    {
+        var menu = new ContextMenu
+        {
+            Items =
+            {
+                new MenuItem { Header = "打开", Tag = item },
+                new MenuItem { Header = "编辑", Tag = item },
+                new MenuItem { Header = "删除", Tag = item },
+                new Separator(),
+                new MenuItem { Header = "上移", Tag = item },
+                new MenuItem { Header = "下移", Tag = item },
+            }
+        };
+
+        foreach (var entry in menu.Items)
+        {
+            if (entry is MenuItem mi)
+            {
+                mi.Click += OnContextMenuItemClick;
+            }
+        }
+
+        menu.Open(control);
+    }
+
+    private void OnContextMenuItemClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem mi || mi.Tag is not LauncherItem item)
+        {
+            return;
+        }
+
+        switch (mi.Header as string)
+        {
+            case "打开":
+                LaunchItem(item);
+                break;
+            case "编辑":
+                OpenEditor(item);
+                break;
+            case "删除":
+                DeleteItem(item);
+                break;
+            case "上移":
+                MoveItem(item, -1);
+                break;
+            case "下移":
+                MoveItem(item, +1);
+                break;
+        }
     }
 
     private void LaunchItem(LauncherItem item)
@@ -957,35 +1031,24 @@ public sealed partial class MainWindow : Window
     /// <summary>B1-4：项目上移（组内手动排序，顺序随配置持久化）。</summary>
     private void OnMoveItemUp(object? sender, RoutedEventArgs e)
     {
-        if (sender is not Control control || control.DataContext is not LauncherItem item)
+        if (sender is Control control && control.DataContext is LauncherItem item)
         {
-            return;
+            MoveItem(item, -1);
         }
-
-        var group = _viewModel.SelectedGroup;
-        if (group is null)
-        {
-            return;
-        }
-
-        var index = group.Items.IndexOf(item);
-        if (index <= 0)
-        {
-            return;
-        }
-
-        group.Items.Move(index, index - 1);
-        SaveAfterChange("已上移：" + item.DisplayName);
     }
 
     /// <summary>B1-4：项目下移（组内手动排序，顺序随配置持久化）。</summary>
     private void OnMoveItemDown(object? sender, RoutedEventArgs e)
     {
-        if (sender is not Control control || control.DataContext is not LauncherItem item)
+        if (sender is Control control && control.DataContext is LauncherItem item)
         {
-            return;
+            MoveItem(item, +1);
         }
+    }
 
+    /// <summary>组内移动项目并持久化；delta=-1 上移，+1 下移。</summary>
+    private void MoveItem(LauncherItem item, int delta)
+    {
         var group = _viewModel.SelectedGroup;
         if (group is null)
         {
@@ -993,13 +1056,14 @@ public sealed partial class MainWindow : Window
         }
 
         var index = group.Items.IndexOf(item);
-        if (index < 0 || index >= group.Items.Count - 1)
+        var target = index + delta;
+        if (index < 0 || target < 0 || target >= group.Items.Count)
         {
             return;
         }
 
-        group.Items.Move(index, index + 1);
-        SaveAfterChange("已下移：" + item.DisplayName);
+        group.Items.Move(index, target);
+        SaveAfterChange((delta < 0 ? "已上移：" : "已下移：") + item.DisplayName);
     }
 
     /// <summary>B1-4：分组上移/下移（分组标签顺序持久化）。</summary>
