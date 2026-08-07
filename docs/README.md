@@ -6,6 +6,7 @@
 | 文档 | 状态 | 说明 |
 |---|---|---|
 | [LanFlow-Linux基线.md](LanFlow-Linux基线.md) | **活跃** | Linux 版功能/UI 基线（Windows 对照），定义 B1–B5 批次与验收规范 |
+| [LanFlow-Linux任务清单.md](LanFlow-Linux任务清单.md) | **活跃** | B1–B5 批次任务清单（可执行任务 + 验收标准 + 状态/完成记录） |
 | [LanFlow-缺陷板与修复冲刺计划.md](LanFlow-缺陷板与修复冲刺计划.md) | **活跃** | D1–D13 缺陷板与修复冲刺记录（持续维护） |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | **活跃** | 架构与发布规范 |
 | [linux-port-devlog.md](linux-port-devlog.md) | 参考 | Linux 移植全过程记录（WPF → Avalonia），历史参考 |
