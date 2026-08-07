@@ -272,7 +272,7 @@ public sealed class HotkeyService : IDisposable
         var tokens = new List<string>();
         if ((modifiers & ControlMask) != 0) tokens.Add("Ctrl");
         if ((modifiers & Mod1Mask) != 0) tokens.Add("Alt");
-        if ((modifiers & ShiftMask) != 0) tokens.Add("Shift");
+        if ((modifiers & ShiftMask) != 0 && !IsShiftSymbol(token)) tokens.Add("Shift");
         if ((modifiers & Mod4Mask) != 0) tokens.Add("Win");
         tokens.Add(token);
         normalized = string.Join('+', tokens);
@@ -334,7 +334,19 @@ public sealed class HotkeyService : IDisposable
         }
 
         var keyToken = tokens[^1];
-        var keysymName = ToKeysymName(keyToken);
+
+        // 符号键（美式布局上档字符）隐式携带 Shift：把它们解析到基础键 keycode，并补上 ShiftMask，
+        // 否则 XGrabKey 会用错误的修饰符去抓取（如 | 需 Shift+反斜杠）。
+        string keysymName;
+        if (keyToken.Length == 1 && _shiftSymbols.TryGetValue(keyToken[0], out var shiftedSymbol))
+        {
+            keysymName = shiftedSymbol.Sym;
+            modifiers |= ShiftMask;
+        }
+        else
+        {
+            keysymName = ToKeysymName(keyToken);
+        }
 
         // keycode 查询用临时连接（仅 XStringToKeysym/XKeysymToKeycode，瞬间关闭，不与循环线程并发）。
         // 非 Linux 环境无 libX11 会抛 DllNotFoundException，须捕获并降级为 false。
@@ -400,6 +412,36 @@ public sealed class HotkeyService : IDisposable
             _ => token,
         };
     }
+
+    /// <summary>美式布局上档符号 → (X11 keysym 名, 是否需要 Shift)。用于把 "Ctrl+|" 这类符号键
+    /// 正确解析为基础键 keycode 并补上 Shift 修饰符。</summary>
+    private static readonly Dictionary<char, (string Sym, bool Shift)> _shiftSymbols = new()
+    {
+        ['~'] = ("asciitilde", true),
+        ['!'] = ("exclam", true),
+        ['@'] = ("at", true),
+        ['#'] = ("numbersign", true),
+        ['$'] = ("dollar", true),
+        ['%'] = ("percent", true),
+        ['^'] = ("asciicircum", true),
+        ['&'] = ("ampersand", true),
+        ['*'] = ("asterisk", true),
+        ['('] = ("parenleft", true),
+        [')'] = ("parenright", true),
+        ['_'] = ("underscore", true),
+        ['+'] = ("plus", true),
+        ['{'] = ("braceleft", true),
+        ['}'] = ("braceright", true),
+        [':'] = ("colon", true),
+        ['"'] = ("quotedbl", true),
+        ['|'] = ("bar", true),
+        ['<'] = ("less", true),
+        ['>'] = ("greater", true),
+        ['?'] = ("question", true),
+    };
+
+    private static bool IsShiftSymbol(string token) =>
+        token.Length == 1 && _shiftSymbols.ContainsKey(token[0]);
 
     [StructLayout(LayoutKind.Sequential, Size = 192)]
     private struct XEvent

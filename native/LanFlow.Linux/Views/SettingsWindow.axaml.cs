@@ -268,8 +268,22 @@ public sealed partial class SettingsWindow : Window
             return; // 无修饰键时放行，保留手动编辑
         }
 
+        // 符号键优先：按住 Shift 的标点/数字排按键用物理键 + Shift 映射出实际符号字符
+        // （如 | ? ~ _ ! @ 等），符号本身已隐含 Shift，展示时不重复加 "Shift"。
+        var shifted = mods.HasFlag(KeyModifiers.Shift);
+        var symbol = SymbolFromPhysicalKey(e.PhysicalKey, shifted);
+
         // 物理键优先（X11 组合键的逻辑 keysym 会被修饰键污染），逻辑键兜底
-        var token = TokenFromPhysicalKey(e.PhysicalKey) ?? TokenFromKey(e.Key);
+        string? token;
+        if (symbol is not null)
+        {
+            token = symbol;
+        }
+        else
+        {
+            token = TokenFromPhysicalKey(e.PhysicalKey) ?? TokenFromKey(e.Key);
+        }
+
         if (token is null)
         {
             return;
@@ -278,7 +292,7 @@ public sealed partial class SettingsWindow : Window
         var parts = new List<string>();
         if (mods.HasFlag(KeyModifiers.Control)) parts.Add("Ctrl");
         if (mods.HasFlag(KeyModifiers.Alt)) parts.Add("Alt");
-        if (mods.HasFlag(KeyModifiers.Shift)) parts.Add("Shift");
+        if (symbol is null && mods.HasFlag(KeyModifiers.Shift)) parts.Add("Shift");
         if (mods.HasFlag(KeyModifiers.Meta)) parts.Add("Win");
         parts.Add(token);
 
@@ -309,6 +323,39 @@ public sealed partial class SettingsWindow : Window
             PhysicalKey.ArrowDown => "Down",
             PhysicalKey.ArrowLeft => "Left",
             PhysicalKey.ArrowRight => "Right",
+            _ => null,
+        };
+    }
+
+    /// <summary>把物理键 + Shift 状态映射为实际符号字符（美式布局）。符号本身隐含 Shift。</summary>
+    private static string? SymbolFromPhysicalKey(PhysicalKey pk, bool shifted)
+    {
+        var n = pk.ToString();
+        if (n.Length == 6 && n.StartsWith("Digit") && int.TryParse(n.Substring(5), out var d))
+        {
+            if (!shifted)
+            {
+                return null; // 无 Shift 的数字由 TokenFromPhysicalKey 输出 "0".."9"
+            }
+
+            // 美式键盘主数字排上档符号：1! 2@ 3# 4$ 5% 6^ 7& 8* 9( 0)
+            const string row = "!@#$%^&*()";
+            return row[d == 0 ? 9 : d - 1].ToString();
+        }
+
+        return pk switch
+        {
+            PhysicalKey.Backslash => shifted ? "|" : "\\",
+            PhysicalKey.Slash => shifted ? "?" : "/",
+            PhysicalKey.Backquote => shifted ? "~" : "`",
+            PhysicalKey.Minus => shifted ? "_" : "-",
+            PhysicalKey.Equal => shifted ? "+" : "=",
+            PhysicalKey.BracketLeft => shifted ? "{" : "[",
+            PhysicalKey.BracketRight => shifted ? "}" : "]",
+            PhysicalKey.Semicolon => shifted ? ":" : ";",
+            PhysicalKey.Quote => shifted ? "\"" : "'",
+            PhysicalKey.Comma => shifted ? "<" : ",",
+            PhysicalKey.Period => shifted ? ">" : ".",
             _ => null,
         };
     }
