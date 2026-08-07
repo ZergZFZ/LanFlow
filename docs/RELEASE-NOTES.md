@@ -29,6 +29,12 @@
 - 每轮测试包 = 一个有效 commit + 取证日志；轮次号递增（如 round3.11 为缺陷板结案轮）。
 - 发布说明随包更新：新增功能、修复项、已知问题见下。
 - 测试卡：包内 `TEST-CARD-rN.md` 为本轮验收清单，U 盘拷贝至目标机逐项勾测。
+- **打包权限注意**：必须用 GNU tar（Git Bash 自带）加 `--mode=755` 打包，否则 Windows bsdtar 不保留 Unix 可执行位，目标机 `./lanflow.sh` 会报「没有那个文件或目录」（round4 首包踩坑，已修正；复现修复命令见下）。
+
+```bash
+# Windows 上正确打包（Git Bash 的 tar 才支持 --mode）
+"D:\Dev\tools\git\usr\bin\tar.exe" --mode=755 -czf LanFlow-linux-x64-roundN.tar.gz -C <pkg_dir> .
+```
 
 ## 4. 已知限制（与 Windows 版差异）
 
