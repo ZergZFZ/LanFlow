@@ -36,6 +36,7 @@ public sealed class HotkeyService : IDisposable
     private readonly object _gate = new();
     private uint _reqModifiers;
     private int _reqKeycode;
+    private string _reqKeysymName = string.Empty;
     private volatile bool _regrabPending;
     private bool _lastGrabOk;
     private int _lastGrabErrorCode;
@@ -61,28 +62,28 @@ public sealed class HotkeyService : IDisposable
     public bool Register(Window window, Action onTriggered, string hotkey = "Ctrl+Alt+L")
     {
         _onTriggered = onTriggered;
-        if (!TryParse(hotkey, out var modifiers, out var keycode, out _))
+        if (!TryParse(hotkey, out var modifiers, out var keycode, out _, out var keysymName))
         {
             LastError = "热键格式无效：" + hotkey;
             return false;
         }
 
-        return RequestGrab(modifiers, keycode);
+        return RequestGrab(modifiers, keycode, keysymName);
     }
 
     public bool TryRegister(string hotkey)
     {
-        if (!TryParse(hotkey, out var modifiers, out var keycode, out _))
+        if (!TryParse(hotkey, out var modifiers, out var keycode, out _, out var keysymName))
         {
             LastError = "热键格式无效：" + hotkey;
             return false;
         }
 
-        return RequestGrab(modifiers, keycode);
+        return RequestGrab(modifiers, keycode, keysymName);
     }
 
     /// <summary>把抓取请求发给循环线程并等待结果（UI 线程不直接碰 Xlib）。</summary>
-    private bool RequestGrab(uint modifiers, int keycode)
+    private bool RequestGrab(uint modifiers, int keycode, string keysymName)
     {
         EnsureLoop();
 
@@ -90,6 +91,7 @@ public sealed class HotkeyService : IDisposable
         {
             _reqModifiers = modifiers;
             _reqKeycode = keycode;
+            _reqKeysymName = keysymName;
             _regrabPending = true;
         }
 
@@ -157,14 +159,16 @@ public sealed class HotkeyService : IDisposable
                 {
                     uint mods;
                     int kc;
+                    string ksn;
                     lock (_gate)
                     {
                         mods = _reqModifiers;
                         kc = _reqKeycode;
+                        ksn = _reqKeysymName;
                         _regrabPending = false;
                     }
 
-                    bool ok = DoGrab(mods, kc);
+                    bool ok = DoGrab(mods, kc, ksn);
                     lock (_gate)
                     {
                         _lastGrabOk = ok;
@@ -216,19 +220,25 @@ public sealed class HotkeyService : IDisposable
         _grabDone.Set();
     }
 
-    /// <summary>在循环线程上执行抓取：先清掉本客户端全部被动抓取，再逐变体抓取并以错误回路判定。</summary>
-    private bool DoGrab(uint modifiers, int keycode)
+    /// <summary>在循环线程上执行抓取：扫描键盘映射找全部匹配 keycode，逐变体抓取并以错误回路判定。</summary>
+    private bool DoGrab(uint modifiers, int fallbackKeycode, string keysymName)
     {
         var root = XDefaultRootWindow(_display);
 
-        Console.WriteLine($"[LanFlow][hotkey] DoGrab keycode={keycode} mod=0x{modifiers:X}");
+        // 扫描键盘映射，找出所有能产生目标 keysym 的 keycode（兼容非美式布局）；
+        // 扫不到时回退到 TryParse 的单一 keycode。
+        var keycodes = FindKeycodesForKeysym(keysymName);
+        if (keycodes.Count == 0 && fallbackKeycode > 0)
+        {
+            keycodes.Add(fallbackKeycode);
+        }
+
+        Console.WriteLine($"[LanFlow][hotkey] DoGrab keycodes=[{string.Join(",", keycodes)}] mod=0x{modifiers:X}");
 
         // 清空本客户端之前的所有被动抓取，避免换键残留
         XUngrabKey(_display, 0, AnyModifier, root);
 
-        // 变体覆盖 Lock(Caps)/Mod2(NumLock)/Shift 的任意组合。
-        // Shift 不再作为强制修饰符：不同布局上符号键的上档层级不同
-        // （美式要 Shift，其它布局可能不要），把 Shift 放进变体让服务器按实际层级匹配。
+        // 变体覆盖 Lock(Caps)/Mod2(NumLock)/Shift 的任意组合，让服务器按实际层级匹配。
         var variants = new[]
         {
             modifiers,
@@ -243,23 +253,74 @@ public sealed class HotkeyService : IDisposable
 
         var anySuccess = false;
         _lastGrabErrorCode = 0;
-        foreach (var m in variants)
+        foreach (var kc in keycodes)
         {
-            _xErrorCode = 0;
-            XGrabKey(_display, keycode, m, root, false, 1, 1);
-            XSync(_display, false); // 强制投递异步错误（如 BadAccess）
-            if (_xErrorCode == 0)
+            foreach (var m in variants)
             {
-                anySuccess = true;
-            }
-            else
-            {
-                _lastGrabErrorCode = _xErrorCode;
-                Console.WriteLine($"[LanFlow] XGrabKey mod=0x{m:X} 失败，X11 错误码={_xErrorCode}");
+                _xErrorCode = 0;
+                XGrabKey(_display, kc, m, root, false, 1, 1);
+                XSync(_display, false); // 强制投递异步错误（如 BadAccess）
+                if (_xErrorCode == 0)
+                {
+                    anySuccess = true;
+                }
+                else
+                {
+                    _lastGrabErrorCode = _xErrorCode;
+                    Console.WriteLine($"[LanFlow] XGrabKey kc={kc} mod=0x{m:X} 失败，X11 错误码={_xErrorCode}");
+                }
             }
         }
 
         return anySuccess;
+    }
+
+    /// <summary>遍历 X 键盘映射，返回所有在任意 Shift 层级上等于目标 keysym 的 keycode。</summary>
+    private List<int> FindKeycodesForKeysym(string keysymName)
+    {
+        var result = new List<int>();
+        try
+        {
+            var keysym = XStringToKeysym(keysymName);
+            if (keysym == IntPtr.Zero)
+            {
+                return result;
+            }
+
+            XDisplayKeycodes(_display, out var minKey, out var maxKey);
+            var ptr = XGetKeyboardMapping(_display, minKey, maxKey - minKey + 1, out var symsPerKey);
+            if (ptr == IntPtr.Zero || symsPerKey <= 0)
+            {
+                return result;
+            }
+
+            try
+            {
+                long target = keysym.ToInt64();
+                for (var k = 0; k <= maxKey - minKey; k++)
+                {
+                    for (var s = 0; s < symsPerKey; s++)
+                    {
+                        var v = Marshal.ReadInt64(ptr, ((k * symsPerKey) + s) * 8);
+                        if (v == target)
+                        {
+                            result.Add(minKey + k);
+                            break;
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                XFree(ptr);
+            }
+        }
+        catch
+        {
+            // 非 Linux 或映射查询失败：返回空，调用方回退到单一 keycode
+        }
+
+        return result;
     }
 
     private string DescribeGrabFailure()
@@ -271,7 +332,7 @@ public sealed class HotkeyService : IDisposable
     public static bool TryNormalize(string value, out string normalized)
     {
         normalized = string.Empty;
-        if (!TryParse(value, out var modifiers, out _, out var token))
+        if (!TryParse(value, out var modifiers, out _, out var token, out _))
         {
             return false;
         }
@@ -294,11 +355,12 @@ public sealed class HotkeyService : IDisposable
 
     public void Dispose() => Unregister();
 
-    private static bool TryParse(string value, out uint modifiers, out int keycode, out string token)
+    private static bool TryParse(string value, out uint modifiers, out int keycode, out string token, out string keysymName)
     {
         modifiers = 0;
         keycode = 0;
         token = string.Empty;
+        keysymName = string.Empty;
 
         if (string.IsNullOrWhiteSpace(value))
         {
@@ -342,9 +404,8 @@ public sealed class HotkeyService : IDisposable
 
         var keyToken = tokens[^1];
 
-        // 符号键解析到基础键 keysym（如 | → bar）拿 keycode；不在这里强制 Shift，
+        // 符号键解析到基础键 keysym（如 | → bar）；不在这里强制 Shift，
         // 上档层级交由 DoGrab 的 Shift 变体覆盖，兼容不同键盘布局。
-        string keysymName;
         if (keyToken.Length == 1 && _shiftSymbols.TryGetValue(keyToken[0], out var shiftedSymbol))
         {
             keysymName = shiftedSymbol.Sym;
@@ -487,4 +548,13 @@ public sealed class HotkeyService : IDisposable
 
     [DllImport("libX11")]
     private static extern IntPtr XSetErrorHandler(IntPtr handler);
+
+    [DllImport("libX11")]
+    private static extern int XDisplayKeycodes(IntPtr display, out int minKeycodes, out int maxKeycodes);
+
+    [DllImport("libX11")]
+    private static extern IntPtr XGetKeyboardMapping(IntPtr display, int firstKeycode, int keycodeCount, out int keysymsPerKeycodeReturn);
+
+    [DllImport("libX11")]
+    private static extern int XFree(IntPtr data);
 }

@@ -560,3 +560,30 @@ round3.9 实机：符号热键能录入、能保存、注册成功（无 BadAcce
 - **最终包：`LanFlow-linux-x64-round3.10.tar.gz`（约 40MB）**，round3–3.9 作废。
 - 实机验证：① 符号热键保存后按下能呼出/隐藏（看 `收到 KeyPress，触发回调`）；
   ② 字母类 Ctrl+Alt+Q 不回退；③ 设置点「确定」不卡。
+
+## 19. 符号键单一 keycode 与物理键不符（D12，2026-08-07，round3.10 实机后）
+
+### 19.1 现象
+
+round3.10 实机：字母（Ctrl+Alt+P，keycode 33）按下有 KeyPress 能触发；但 `\` `~`
+等符号（keycode 204）无论 Ctrl/Alt/Ctrl+Alt 均无 KeyPress。另：CJK 标点（、）与
+带 Shift 组合的录入疑问。
+
+### 19.2 根因
+
+`XKeysymToKeycode` 在中文布局上对符号返回**单一 keycode(204)**，与用户实际按的
+物理键 keycode 不符，抓了个"不存在"的键，故永不命中。字母 keycode 稳定所以正常。
+（CJK 标点无 X keysym，本就不能作全局热键；符号录入 Shift 折叠进字符属设计。）
+
+### 19.3 修复
+
+`DoGrab` 改为**扫描 X 键盘映射**：`XDisplayKeycodes`+`XGetKeyboardMapping` 遍历
+全部 keycode 的各 Shift 层级，找出所有等于目标 keysym 的 keycode **逐个抓取**，
+不再依赖单一 keycode；扫不到回退原 keycode。新增 XDisplayKeycodes/
+XGetKeyboardMapping/XFree 三个 P/Invoke。TryParse 增加 out keysymName 供扫描。
+
+### 19.4 包状态与验证要点
+
+- **最终包：`LanFlow-linux-x64-round3.11.tar.gz`（约 40MB）**，round3–3.10 作废。
+- 实机验证：① Ctrl+Alt+\ / Ctrl+~ / Ctrl+? 保存后按下能呼出/隐藏（看 `收到 KeyPress`）；
+  ② 字母 Ctrl+Alt+P 不回退；③ 确定不卡。日志 `DoGrab keycodes=[…]` 会列出实际抓取的 keycode 集合。
