@@ -113,6 +113,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
         settings.Hotkey = source.Hotkey;
         settings.StartWithWindows = source.StartWithWindows;
         settings.OpenItemsOnSingleClick = source.OpenItemsOnSingleClick;
+        settings.HideOnDeactivate = source.HideOnDeactivate;
+        settings.GroupSwitchMode = source.GroupSwitchMode == "hover" ? "hover" : "click";
+        settings.GroupHoverDelayMs = Math.Clamp(source.GroupHoverDelayMs, 0, 1000);
+        settings.AnimationMode = source.AnimationMode == "off" ? "off" : "on";
         OnPropertyChanged(nameof(Settings));
         OnPropertyChanged(nameof(VisibleItems));
         OnPropertyChanged(nameof(InfoText));

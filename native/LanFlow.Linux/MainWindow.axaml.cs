@@ -28,6 +28,8 @@ public sealed partial class MainWindow : Window
     private LauncherItem? _dragItem;
     private Point _dragStart;
     private bool _isDragging;
+    private int _modalDepth;
+    private int _searchIndex;
 
     public MainWindow()
     {
@@ -46,6 +48,7 @@ public sealed partial class MainWindow : Window
         ReloadItems();
 
         Closing += OnClosing;
+        Deactivated += OnDeactivated;
 
         // 第三轮取证件（缺陷板 v2 §3.3）：窗口打开 500ms 后 dump 分组栏渲染结果
         Opened += (_, _) =>
@@ -126,17 +129,78 @@ public sealed partial class MainWindow : Window
         Hide();
     }
 
+    /// <summary>B2-1 失焦隐藏：无模态对话框且设置开启时，失焦自动隐藏（托盘常驻）。</summary>
+    private void OnDeactivated(object? sender, EventArgs e)
+    {
+        if (_modalDepth > 0 || !_viewModel.Settings.HideOnDeactivate)
+        {
+            return;
+        }
+
+        Hide();
+    }
+
+    /// <summary>模态对话框守卫：对话框打开期间不触发失焦隐藏（ShowDialog 会让主窗口 Deactivated）。</summary>
+    private async Task<T> ShowDialogGuarded<T>(T dialog) where T : Window
+    {
+        _modalDepth++;
+        try
+        {
+            await dialog.ShowDialog(this);
+        }
+        finally
+        {
+            _modalDepth--;
+        }
+
+        return dialog;
+    }
+
     private void OnSearchChanged(object? sender, TextChangedEventArgs e)
     {
+        _searchIndex = 0;
         _viewModel.SearchText = SearchBox.Text ?? string.Empty;
         ReloadItems();
+    }
+
+    /// <summary>B2-6 搜索键盘操作：Enter 启动、上下键遍历结果、Esc 清空。</summary>
+    private void OnSearchKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape)
+        {
+            SearchBox.Text = string.Empty;
+            e.Handled = true;
+            return;
+        }
+
+        var items = _viewModel.VisibleItems.ToList();
+        if (items.Count == 0)
+        {
+            return;
+        }
+
+        switch (e.Key)
+        {
+            case Key.Enter:
+                LaunchItem(items[Math.Clamp(_searchIndex, 0, items.Count - 1)]);
+                e.Handled = true;
+                break;
+            case Key.Down:
+                _searchIndex = Math.Min(_searchIndex + 1, items.Count - 1);
+                e.Handled = true;
+                break;
+            case Key.Up:
+                _searchIndex = Math.Max(_searchIndex - 1, 0);
+                e.Handled = true;
+                break;
+        }
     }
 
     private async void OnOpenSettings(object? sender, RoutedEventArgs e)
     {
         var settingsWindow = new Views.SettingsWindow(_viewModel);
         settingsWindow.OnApplied = RefreshAfterSettings;
-        await settingsWindow.ShowDialog(this);
+        await ShowDialogGuarded(settingsWindow);
     }
 
     private void RefreshAfterSettings()
@@ -243,6 +307,28 @@ public sealed partial class MainWindow : Window
                 border.Child = tabContent;
                 border.PointerPressed += (_, _) => SelectGroup(group);
 
+                // B2-4 悬停切换：设置开启时，悬停停留达延迟后自动切换分组
+                if (_viewModel.Settings.GroupSwitchMode == "hover")
+                {
+                    var hoverTimer = new DispatcherTimer
+                    {
+                        Interval = TimeSpan.FromMilliseconds(Math.Max(0, _viewModel.Settings.GroupHoverDelayMs)),
+                    };
+                    hoverTimer.Tick += (_, _) =>
+                    {
+                        hoverTimer.Stop();
+                        SelectGroup(group);
+                    };
+                    border.PointerEntered += (_, _) =>
+                    {
+                        if (group != _viewModel.SelectedGroup)
+                        {
+                            hoverTimer.Start();
+                        }
+                    };
+                    border.PointerExited += (_, _) => hoverTimer.Stop();
+                }
+
                 DragDrop.SetAllowDrop(border, true);
                 border.AddHandler(DragDrop.DragOverEvent, (s, ev) =>
                 {
@@ -277,13 +363,18 @@ public sealed partial class MainWindow : Window
 
     private void ReloadItems()
     {
-        LoadIcons();
-        ItemsControl.ItemsSource = _viewModel.VisibleItems;
+        var items = _viewModel.VisibleItems.ToList();
+        LoadIcons(items);
+        ItemsControl.ItemsSource = items;
+        EmptyStateText.IsVisible = items.Count == 0;
+        EmptyStateText.Text = string.IsNullOrWhiteSpace(_viewModel.SearchText)
+            ? "该分组暂无项目\n点击「添加文件」或进入编辑模式添加"
+            : "未找到匹配的项目";
     }
 
-    private void LoadIcons()
+    private void LoadIcons(IReadOnlyList<LauncherItem> items)
     {
-        foreach (var item in _viewModel.VisibleItems)
+        foreach (var item in items)
         {
             if (item.IconImage is null)
             {
@@ -674,7 +765,7 @@ public sealed partial class MainWindow : Window
         }
 
         var dialog = new Views.EditGroupWindow { GroupName = _viewModel.SelectedGroup.Name };
-        await dialog.ShowDialog(this);
+        await ShowDialogGuarded(dialog);
         if (dialog.Confirmed)
         {
             _viewModel.SelectedGroup.Name = dialog.GroupName;
@@ -713,7 +804,7 @@ public sealed partial class MainWindow : Window
         var item = new LauncherItem { Name = string.Empty, Kind = "app" };
         var dialog = new Views.EditItemWindow();
         dialog.InitializeDialog(item);
-        await dialog.ShowDialog(this);
+        await ShowDialogGuarded(dialog);
         if (dialog.Confirmed && (!string.IsNullOrWhiteSpace(item.Path) || item.IsCommand))
         {
             group.Items.Add(item);
@@ -930,7 +1021,7 @@ public sealed partial class MainWindow : Window
     {
         var dialog = new Views.EditItemWindow();
         dialog.InitializeDialog(item);
-        await dialog.ShowDialog(this);
+        await ShowDialogGuarded(dialog);
         if (dialog.Confirmed)
         {
             item.IconImage = null;

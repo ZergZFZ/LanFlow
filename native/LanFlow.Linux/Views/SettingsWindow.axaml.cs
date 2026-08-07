@@ -125,6 +125,10 @@ public sealed partial class SettingsWindow : Window
         ShowFullToggle.IsChecked = _working.ShowFullItemName;
         ShowTitleToggle.IsChecked = _working.ShowItemTitle;
         StartupToggle.IsChecked = _working.StartWithWindows;
+        HideOnDeactivateToggle.IsChecked = _working.HideOnDeactivate;
+        GroupHoverToggle.IsChecked = _working.GroupSwitchMode == "hover";
+        GroupHoverDelayBox.Value = _working.GroupHoverDelayMs;
+        AnimationToggle.IsChecked = _working.AnimationMode != "off";
 
         HotkeyBox.Text = _working.Hotkey;
         HotkeyHint.Text = "当前：" + _working.Hotkey;
@@ -419,6 +423,10 @@ public sealed partial class SettingsWindow : Window
         _working.ShowFullItemName = ShowFullToggle.IsChecked == true;
         _working.ShowItemTitle = ShowTitleToggle.IsChecked == true;
         _working.StartWithWindows = StartupToggle.IsChecked == true;
+        _working.HideOnDeactivate = HideOnDeactivateToggle.IsChecked == true;
+        _working.GroupSwitchMode = GroupHoverToggle.IsChecked == true ? "hover" : "click";
+        _working.GroupHoverDelayMs = (int)GroupHoverDelayBox.Value.GetValueOrDefault();
+        _working.AnimationMode = AnimationToggle.IsChecked == false ? "off" : "on";
 
         if (HotkeyService.TryNormalize(HotkeyBox.Text ?? string.Empty, out var normalized))
         {

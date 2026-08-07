@@ -137,6 +137,19 @@ public sealed class Settings
     [JsonPropertyName("openItemsOnSingleClick")]
     public bool OpenItemsOnSingleClick { get; set; } = true;
 
+    // ---- B2 交互体验新增（Linux 对齐 Windows 基线）----
+    [JsonPropertyName("hideOnDeactivate")]
+    public bool HideOnDeactivate { get; set; }
+
+    [JsonPropertyName("groupSwitchMode")]
+    public string GroupSwitchMode { get; set; } = "click";
+
+    [JsonPropertyName("groupHoverDelayMs")]
+    public int GroupHoverDelayMs { get; set; } = 300;
+
+    [JsonPropertyName("animationMode")]
+    public string AnimationMode { get; set; } = "on";
+
     public Settings Clone() => new()
     {
         Hotkey = Hotkey,
@@ -160,6 +173,10 @@ public sealed class Settings
         GroupLayout = GroupLayout,
         StartWithWindows = StartWithWindows,
         OpenItemsOnSingleClick = OpenItemsOnSingleClick,
+        HideOnDeactivate = HideOnDeactivate,
+        GroupSwitchMode = GroupSwitchMode,
+        GroupHoverDelayMs = GroupHoverDelayMs,
+        AnimationMode = AnimationMode,
     };
 }
 

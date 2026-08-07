@@ -70,6 +70,14 @@
                     <views:LabelToggle x:Name="ShowFullToggle" Title="显示完整名称" Description="不截断过长名称" />
                     <views:LabelToggle x:Name="ShowTitleToggle" Title="显示项目标题" Description="在图标下方显示名称" />
                     <views:LabelToggle x:Name="StartupToggle" Title="开机自启动" Description="登录系统后自动启动 LanFlow" />
+                    <!-- B2 交互体验：失焦隐藏 / 悬停切换 / 动画 -->
+                    <views:LabelToggle x:Name="HideOnDeactivateToggle" Title="失焦自动隐藏" Description="窗口失去焦点后自动隐藏到托盘" />
+                    <views:LabelToggle x:Name="GroupHoverToggle" Title="悬停切换分组" Description="鼠标悬停分组标签自动切换，关闭则需点击" />
+                    <Grid ColumnDefinitions="*,200">
+                        <TextBlock Grid.Column="0" Text="悬停延迟（毫秒）" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
+                        <NumericUpDown Grid.Column="1" x:Name="GroupHoverDelayBox" Minimum="0" Maximum="1000" />
+                    </Grid>
+                    <views:LabelToggle x:Name="AnimationToggle" Title="启用动画" Description="界面切换使用过渡动画" />
                 </StackPanel>
 
                 <StackPanel Spacing="8">
