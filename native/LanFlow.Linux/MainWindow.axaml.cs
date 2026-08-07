@@ -8,6 +8,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using LanFlow.Desktop.Models;
 using LanFlow.Desktop.Services;
@@ -214,12 +215,32 @@ public sealed partial class MainWindow : Window
                     BorderBrush = GetBrush("SurfaceBorderBrush"),
                     BorderThickness = new Thickness(1),
                 };
-                border.Child = new TextBlock
+                // B1-4：编辑模式显示分组上移/下移按钮（手动排序持久化）
+                var tabContent = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+                tabContent.Children.Add(new TextBlock
                 {
                     Text = group.Name,
                     Foreground = GetBrush("TextPrimaryBrush"),
                     FontSize = 13,
-                };
+                    VerticalAlignment = VerticalAlignment.Center,
+                });
+                if (_editMode)
+                {
+                    var up = new Button
+                    {
+                        Content = "↑", Width = 20, Height = 20, Padding = new Thickness(0), FontSize = 10,
+                    };
+                    up.Click += (_, _) => OnMoveGroupUp(group);
+                    tabContent.Children.Add(up);
+
+                    var down = new Button
+                    {
+                        Content = "↓", Width = 20, Height = 20, Padding = new Thickness(0), FontSize = 10,
+                    };
+                    down.Click += (_, _) => OnMoveGroupDown(group);
+                    tabContent.Children.Add(down);
+                }
+                border.Child = tabContent;
                 border.PointerPressed += (_, _) => SelectGroup(group);
 
                 DragDrop.SetAllowDrop(border, true);
@@ -274,6 +295,12 @@ public sealed partial class MainWindow : Window
     private void OnItemPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (!_editMode || sender is not Control control)
+        {
+            return;
+        }
+
+        // 排序/删除按钮的点击不进入拖拽或编辑流程，避免按钮 Click 与 Border 手势冲突
+        if (e.Source is Button)
         {
             return;
         }
@@ -495,6 +522,12 @@ public sealed partial class MainWindow : Window
                 continue;
             }
 
+            // 去重：同一分组内已存在的路径跳过（拖放/批量添加/目录导入共用此入口）
+            if (group.Items.Any(i => string.Equals(i.Path, path, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
             group.Items.Add(CreateItemFromPath(path));
             added++;
         }
@@ -677,7 +710,7 @@ public sealed partial class MainWindow : Window
             BuildGroupTabs();
         }
 
-        var item = new LauncherItem { Name = "新项目", Kind = "app" };
+        var item = new LauncherItem { Name = string.Empty, Kind = "app" };
         var dialog = new Views.EditItemWindow();
         dialog.InitializeDialog(item);
         await dialog.ShowDialog(this);
@@ -696,6 +729,201 @@ public sealed partial class MainWindow : Window
             ReloadItems();
             _viewModel.StatusText = "已添加项目：" + item.DisplayName;
         }
+    }
+
+    /// <summary>B1-1：批量添加文件（多选），自动命名并直接入库，不逐个弹编辑框。</summary>
+    private async void OnAddFilesBatch(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "批量添加文件（可多选）",
+                AllowMultiple = true,
+            });
+
+            var paths = files.Select(f => f.Path.LocalPath).ToList();
+            Console.WriteLine($"[LanFlow] 批量添加 {paths.Count} 个文件");
+            if (paths.Count > 0)
+            {
+                DropFiles(paths, _viewModel.SelectedGroup);
+            }
+            else
+            {
+                _viewModel.StatusText = "未选择文件";
+            }
+        }
+        catch (Exception ex)
+        {
+            // UOS 上 DBus portal 缺失时 OpenFilePicker 可能抛异常，必须落日志不崩溃
+            _viewModel.StatusText = "批量添加失败：" + ex.Message;
+            Console.WriteLine("[LanFlow] 批量添加异常: " + ex);
+        }
+    }
+
+    /// <summary>B1-1：从目录导入——扫描目录内 .desktop 与可执行文件，批量加入当前分组。</summary>
+    private async void OnImportDirectory(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var dirs = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            {
+                Title = "选择要导入的目录",
+                AllowMultiple = false,
+            });
+            if (dirs.Count == 0)
+            {
+                return;
+            }
+
+            var dir = dirs[0].Path.LocalPath;
+            var paths = new List<string>();
+            try
+            {
+                foreach (var file in Directory.EnumerateFiles(dir))
+                {
+                    if (paths.Count >= 500)
+                    {
+                        break;
+                    }
+
+                    if (IsImportableFile(file))
+                    {
+                        paths.Add(file);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[LanFlow] 目录扫描失败: " + ex);
+            }
+
+            Console.WriteLine($"[LanFlow] 从目录导入 {paths.Count} 个条目: {dir}");
+            if (paths.Count > 0)
+            {
+                DropFiles(paths, _viewModel.SelectedGroup);
+            }
+            else
+            {
+                _viewModel.StatusText = "目录内未找到可导入的应用";
+            }
+        }
+        catch (Exception ex)
+        {
+            _viewModel.StatusText = "目录导入失败：" + ex.Message;
+            Console.WriteLine("[LanFlow] 目录导入异常: " + ex);
+        }
+    }
+
+    /// <summary>目录导入的条目判定：.desktop 全收；普通文件要求具备可执行位（兼容 glibc 2.28 的 UOS）。</summary>
+    private static bool IsImportableFile(string path)
+    {
+        if (path.EndsWith(".desktop", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (!File.Exists(path))
+        {
+            return false;
+        }
+
+        try
+        {
+            var mode = File.GetUnixFileMode(path);
+            const UnixFileMode anyExec =
+                UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute;
+            return (mode & anyExec) != 0;
+        }
+        catch
+        {
+            // Windows 探针/开发机无有效 Unix 权限位，按常见可执行扩展名兜底
+            return path.EndsWith(".sh", StringComparison.OrdinalIgnoreCase)
+                || path.EndsWith(".AppImage", StringComparison.OrdinalIgnoreCase)
+                || path.EndsWith(".run", StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    /// <summary>B1-4：项目上移（组内手动排序，顺序随配置持久化）。</summary>
+    private void OnMoveItemUp(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Control control || control.DataContext is not LauncherItem item)
+        {
+            return;
+        }
+
+        var group = _viewModel.SelectedGroup;
+        if (group is null)
+        {
+            return;
+        }
+
+        var index = group.Items.IndexOf(item);
+        if (index <= 0)
+        {
+            return;
+        }
+
+        group.Items.Move(index, index - 1);
+        SaveAfterChange("已上移：" + item.DisplayName);
+    }
+
+    /// <summary>B1-4：项目下移（组内手动排序，顺序随配置持久化）。</summary>
+    private void OnMoveItemDown(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Control control || control.DataContext is not LauncherItem item)
+        {
+            return;
+        }
+
+        var group = _viewModel.SelectedGroup;
+        if (group is null)
+        {
+            return;
+        }
+
+        var index = group.Items.IndexOf(item);
+        if (index < 0 || index >= group.Items.Count - 1)
+        {
+            return;
+        }
+
+        group.Items.Move(index, index + 1);
+        SaveAfterChange("已下移：" + item.DisplayName);
+    }
+
+    /// <summary>B1-4：分组上移/下移（分组标签顺序持久化）。</summary>
+    private void MoveGroup(Group group, int delta)
+    {
+        var index = _viewModel.Config.Groups.IndexOf(group);
+        var target = index + delta;
+        if (index < 0 || target < 0 || target >= _viewModel.Config.Groups.Count)
+        {
+            return;
+        }
+
+        _viewModel.Config.Groups.Move(index, target);
+        SaveAfterChange("已调整分组顺序");
+        BuildGroupTabs();
+    }
+
+    private void OnMoveGroupUp(Group group) => MoveGroup(group, -1);
+
+    private void OnMoveGroupDown(Group group) => MoveGroup(group, 1);
+
+    private void SaveAfterChange(string status)
+    {
+        try
+        {
+            _viewModel.Save();
+        }
+        catch (Exception ex)
+        {
+            _viewModel.StatusText = "保存失败：" + ex.Message;
+        }
+
+        ReloadItems();
+        _viewModel.StatusText = status;
     }
 
     private async void OpenEditor(LauncherItem item)

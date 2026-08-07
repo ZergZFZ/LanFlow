@@ -1,3 +1,4 @@
+using System.IO;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
@@ -62,12 +63,23 @@ public sealed partial class EditItemWindow : Window
             var path = file.Path.LocalPath;
             PathBox.Text = path;
 
-            if (path.EndsWith(".desktop", System.StringComparison.OrdinalIgnoreCase))
+            // B1-2：选中文件后自动命名。名称框为空或仍是占位"新项目"时自动填充：
+            // .desktop 取桌面入口 Name，其余取文件名（去扩展名）。
+            if (string.IsNullOrWhiteSpace(NameBox.Text) || NameBox.Text == "新项目")
             {
-                var (name, _, _) = ShellIconService.ParseDesktop(path);
-                if (string.IsNullOrWhiteSpace(NameBox.Text) && !string.IsNullOrWhiteSpace(name))
+                if (path.EndsWith(".desktop", StringComparison.OrdinalIgnoreCase))
                 {
-                    NameBox.Text = name;
+                    var (name, _, _) = ShellIconService.ParseDesktop(path);
+                    NameBox.Text = string.IsNullOrWhiteSpace(name)
+                        ? Path.GetFileNameWithoutExtension(path)
+                        : name;
+                }
+                else
+                {
+                    var fileName = Path.GetFileNameWithoutExtension(path);
+                    NameBox.Text = string.IsNullOrWhiteSpace(fileName)
+                        ? Path.GetFileName(path)
+                        : fileName;
                 }
             }
         }
