@@ -7,7 +7,9 @@
 |---|---|---|
 | [LanFlow-Linux基线.md](LanFlow-Linux基线.md) | **活跃** | Linux 版功能/UI 基线（Windows 对照），定义 B1–B5 批次与验收规范 |
 | [LanFlow-Linux任务清单.md](LanFlow-Linux任务清单.md) | **活跃** | B1–B5 批次任务清单（可执行任务 + 验收标准 + 状态/完成记录） |
+| [LanFlow-Linux测试基线.md](LanFlow-Linux测试基线.md) | **活跃** | 当前测试基线：round4 包、覆盖 commit 与验收点（实机结果回填） |
 | [LanFlow-缺陷板与修复冲刺计划.md](LanFlow-缺陷板与修复冲刺计划.md) | **活跃** | D1–D13 缺陷板与修复冲刺记录（持续维护） |
+| [RELEASE-NOTES.md](RELEASE-NOTES.md) | **活跃** | Linux 发布说明：版本/安装更新/已知限制（随测试包分发） |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | **活跃** | 架构与发布规范 |
 | [linux-port-devlog.md](linux-port-devlog.md) | 参考 | Linux 移植全过程记录（WPF → Avalonia），历史参考 |
 | archive/Settings-UI-Beautify.md | 归档 | Windows 旧迭代：设置美化 |
