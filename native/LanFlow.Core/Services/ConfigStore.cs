@@ -6,6 +6,9 @@ namespace LanFlow.Desktop.Services;
 
 public sealed class ConfigStore
 {
+    /// <summary>B5-4：当前配置版本。每次结构变更时递增，旧版本在 Load 时受控迁移。</summary>
+    private const int CurrentConfigVersion = 1;
+
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -19,9 +22,13 @@ public sealed class ConfigStore
     public ConfigStore(string defaultHotkey = "Ctrl+Alt+Space")
     {
         _defaultHotkey = defaultHotkey;
-        _configDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "LanFlow");
+        // B5-4：支持换位置——环境变量 LANFLOW_CONFIG_DIR 覆盖配置目录（UOS 无 UI 迁移需求的最小支持）。
+        var overrideDir = Environment.GetEnvironmentVariable("LANFLOW_CONFIG_DIR");
+        _configDirectory = string.IsNullOrWhiteSpace(overrideDir)
+            ? Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "LanFlow")
+            : overrideDir;
         _configPath = Path.Combine(_configDirectory, "config.json");
     }
 
@@ -49,6 +56,13 @@ public sealed class ConfigStore
 
     private AppConfig Normalize(AppConfig config)
     {
+        // B5-4：受控迁移——旧配置（version 缺失=0）迁移到当前版本。
+        // v0→v1：无需结构性改写（字段默认值兜底已在下方 Normalize 完成），仅补齐版本号。
+        if (config.Version < CurrentConfigVersion)
+        {
+            config.Version = CurrentConfigVersion;
+        }
+
         config.Settings ??= new Settings();
         var settings = config.Settings;
         // 空热键用平台默认值；若仍是旧默认 Alt+Space（常被窗口管理器占用），

@@ -5,6 +5,10 @@ namespace LanFlow.Desktop.Models;
 
 public sealed class AppConfig
 {
+    /// <summary>B5-4：配置版本号。旧配置（无此字段）视为 0，Load 时受控迁移到当前版本。</summary>
+    [JsonPropertyName("version")]
+    public int Version { get; set; }
+
     [JsonPropertyName("groups")]
     public ObservableCollection<Group> Groups { get; set; } = [];
 

@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Avalonia.Media;
@@ -13,13 +13,16 @@ namespace LanFlow.Desktop.Services;
 /// </summary>
 public sealed class ShellIconService
 {
-    // B3-6/B5-1：缓存提升为静态（设置窗口与主窗口可共享清空），后续由 LRU 上限约束容量
-    private static readonly ConcurrentDictionary<string, IImage?> Cache = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>B5-1：图标缓存上限（对齐 Windows E1 LRU 256 项），超限淘汰最久未用。</summary>
+    private const int CacheLimit = 256;
+
+    // B3-6/B5-1：缓存为静态（设置窗口与主窗口可共享清空），LRU 约束容量
+    private static readonly LruCache<string, IImage?> Cache = new(CacheLimit);
 
     public IImage? GetIcon(LauncherItem item)
     {
         var key = (item.Path ?? string.Empty) + "|" + (item.Icon ?? string.Empty);
-        return Cache.GetOrAdd(key, _ => Extract(item));
+        return Cache.GetOrAdd(key, () => Extract(item));
     }
 
     /// <summary>B3-6：清空图标缓存（设置页"清空缓存"按钮）。</summary>
@@ -210,6 +213,52 @@ public sealed class ShellIconService
         catch
         {
             return null;
+        }
+    }
+}
+
+/// <summary>B5-1：轻量 LRU 缓存（容量上限，命中提升使用序，超限淘汰最久未用）。GetOrAdd/Clear 线程安全。</summary>
+internal sealed class LruCache<TKey, TValue> where TKey : notnull
+{
+    private readonly int _capacity;
+    private readonly object _lock = new();
+    private readonly Dictionary<TKey, LinkedListNode<(TKey Key, TValue Value)>> _map = new();
+    private readonly LinkedList<(TKey Key, TValue Value)> _order = new();
+
+    public LruCache(int capacity) => _capacity = Math.Max(1, capacity);
+
+    public TValue GetOrAdd(TKey key, Func<TValue> factory)
+    {
+        lock (_lock)
+        {
+            if (_map.TryGetValue(key, out var existing))
+            {
+                _order.Remove(existing);
+                _order.AddFirst(existing);
+                return existing.Value.Value;
+            }
+
+            var value = factory();
+            var node = _order.AddFirst((key, value));
+            _map[key] = node;
+
+            while (_map.Count > _capacity)
+            {
+                var last = _order.Last;
+                _map.Remove(last.Value.Key);
+                _order.RemoveLast();
+            }
+
+            return value;
+        }
+    }
+
+    public void Clear()
+    {
+        lock (_lock)
+        {
+            _map.Clear();
+            _order.Clear();
         }
     }
 }
