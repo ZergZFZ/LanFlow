@@ -587,3 +587,23 @@ XGetKeyboardMapping/XFree 三个 P/Invoke。TryParse 增加 out keysymName 供�
 - **最终包：`LanFlow-linux-x64-round3.11.tar.gz`（约 40MB）**，round3–3.10 作废。
 - 实机验证：① Ctrl+Alt+\ / Ctrl+~ / Ctrl+? 保存后按下能呼出/隐藏（看 `收到 KeyPress`）；
   ② 字母 Ctrl+Alt+P 不回退；③ 确定不卡。日志 `DoGrab keycodes=[…]` 会列出实际抓取的 keycode 集合。
+
+## 20. 中文布局符号热键的物理键边界（D13 结论，2026-08-07，round3.11 实机后）
+
+### 20.1 现象
+
+round3.11（keymap 扫描版）实机：`DoGrab keycodes=[204]`（反斜杠 keysym 的唯一 keycode），
+注册成功但按下物理 `\` 键仍无 KeyPress；字母 keycode=46 正常触发。
+
+### 20.2 结论（非代码缺陷，是布局边界）
+
+中文布局上"键帽符号"与"X 键表中该符号 keysym 所在 keycode"不一致：
+keysym 反查（含全键表扫描）得到 204，但用户物理 `\` 键产生另一 keycode，
+故基于 keysym 的被动抓取永远对不上物理键。字母/数字 keycode 跨布局稳定，故可靠。
+彻底修复需录入瞬间抓原始 keycode（evdev→X 硬件映射），在离线实机上无法可靠验证，属脆弱方案。
+
+### 20.3 决策
+
+- **推荐热键用 字母/数字 + 修饰键**（如 Ctrl+Alt+Q / Ctrl+Alt+1），round3.11 已可靠。
+- ASCII 符号在中文布局不保证；CJK 标点（、。）无 X keysym，不可用。
+- 现状包 round3.11 不变，不再为符号键出包；本结论留痕闭环。
