@@ -43,7 +43,6 @@ public sealed partial class MainWindow : Window
         TransparencyLevelHint = new[] { WindowTransparencyLevel.None };
         App.ApplyThemeColors(_viewModel.Settings);
         ApplyMetrics(_viewModel.Settings);
-        Opacity = _viewModel.Settings.Opacity;
         BuildGroupTabs();
         ReloadItems();
 
@@ -207,7 +206,8 @@ public sealed partial class MainWindow : Window
     {
         App.ApplyThemeColors(_viewModel.Settings);
         ApplyMetrics(_viewModel.Settings);
-        Opacity = _viewModel.Settings.Opacity;
+        // B3-6：设置变更后清图标缓存，按当前主题/图标解析重新加载
+        ShellIconService.Clear();
         BuildGroupTabs();
         ReloadItems();
         if (_hotkey?.TryRegister(_viewModel.Settings.Hotkey) == false)
@@ -242,6 +242,25 @@ public sealed partial class MainWindow : Window
         {
             DockPanel.SetDock(GroupsHost, Dock.Left);
             GroupTabs.Orientation = Orientation.Vertical;
+        }
+
+        // B3-2 透明度双模式：整窗 = 窗口整体 Opacity；分层 = 仅项目区内容透明
+        // （窗口自身保持不透明，避免 X11 visual 重建卡死——D6 教训）
+        if (settings.TransparencyMode == "wholeWindow")
+        {
+            Opacity = Math.Clamp(settings.WholeWindowOpacity, 0.55, 1.0);
+            if (ItemsHost is not null)
+            {
+                ItemsHost.Opacity = 1;
+            }
+        }
+        else
+        {
+            Opacity = 1;
+            if (ItemsHost is not null)
+            {
+                ItemsHost.Opacity = Math.Clamp(settings.LayeredOpacity, 0.55, 1.0);
+            }
         }
     }
 

@@ -13,13 +13,17 @@ namespace LanFlow.Desktop.Services;
 /// </summary>
 public sealed class ShellIconService
 {
-    private readonly ConcurrentDictionary<string, IImage?> _cache = new(StringComparer.OrdinalIgnoreCase);
+    // B3-6/B5-1：缓存提升为静态（设置窗口与主窗口可共享清空），后续由 LRU 上限约束容量
+    private static readonly ConcurrentDictionary<string, IImage?> Cache = new(StringComparer.OrdinalIgnoreCase);
 
     public IImage? GetIcon(LauncherItem item)
     {
         var key = (item.Path ?? string.Empty) + "|" + (item.Icon ?? string.Empty);
-        return _cache.GetOrAdd(key, _ => Extract(item));
+        return Cache.GetOrAdd(key, _ => Extract(item));
     }
+
+    /// <summary>B3-6：清空图标缓存（设置页"清空缓存"按钮）。</summary>
+    public static void Clear() => Cache.Clear();
 
     private static IImage? Extract(LauncherItem item)
     {

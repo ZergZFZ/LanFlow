@@ -150,6 +150,16 @@ public sealed class Settings
     [JsonPropertyName("animationMode")]
     public string AnimationMode { get; set; } = "on";
 
+    // ---- B3 透明度双模式（对齐 Windows：分层/整窗）----
+    [JsonPropertyName("transparencyMode")]
+    public string TransparencyMode { get; set; } = "layered";
+
+    [JsonPropertyName("layeredOpacity")]
+    public double LayeredOpacity { get; set; } = 1.0;
+
+    [JsonPropertyName("wholeWindowOpacity")]
+    public double WholeWindowOpacity { get; set; } = 0.85;
+
     public Settings Clone() => new()
     {
         Hotkey = Hotkey,
@@ -177,6 +187,9 @@ public sealed class Settings
         GroupSwitchMode = GroupSwitchMode,
         GroupHoverDelayMs = GroupHoverDelayMs,
         AnimationMode = AnimationMode,
+        TransparencyMode = TransparencyMode,
+        LayeredOpacity = LayeredOpacity,
+        WholeWindowOpacity = WholeWindowOpacity,
     };
 }
 

@@ -117,6 +117,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
         settings.GroupSwitchMode = source.GroupSwitchMode == "hover" ? "hover" : "click";
         settings.GroupHoverDelayMs = Math.Clamp(source.GroupHoverDelayMs, 0, 1000);
         settings.AnimationMode = source.AnimationMode == "off" ? "off" : "on";
+        settings.TransparencyMode = source.TransparencyMode == "wholeWindow" ? "wholeWindow" : "layered";
+        settings.LayeredOpacity = Math.Clamp(source.LayeredOpacity, 0.55, 1.0);
+        settings.WholeWindowOpacity = Math.Clamp(source.WholeWindowOpacity, 0.55, 1.0);
         OnPropertyChanged(nameof(Settings));
         OnPropertyChanged(nameof(VisibleItems));
         OnPropertyChanged(nameof(InfoText));

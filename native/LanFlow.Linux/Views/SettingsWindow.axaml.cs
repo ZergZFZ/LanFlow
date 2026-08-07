@@ -1,5 +1,8 @@
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -60,6 +63,9 @@ public sealed partial class SettingsWindow : Window
         HotkeyBox.AddHandler(InputElement.KeyDownEvent, OnHotkeyBoxKeyDown,
             Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
         InitializeState();
+        // B3-1：默认选中第一个分类（外观与主题）
+        CategoryList.SelectedIndex = 0;
+        ShowPanel(0);
 
         // 第三轮取证件（缺陷板 v2 §3.2）：窗口打开 500ms 后 dump 关键控件尺寸
         Opened += (_, _) =>
@@ -108,8 +114,11 @@ public sealed partial class SettingsWindow : Window
 
         ProfileBox.ItemsSource = BuildProfileList();
         ProfileBox.SelectedItem = _working.ThemeProfile;
+        ThemeProfileBox.Text = _working.ThemeProfile;
 
         OpacityBox.Value = _working.Opacity;
+        TransparencyModeBox.SelectedIndex = _working.TransparencyMode == "wholeWindow" ? 1 : 0;
+        RefreshOpacityFromMode();
         LayoutBox.SelectedIndex = _working.LayoutMode == "card" ? 1 : 0;
         GroupBoxLayoutBox.SelectedIndex = _working.GroupLayout == "top" ? 1 : 0;
         IconSizeBox.Value = (decimal)_working.IconSize;
@@ -119,6 +128,7 @@ public sealed partial class SettingsWindow : Window
         RowSpacingBox.Value = (decimal)_working.RowSpacing;
         ContentPaddingBox.Value = (decimal)_working.ContentPadding;
         CardSizeRow.IsVisible = _working.LayoutMode == "card";
+        ThemeProfileBox.Text = _working.ThemeProfile;
 
         OpenSingleClickToggle.IsChecked = _working.OpenItemsOnSingleClick;
         ShowBadgeToggle.IsChecked = _working.ShowShortcutBadge;
@@ -132,6 +142,11 @@ public sealed partial class SettingsWindow : Window
 
         HotkeyBox.Text = _working.Hotkey;
         HotkeyHint.Text = "当前：" + _working.Hotkey;
+
+        // B3-6 性能页 / B3-5 关于页
+        CacheStatusText.Text = string.Empty;
+        ConfigPathText.Text = Path.Combine(ConfigDir, "config.json");
+        VersionText.Text = "版本：" + (Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "未知");
 
         BuildColorRows();
     }
@@ -410,6 +425,15 @@ public sealed partial class SettingsWindow : Window
     private void OnConfirm(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         _working.Opacity = OpacityBox.Value;
+        _working.TransparencyMode = TransparencyModeBox.SelectedIndex == 1 ? "wholeWindow" : "layered";
+        if (_working.TransparencyMode == "wholeWindow")
+        {
+            _working.WholeWindowOpacity = OpacityBox.Value;
+        }
+        else
+        {
+            _working.LayeredOpacity = OpacityBox.Value;
+        }
         _working.LayoutMode = LayoutBox.SelectedIndex == 1 ? "card" : "tile";
         _working.GroupLayout = GroupBoxLayoutBox.SelectedIndex == 1 ? "top" : "left";
         _working.IconSize = (double)IconSizeBox.Value.GetValueOrDefault();
@@ -438,6 +462,11 @@ public sealed partial class SettingsWindow : Window
             _working.ThemeProfile = profile;
         }
 
+        if (!string.IsNullOrWhiteSpace(ThemeProfileBox.Text))
+        {
+            _working.ThemeProfile = ThemeProfileBox.Text!;
+        }
+
         _viewModel.ApplyAppearance(_working, persist: true);
         App.ApplyThemeColors(_viewModel.Settings);
         _startup.SetEnabled(_working.StartWithWindows);
@@ -446,4 +475,86 @@ public sealed partial class SettingsWindow : Window
     }
 
     private void OnCancel(object? sender, Avalonia.Interactivity.RoutedEventArgs e) => Close();
+
+    // ---- B3-1 分类导航 ----
+    private void OnCategoryChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (CategoryList.SelectedIndex >= 0)
+        {
+            ShowPanel(CategoryList.SelectedIndex);
+        }
+    }
+
+    private void ShowPanel(int index)
+    {
+        PanelAppearance.IsVisible = index == 0;
+        PanelLayout.IsVisible = index == 1;
+        PanelGroups.IsVisible = index == 2;
+        PanelTransparency.IsVisible = index == 3;
+        PanelInteraction.IsVisible = index == 4;
+        PanelStartup.IsVisible = index == 5;
+        PanelPerformance.IsVisible = index == 6;
+        PanelAbout.IsVisible = index == 7;
+    }
+
+    // ---- B3-4 主题配置命名 ----
+    private void OnThemeProfileChanged(object? sender, TextChangedEventArgs e) =>
+        _working.ThemeProfile = string.IsNullOrWhiteSpace(ThemeProfileBox.Text)
+            ? "自定义风格"
+            : ThemeProfileBox.Text!;
+
+    // ---- B3-2 透明度双模式 ----
+    private void OnTransparencyModeChanged(object? sender, SelectionChangedEventArgs e) => RefreshOpacityFromMode();
+
+    private void RefreshOpacityFromMode()
+    {
+        if (TransparencyModeBox.SelectedIndex == 1)
+        {
+            OpacityBox.Value = _working.WholeWindowOpacity;
+        }
+        else
+        {
+            OpacityBox.Value = _working.LayeredOpacity;
+        }
+    }
+
+    private void OnResetOpacity(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        OpacityBox.Value = 0.85;
+        if (TransparencyModeBox.SelectedIndex == 1)
+        {
+            _working.WholeWindowOpacity = 0.85;
+        }
+        else
+        {
+            _working.LayeredOpacity = 0.85;
+        }
+    }
+
+    // ---- B3-6 性能页 ----
+    private static string ConfigDir =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "LanFlow");
+
+    private void OnClearIconCache(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        ShellIconService.Clear();
+        CacheStatusText.Text = "已清空图标缓存，下次显示时按需重新加载";
+    }
+
+    private void OnOpenConfigPath(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        try
+        {
+            if (!Directory.Exists(ConfigDir))
+            {
+                Directory.CreateDirectory(ConfigDir);
+            }
+
+            Process.Start(new ProcessStartInfo("xdg-open", ConfigDir) { UseShellExecute = false });
+        }
+        catch (Exception ex)
+        {
+            System.Console.WriteLine("[取证] 打开配置目录失败: " + ex);
+        }
+    }
 }

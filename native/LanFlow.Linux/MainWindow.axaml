@@ -130,7 +130,7 @@
             </ScrollViewer>
         </Border>
 
-        <Grid>
+        <Grid x:Name="ItemsHost">
             <ScrollViewer x:Name="ItemsScroller">
                 <ItemsControl x:Name="ItemsControl" ItemTemplate="{DynamicResource TileTemplate}"
                               DragDrop.AllowDrop="True" DragDrop.DragOver="OnItemsDragOver" DragDrop.Drop="OnItemsDrop">

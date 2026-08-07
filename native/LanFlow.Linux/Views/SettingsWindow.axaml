@@ -3,26 +3,61 @@
         xmlns:views="clr-namespace:LanFlow.Desktop.Views"
         x:Class="LanFlow.Desktop.Views.SettingsWindow"
         Title="设置"
-        Width="540" Height="600"
+        Width="760" Height="600"
+        MinWidth="700" MinHeight="480"
         CanResize="True"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource PanelBrush}">
-    <Grid RowDefinitions="*,Auto">
-        <!-- 注意：边距必须放在内层 StackPanel 的 Margin 上，不能放 ScrollViewer 的 Padding——
-             后者不计入可滚动 extent，会导致底部（快捷键区）滚不进视口（历史遗留问题）。 -->
-        <ScrollViewer Grid.Row="0">
+    <Grid RowDefinitions="*,Auto" ColumnDefinitions="190,*">
+        <!-- 左侧分类导航（B3-1：对齐 Windows 8 分类结构） -->
+        <Border Grid.Row="0" Grid.Column="0"
+                Background="{DynamicResource SurfaceBrush}"
+                BorderBrush="{DynamicResource SurfaceBorderBrush}"
+                BorderThickness="0,0,1,0" Padding="10">
+            <Grid RowDefinitions="Auto,*">
+                <TextBlock Text="设置" FontSize="18" FontWeight="SemiBold" Margin="6,10,0,12"
+                           Foreground="{DynamicResource TextPrimaryBrush}" />
+                <ListBox x:Name="CategoryList" Grid.Row="1" BorderThickness="0"
+                         Background="Transparent" SelectionChanged="OnCategoryChanged">
+                    <ListBoxItem Content="外观与主题" />
+                    <ListBoxItem Content="布局与项目" />
+                    <ListBoxItem Content="分组标签" />
+                    <ListBoxItem Content="透明度" />
+                    <ListBoxItem Content="交互" />
+                    <ListBoxItem Content="启动与快捷键" />
+                    <ListBoxItem Content="性能" />
+                    <ListBoxItem Content="关于" />
+                </ListBox>
+            </Grid>
+        </Border>
+
+        <!-- 右侧内容（8 个分类面板，可见性切换） -->
+        <ScrollViewer Grid.Row="0" Grid.Column="1">
             <StackPanel Spacing="16" Margin="18">
-                <StackPanel Spacing="6">
-                    <TextBlock Text="主题" Foreground="{DynamicResource TextSecondaryBrush}" FontWeight="Bold" />
-                    <ComboBox x:Name="ProfileBox" Width="200" SelectionChanged="OnProfileChanged" />
+
+                <!-- 1 外观与主题 -->
+                <StackPanel x:Name="PanelAppearance" Spacing="12">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="主题方案" Foreground="{DynamicResource TextSecondaryBrush}" FontWeight="Bold" />
+                        <ComboBox x:Name="ProfileBox" Width="220" SelectionChanged="OnProfileChanged" />
+                        <Grid ColumnDefinitions="*,200">
+                            <TextBlock Grid.Column="0" Text="主题配置名称" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextPrimaryBrush}" />
+                            <TextBox Grid.Column="1" x:Name="ThemeProfileBox" TextChanged="OnThemeProfileChanged" />
+                        </Grid>
+                    </StackPanel>
+                    <StackPanel Spacing="6">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Text="自定义颜色" Foreground="{DynamicResource TextSecondaryBrush}" FontWeight="Bold" VerticalAlignment="Center" />
+                            <Button Content="保存为风格" FontSize="11" Height="26" Click="OnSaveTheme" />
+                        </StackPanel>
+                        <StackPanel x:Name="ColorPanel" Spacing="6" />
+                    </StackPanel>
                 </StackPanel>
 
-                <StackPanel Spacing="8">
-                    <TextBlock Text="外观" Foreground="{DynamicResource TextSecondaryBrush}" FontWeight="Bold" />
-                    <Grid ColumnDefinitions="*,200">
-                        <TextBlock Grid.Column="0" Text="窗口不透明度" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
-                        <Slider Grid.Column="1" x:Name="OpacityBox" Minimum="0.55" Maximum="1" Value="1" />
-                    </Grid>
+                <!-- 2 布局与项目 -->
+                <StackPanel x:Name="PanelLayout" Spacing="8" IsVisible="False">
+                    <TextBlock Text="排列方式" Foreground="{DynamicResource TextSecondaryBrush}" FontWeight="Bold" />
                     <Grid ColumnDefinitions="*,200">
                         <TextBlock Grid.Column="0" Text="布局模式" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
                         <ComboBox Grid.Column="1" x:Name="LayoutBox">
@@ -30,13 +65,7 @@
                             <ComboBoxItem Content="卡片" />
                         </ComboBox>
                     </Grid>
-                    <Grid ColumnDefinitions="*,200">
-                        <TextBlock Grid.Column="0" Text="分组栏位置" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
-                        <ComboBox Grid.Column="1" x:Name="GroupBoxLayoutBox">
-                            <ComboBoxItem Content="左侧" />
-                            <ComboBoxItem Content="顶部" />
-                        </ComboBox>
-                    </Grid>
+                    <TextBlock Text="尺寸与密度" Foreground="{DynamicResource TextSecondaryBrush}" FontWeight="Bold" Margin="0,8,0,0" />
                     <Grid ColumnDefinitions="*,200">
                         <TextBlock Grid.Column="0" Text="图标尺寸" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
                         <NumericUpDown Grid.Column="1" x:Name="IconSizeBox" Minimum="24" Maximum="72" />
@@ -63,43 +92,96 @@
                     </Grid>
                 </StackPanel>
 
-                <StackPanel Spacing="8">
-                    <TextBlock Text="行为" Foreground="{DynamicResource TextSecondaryBrush}" FontWeight="Bold" />
-                    <views:LabelToggle x:Name="OpenSingleClickToggle" Title="单击打开项目" Description="关闭则需双击打开" />
-                    <views:LabelToggle x:Name="ShowBadgeToggle" Title="显示快捷键角标" Description="在图标右上角显示快捷键" />
-                    <views:LabelToggle x:Name="ShowFullToggle" Title="显示完整名称" Description="不截断过长名称" />
-                    <views:LabelToggle x:Name="ShowTitleToggle" Title="显示项目标题" Description="在图标下方显示名称" />
-                    <views:LabelToggle x:Name="StartupToggle" Title="开机自启动" Description="登录系统后自动启动 LanFlow" />
-                    <!-- B2 交互体验：失焦隐藏 / 悬停切换 / 动画 -->
-                    <views:LabelToggle x:Name="HideOnDeactivateToggle" Title="失焦自动隐藏" Description="窗口失去焦点后自动隐藏到托盘" />
+                <!-- 3 分组标签 -->
+                <StackPanel x:Name="PanelGroups" Spacing="8" IsVisible="False">
+                    <TextBlock Text="分组导航" Foreground="{DynamicResource TextSecondaryBrush}" FontWeight="Bold" />
+                    <Grid ColumnDefinitions="*,200">
+                        <TextBlock Grid.Column="0" Text="分组栏位置" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
+                        <ComboBox Grid.Column="1" x:Name="GroupBoxLayoutBox">
+                            <ComboBoxItem Content="左侧" />
+                            <ComboBoxItem Content="顶部" />
+                        </ComboBox>
+                    </Grid>
+                    <TextBlock Text="切换方式" Foreground="{DynamicResource TextSecondaryBrush}" FontWeight="Bold" Margin="0,8,0,0" />
                     <views:LabelToggle x:Name="GroupHoverToggle" Title="悬停切换分组" Description="鼠标悬停分组标签自动切换，关闭则需点击" />
                     <Grid ColumnDefinitions="*,200">
                         <TextBlock Grid.Column="0" Text="悬停延迟（毫秒）" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
                         <NumericUpDown Grid.Column="1" x:Name="GroupHoverDelayBox" Minimum="0" Maximum="1000" />
                     </Grid>
+                </StackPanel>
+
+                <!-- 4 透明度 -->
+                <StackPanel x:Name="PanelTransparency" Spacing="8" IsVisible="False">
+                    <TextBlock Text="透明模式" Foreground="{DynamicResource TextSecondaryBrush}" FontWeight="Bold" />
+                    <Grid ColumnDefinitions="*,200">
+                        <TextBlock Grid.Column="0" Text="应用范围" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
+                        <ComboBox Grid.Column="1" x:Name="TransparencyModeBox" SelectionChanged="OnTransparencyModeChanged">
+                            <ComboBoxItem Content="分层透明" Tag="layered" />
+                            <ComboBoxItem Content="整窗透明" Tag="wholeWindow" />
+                        </ComboBox>
+                    </Grid>
+                    <Grid ColumnDefinitions="*,200">
+                        <TextBlock Grid.Column="0" Text="透明度（55%-100%）" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
+                        <Slider Grid.Column="1" x:Name="OpacityBox" Minimum="0.55" Maximum="1" Value="1" />
+                    </Grid>
+                    <Button Content="恢复 85%" Width="120" HorizontalAlignment="Left" Click="OnResetOpacity" />
+                </StackPanel>
+
+                <!-- 5 交互 -->
+                <StackPanel x:Name="PanelInteraction" Spacing="8" IsVisible="False">
+                    <TextBlock Text="启动项交互" Foreground="{DynamicResource TextSecondaryBrush}" FontWeight="Bold" />
+                    <views:LabelToggle x:Name="OpenSingleClickToggle" Title="单击打开项目" Description="关闭则需双击打开" />
                     <views:LabelToggle x:Name="AnimationToggle" Title="启用动画" Description="界面切换使用过渡动画" />
+                    <TextBlock Text="项目信息显示" Foreground="{DynamicResource TextSecondaryBrush}" FontWeight="Bold" Margin="0,8,0,0" />
+                    <views:LabelToggle x:Name="ShowBadgeToggle" Title="显示快捷键角标" Description="在图标右上角显示快捷键" />
+                    <views:LabelToggle x:Name="ShowFullToggle" Title="显示完整名称" Description="不截断过长名称" />
+                    <views:LabelToggle x:Name="ShowTitleToggle" Title="显示项目标题" Description="在图标下方显示名称" />
+                    <TextBlock Text="窗口行为" Foreground="{DynamicResource TextSecondaryBrush}" FontWeight="Bold" Margin="0,8,0,0" />
+                    <views:LabelToggle x:Name="HideOnDeactivateToggle" Title="失焦自动隐藏" Description="窗口失去焦点后自动隐藏到托盘" />
                 </StackPanel>
 
-                <StackPanel Spacing="8">
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <TextBlock Text="颜色" Foreground="{DynamicResource TextSecondaryBrush}" FontWeight="Bold" VerticalAlignment="Center" />
-                        <Button Content="保存为风格" FontSize="11" Height="26" Click="OnSaveTheme" />
-                    </StackPanel>
-                    <StackPanel x:Name="ColorPanel" Spacing="6" />
-                </StackPanel>
-
-                <StackPanel Spacing="8">
+                <!-- 6 启动与快捷键 -->
+                <StackPanel x:Name="PanelStartup" Spacing="8" IsVisible="False">
                     <TextBlock Text="快捷键" Foreground="{DynamicResource TextSecondaryBrush}" FontWeight="Bold" />
                     <Grid ColumnDefinitions="*,Auto">
                         <TextBox Grid.Column="0" x:Name="HotkeyBox" Watermark="例如 Ctrl+Alt+L" />
                         <Button Grid.Column="1" Content="应用" Margin="8,0,0,0" Click="OnApplyHotkey" />
                     </Grid>
                     <TextBlock x:Name="HotkeyHint" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" />
+                    <TextBlock Text="启动" Foreground="{DynamicResource TextSecondaryBrush}" FontWeight="Bold" Margin="0,8,0,0" />
+                    <views:LabelToggle x:Name="StartupToggle" Title="开机自启动" Description="登录系统后自动启动 LanFlow" />
+                </StackPanel>
+
+                <!-- 7 性能 -->
+                <StackPanel x:Name="PanelPerformance" Spacing="8" IsVisible="False">
+                    <TextBlock Text="图标缓存" Foreground="{DynamicResource TextSecondaryBrush}" FontWeight="Bold" />
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0" Text="清空已加载的图标缓存" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource TextPrimaryBrush}" />
+                        <Button Grid.Column="1" Content="清空缓存" Click="OnClearIconCache" />
+                    </Grid>
+                    <TextBlock x:Name="CacheStatusText" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" />
+                    <TextBlock Text="配置位置" Foreground="{DynamicResource TextSecondaryBrush}" FontWeight="Bold" Margin="0,8,0,0" />
+                    <TextBlock x:Name="ConfigPathText" FontSize="11" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextSecondaryBrush}" />
+                    <Button Content="打开配置目录" Width="140" HorizontalAlignment="Left" Click="OnOpenConfigPath" />
+                </StackPanel>
+
+                <!-- 8 关于 -->
+                <StackPanel x:Name="PanelAbout" Spacing="8" IsVisible="False">
+                    <TextBlock Text="LanFlow" FontSize="22" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextPrimaryBrush}" />
+                    <TextBlock x:Name="VersionText" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                    <TextBlock Text="LanFlow 是一款 Linux（UOS/Deepin）轻量启动与整理工具，支持分组导航、快速搜索、全局热键与自定义主题。"
+                               TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                    <TextBlock Text="源码：github.com/ZergZFZ/LanFlow（linux 分支）" FontSize="12"
+                               Foreground="{DynamicResource TextSecondaryBrush}" />
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>
 
-        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10" Margin="18">
+        <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right"
+                    Spacing="10" Margin="18,14" Background="{DynamicResource FooterBrush}">
             <Button Content="确定" Width="80" Click="OnConfirm" />
             <Button Content="取消" Width="80" Click="OnCancel" />
         </StackPanel>
