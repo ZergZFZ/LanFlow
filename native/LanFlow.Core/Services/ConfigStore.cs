@@ -16,7 +16,7 @@ public sealed class ConfigStore : IConfigStore
     private readonly string _configPath;
     private readonly string _defaultHotkey;
 
-    public ConfigStore(string defaultHotkey = "Ctrl+Alt+Space", string? configDirectory = null)
+    public ConfigStore(string defaultHotkey = "Ctrl+Alt+L", string? configDirectory = null)
     {
         _defaultHotkey = defaultHotkey;
         _configDirectory = configDirectory ?? Path.Combine(
