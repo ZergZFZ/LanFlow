@@ -60,8 +60,14 @@ public sealed partial class MainWindow : Window
         // 第三轮取证件（缺陷板 v2 §3.3）：窗口打开 500ms 后 dump 分组栏渲染结果
         Opened += (_, _) =>
         {
-            // B2-1：启动后 2 秒内抑制失焦隐藏（窗口显示时焦点尚未稳定，否则一打开就被隐藏）
-            _suppressHideUntilUtc = DateTime.UtcNow.AddSeconds(2);
+            // B2-1：仅首次显示时给 2 秒启动抑制（窗口显示时焦点尚未稳定，否则一打开就被隐藏）。
+            // 注意：Show()/唤回也会触发 Opened，必须只在首次设置，否则每次唤回都会把抑制覆盖为 2s，
+            // 造成"唤回后点桌面要等 2s 才消失"的延迟（ToggleVisibility 的 600ms 抑制被覆盖）。
+            if (!_startupSuppressDone)
+            {
+                _startupSuppressDone = true;
+                _suppressHideUntilUtc = DateTime.UtcNow.AddSeconds(2);
+            }
             StartFocusCheck();
             var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
             timer.Tick += (_, _) =>
@@ -116,12 +122,16 @@ public sealed partial class MainWindow : Window
         }
         else
         {
-            // B2-1：热键唤回后 800ms 内抑制失焦隐藏（Activate 焦点切换异步，避免被紧随的失焦吞掉）
-            _suppressHideUntilUtc = DateTime.UtcNow.AddMilliseconds(800);
+            // B2-1：热键唤回后短暂抑制失焦隐藏（Activate 焦点切换异步，避免被紧随的失焦吞掉）。
+            // 时长：Topmost 抢焦 300ms 后留 300ms 余量；过短会导致唤回后焦点未给到窗口、
+            // 抑制期一过被轮询误隐藏（唤回即消失）。
+            _suppressHideUntilUtc = DateTime.UtcNow.AddMilliseconds(600);
             Show();
             Activate();
             // Deepin/X11 下 Activate 可能不立即抢到焦点（焦点策略为"点击激活"时，无焦点的窗口
             // 从未触发 Deactivated，导致点桌面不隐藏）。短暂置顶强制 WM 给焦点。
+            // 时长权衡：过短抢焦不足（唤回后焦点未给窗口，抑制期一过被轮询误隐藏）；
+            // 过长则抢焦期间点击外部会被 WM 拦截吞掉（焦点不转移、窗口不消失）。
             Topmost = true;
             var restoreTopmost = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
             restoreTopmost.Tick += (_, _) =>
@@ -157,6 +167,7 @@ public sealed partial class MainWindow : Window
     /// （从未激活，点桌面/切窗口都不触发 Deactivated）。因此用 XGetInputFocus 主动轮询：
     /// 焦点不在本窗口即隐藏。启动/热键唤回后的短暂失焦仍用 _suppressHideUntilUtc 抑制。
     private DateTime _suppressHideUntilUtc = DateTime.MinValue;
+    private bool _startupSuppressDone;
     private DispatcherTimer? _focusTimer;
 
     private void OnDeactivated(object? sender, EventArgs e) => TryAutoHide();
@@ -184,11 +195,12 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        _focusTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+        _focusTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
         _focusTimer.Tick += (_, _) =>
         {
             if (!_viewModel.Settings.HideOnDeactivate) return; // 开关关闭零 X 开销
-            if (_modalDepth > 0) return;                        // 模态对话框不隐藏
+            if (!IsVisible) return;                            // 已隐藏：跳过 X 查询，避免冗余调用
+            if (_modalDepth > 0) return;                       // 模态对话框不隐藏
             if (DateTime.UtcNow < _suppressHideUntilUtc) return;
             if (IsSelfFocused()) return;
             Hide();
