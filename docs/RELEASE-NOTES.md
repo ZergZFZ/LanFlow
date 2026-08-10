@@ -68,4 +68,4 @@
 | 修复 | 浅色主题下设置窗口白底白字：`ApplyThemeColors` 切换画刷时同步 `RequestedThemeVariant = Light`（否则 FluentTheme 保持 Dark，控件默认前景仍为白色系）；设置窗口补 `Foreground` 兜底 |
 | 修复 | 透明度滑块「失效」感知：滑块无任何数值/说明反馈，且分层模式仅项目区内容透明、窗口背景不变。新增滑块实时百分比显示 + 透明模式说明文字 |
 | 说明 | 分层透明 = 仅项目区内容半透明（顶部搜索栏/底部按钮栏/分组栏保持不透明）；整窗透明 = 整个窗口半透明（X11 走 `_NET_WM_WINDOW_OPACITY`） |
-| 源码 commit | linux 分支（本轮，见 git log） |
+| 源码 commit | linux 分支 `0ae1a81`（round6 三大基础体验修复） |
