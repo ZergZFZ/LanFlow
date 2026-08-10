@@ -532,8 +532,8 @@ public sealed partial class SettingsWindow : Window
     }
 
     // ---- B3-6 性能页 ----
-    private static string ConfigDir =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "LanFlow");
+    // 复用 ConfigStore 统一解析（含 LANFLOW_CONFIG_DIR 覆盖），避免与运行目录不一致。
+    private static string ConfigDir => ConfigStore.ResolveConfigDirectory();
 
     private void OnClearIconCache(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {

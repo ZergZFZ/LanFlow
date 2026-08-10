@@ -22,14 +22,20 @@ public sealed class ConfigStore
     public ConfigStore(string defaultHotkey = "Ctrl+Alt+Space")
     {
         _defaultHotkey = defaultHotkey;
-        // B5-4：支持换位置——环境变量 LANFLOW_CONFIG_DIR 覆盖配置目录（UOS 无 UI 迁移需求的最小支持）。
+        _configDirectory = ResolveConfigDirectory();
+        _configPath = Path.Combine(_configDirectory, "config.json");
+    }
+
+    // B5-4/B3-6：配置目录统一解析——环境变量 LANFLOW_CONFIG_DIR 覆盖默认目录。
+    // 供 SettingsWindow 性能页等外部复用，避免各自硬编码导致路径不一致。
+    public static string ResolveConfigDirectory()
+    {
         var overrideDir = Environment.GetEnvironmentVariable("LANFLOW_CONFIG_DIR");
-        _configDirectory = string.IsNullOrWhiteSpace(overrideDir)
+        return string.IsNullOrWhiteSpace(overrideDir)
             ? Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                 "LanFlow")
             : overrideDir;
-        _configPath = Path.Combine(_configDirectory, "config.json");
     }
 
     public AppConfig Load()
