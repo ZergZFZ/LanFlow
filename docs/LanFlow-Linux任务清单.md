@@ -65,6 +65,7 @@
 | 批次 | 完成 commit | 测试包 | 实机结果 |
 |---|---|---|---|
 | B1 | 89dcd65 | `LanFlow-linux-x64-b1.tar.gz`（38.1MB） | 批量添加/目录导入/自动命名/排序/搜索通过；**拖放仍不可用**（D2 遗留，兜底按钮可用） |
+| B1（探针复验） | 89dcd65（代码未变） | — | 2026-08-10 Headless 探针复验：批量添加/自动命名/去重/空分组自动建/排序持久化 **10 项全 PASS**；外部拖放为 X11 平台行为，实机待验证（round7 包已含收口代码） |
 | B2 | 886e90a | —（随最终包） | VM 验证通过（round5-b2）：失焦隐藏/空状态/悬停切换/动画偏好 |
 | B3 | 7e5b4a9 | —（随最终包） | VM 验证通过（round5-b3）：8 分类/透明双模式/主题命名/关于/性能页 |
 | B4 | d7b7173 | —（随最终包） | VM 验证通过（round5-b4）：右键菜单 5 项 + RELEASE-NOTES |
@@ -80,6 +81,7 @@
 - 2026-08-07：B4 完成——项目右键菜单（打开/编辑/删除/上移/下移，code-behind 动态 ContextMenu，绕过 XAML 事件绑定限制）、发布说明文档化（docs/RELEASE-NOTES.md，手动解压替换）、B4-3 import-manifest 按基线 §5 决策不排。构建 0 错误。
 - 2026-08-07：B5 完成——图标缓存 LRU 256 项上限（ShellIconService，线程安全）；配置版本号 + 受控迁移（v0→v1）+ 换位置（LANFLOW_CONFIG_DIR 环境变量）；B5-2 虚拟化受限评估不实施（见 §4 记录）；B5-3 部分完成（依托 LRU 有界化，内存实机验证后置）。构建 0 错误。
 - 2026-08-07：最终打包——`LanFlow-linux-x64-round4.tar.gz`（39.9MB，B1–B5 全量，commit 690061f）；生成测试基线文件 `docs/LanFlow-Linux测试基线.md`；包内附 TEST-CARD-r4.md + RELEASE-NOTES.md。待 UOS 实机验证。
+- 2026-08-10：B1 功能闭环探针复验（Headless）——批量添加（3 文件入库）、自动命名（.desktop Name=微信/WPS Office、脚本 my-tool.sh→my-tool）、重复拖入去重、无分组自动建组、上移/下移排序 + 重载持久化，**10 项全 PASS**。代码未改动（89dcd65 已含），外部拖放属 X11 平台行为，实机用 round7 包验证。
 - 2026-08-10：B3-6 修复完成——ConfigStore 提取静态 `ResolveConfigDirectory()`（含 LANFLOW_CONFIG_DIR 覆盖），SettingsWindow 性能页复用该解析替代硬编码路径（7b809eb）。VM 验证：覆盖目录 config 落盘 PASS；设置窗口打开 PASS（根因：桌面遮挡窗口，清理后正常）；性能页路径显示以源码链路确认，UI OCR 留实机。构建 0 错误。
 
 ## 5. B5-2 虚拟化受限评估记录
