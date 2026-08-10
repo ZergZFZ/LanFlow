@@ -21,7 +21,7 @@
 |---|---|---|---|
 | B1 | 89dcd65 | 批量添加/自动命名/拖放收口/排序/搜索核对 | 批量添加通过（名称正确）；目录导入通过；自动命名通过；排序通过（UI 待统一优化）；搜索键盘通过；**拖放仍不可用**（D2 遗留，兜底按钮可用） |
 | B2 | 886e90a | 失焦隐藏/空状态/悬停切换/动画偏好/搜索键盘 | VM 验证通过：空状态（空分组/搜索无结果）PASS；悬停切换 PASS；动画偏好 PASS（设置含开关）；失焦隐藏 PASS（修复"hide=true 启动即隐藏+热键唤回被吞"，见 round5-b2 记录） |
-| B3 | 7e5b4a9 | 设置 8 分类/透明双模式/主题命名/关于/性能页 | VM 验证通过（round5-b3，2026-08-10） |
+| B3 | 7e5b4a9 | 设置 8 分类/透明双模式/主题命名/关于/性能页 | VM 验证通过（round5-b3，2026-08-10）；B3-6 配置目录统一解析修复见 round5-b3.6（7b809eb） |
 | B4 | d7b7173 | 右键菜单/发布说明文档化 | VM 验证通过（round5-b4，2026-08-10） |
 | B5 | 690061f | 图标 LRU 256/配置版本迁移/换位置 | VM 验证通过（round5-pass，2026-08-10）：300 项目启动存活、内存 193MB ≤450MB、首启即落盘 version:1、LANFLOW_CONFIG_DIR 换位置生效 |
 
@@ -125,6 +125,19 @@
 | 关于页 | PASS | 版本号 + 源码地址（ZergZFZ）OCR 命中 |
 
 > 验证技术备注：① `xdotool search --name` 中文窗口名匹配不可用（getwindowname 正常），改按进程 pid + 窗口几何识别；② tesseract 对全屏图（含桌面/Dock）OCR 布局错乱导致坐标失真，须先裁剪单窗口或右侧面板区域；③ 分类切换用键盘 End/Up 导航规避坐标定位；④ 验证脚本 `publish/run-vm-b3.sh` + `b3-img.py` 可复用。
+
+### VM 验证记录（round5-b3.6，2026-08-10，B3-6 配置目录统一解析）
+
+> 触发：round5-b3 后复查发现 SettingsWindow 性能页硬编码 `~/.config/LanFlow`，与 ConfigStore 的 `LANFLOW_CONFIG_DIR` 覆盖不一致（B3-6 遗留）。
+> 修复（7b809eb）：ConfigStore 提取静态 `ResolveConfigDirectory()`（环境变量覆盖默认目录）；SettingsWindow 性能页 `ConfigDir` 复用该方法。
+
+| 验收点 | 结果 | 说明 |
+|---|---|---|
+| LANFLOW_CONFIG_DIR 落盘 | PASS | `LANFLOW_CONFIG_DIR=/tmp/lf-cfgdir-test` 启动：config 落盘到覆盖目录，默认目录未生成 |
+| 设置窗口打开 | PASS | 清理遮挡窗口后右上角按钮点击成功（`[取证] SettingsWindow Bounds=0,0,760,600`） |
+| 性能页路径显示覆盖值 | PASS（源码链路确认） | `ConfigPathText.Text = Path.Combine(ConfigDir, "config.json")`，`ConfigDir = ConfigStore.ResolveConfigDirectory()`；ResolveConfigDirectory 返回覆盖路径已实测 → 显示必然为覆盖路径。UI 渲染 OCR 取证留实机终验 |
+
+> 技术备注：① **打开设置窗口前必须清理遮挡窗口**（复用 run-vm-b3.sh §4：windowkill 非保留窗口）——此前多轮"设置按钮点击无效"系桌面其他窗口遮挡右上角按钮，非应用问题；② ffmpeg x11grab 在 KWin 下抓不到设置窗口内容（截图全蓝，含已打开窗口时），统信截图 Ctrl+Alt+A 无法被 xdotool 触发（无新文件），本 VM 环境 OCR 截图取证通道不可用，路径显示验证以源码链路断言为准。
 
 ### VM 验证记录（round5-b4，2026-08-10，B4 右键菜单 + 发布说明）
 
