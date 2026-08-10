@@ -80,3 +80,15 @@
 | 结案 | round6 三大问题（开关视觉反馈 / 浅色白底白字 / 透明度滑块）UOS 实机全部通过 |
 | 修复 | 主题保存回退深色（D17）：选浅色保存后再次进入设置，改动非主题项再保存会回退深色。根因——切换主题时未同步「主题配置名称」文本框，`OnConfirm` 用残留的旧名称（默认"深色"）覆盖 `ThemeProfile`，下次进入按"深色"恢复选中项导致主题重置。修复：`OnProfileChanged` 同步 `ThemeProfileBox.Text` |
 | 源码 commit | linux 分支 `9132a6a`（D17 主题保存回退修复） |
+
+## 8. 本轮变更（round8，2026-08-10，单文件版）
+
+> 解决「解压后文件太多、无可双击入口」问题：SingleFile 单文件发布。
+> 解压后仅 2 个文件：`LanFlow`（单个可执行 ELF，双击即可运行）+ `lanflow.sh`（终端启动脚本）。
+
+| 类别 | 内容 |
+|---|---|
+| 单文件发布 | `PublishSingleFile=true` + `IncludeNativeLibrariesForSelfExtract=true`，216 个运行文件 → 1 个可执行文件；包体积 38.2MB → 35.5MB |
+| 双击运行 | Deepin/UOS 文件管理器双击 `LanFlow` 即可启动（ELF + x 权限）；或终端 `./lanflow.sh` |
+| 说明 | 首次运行会自解压内置原生库到用户缓存目录，首启略慢属正常；功能与 round7 完全一致（D14–D17 修复 + B1–B5 全量） |
+| 源码 commit | linux 分支 `995de1a` 及之前（代码未变，仅发布方式变更） |
