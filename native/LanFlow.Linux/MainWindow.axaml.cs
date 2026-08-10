@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml.Templates;
@@ -19,6 +20,13 @@ namespace LanFlow.Desktop;
 
 public sealed partial class MainWindow : Window
 {
+    // 确保 libX11 的 DllImportResolver 已注册（注册在 HotkeyService 静态构造中），
+    // 否则本窗口的 XOpenDisplay/XGetInputFocus 在未触发 HotkeyService 实例化时会 DllNotFound。
+    static MainWindow()
+    {
+        _ = typeof(HotkeyService);
+    }
+
     private MainViewModel _viewModel = null!;
     private readonly LauncherService _launcher = new();
     private readonly ShellIconService _shellIcon = new();
@@ -52,6 +60,9 @@ public sealed partial class MainWindow : Window
         // 第三轮取证件（缺陷板 v2 §3.3）：窗口打开 500ms 后 dump 分组栏渲染结果
         Opened += (_, _) =>
         {
+            // B2-1：启动后 2 秒内抑制失焦隐藏（窗口显示时焦点尚未稳定，否则一打开就被隐藏）
+            _suppressHideUntilUtc = DateTime.UtcNow.AddSeconds(2);
+            StartFocusCheck();
             var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
             timer.Tick += (_, _) =>
             {
@@ -105,14 +116,27 @@ public sealed partial class MainWindow : Window
         }
         else
         {
+            // B2-1：热键唤回后 800ms 内抑制失焦隐藏（Activate 焦点切换异步，避免被紧随的失焦吞掉）
+            _suppressHideUntilUtc = DateTime.UtcNow.AddMilliseconds(800);
             Show();
             Activate();
+            // Deepin/X11 下 Activate 可能不立即抢到焦点（焦点策略为"点击激活"时，无焦点的窗口
+            // 从未触发 Deactivated，导致点桌面不隐藏）。短暂置顶强制 WM 给焦点。
+            Topmost = true;
+            var restoreTopmost = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+            restoreTopmost.Tick += (_, _) =>
+            {
+                restoreTopmost.Stop();
+                Topmost = false;
+            };
+            restoreTopmost.Start();
         }
     }
 
     public void Quit()
     {
         _exiting = true;
+        _focusTimer?.Stop();
         _hotkey?.Dispose();
         Close();
     }
@@ -129,14 +153,107 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>B2-1 失焦隐藏：无模态对话框且设置开启时，失焦自动隐藏（托盘常驻）。</summary>
-    private void OnDeactivated(object? sender, EventArgs e)
+    /// X11 下 Deactivated 事件依赖"窗口曾激活→失激活"，而快捷键呼出的窗口在 Deepin 上可能拿不到焦点
+    /// （从未激活，点桌面/切窗口都不触发 Deactivated）。因此用 XGetInputFocus 主动轮询：
+    /// 焦点不在本窗口即隐藏。启动/热键唤回后的短暂失焦仍用 _suppressHideUntilUtc 抑制。
+    private DateTime _suppressHideUntilUtc = DateTime.MinValue;
+    private DispatcherTimer? _focusTimer;
+
+    private void OnDeactivated(object? sender, EventArgs e) => TryAutoHide();
+
+    private void TryAutoHide()
     {
         if (_modalDepth > 0 || !_viewModel.Settings.HideOnDeactivate)
         {
             return;
         }
 
+        if (DateTime.UtcNow < _suppressHideUntilUtc)
+        {
+            return;
+        }
+
         Hide();
+    }
+
+    /// <summary>轮询 X11 焦点：焦点不在本窗口且非模态时自动隐藏。</summary>
+    private void StartFocusCheck()
+    {
+        if (_focusTimer != null)
+        {
+            return;
+        }
+
+        _focusTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+        _focusTimer.Tick += (_, _) =>
+        {
+            if (!_viewModel.Settings.HideOnDeactivate) return; // 开关关闭零 X 开销
+            if (_modalDepth > 0) return;                        // 模态对话框不隐藏
+            if (DateTime.UtcNow < _suppressHideUntilUtc) return;
+            if (IsSelfFocused()) return;
+            Hide();
+        };
+        _focusTimer.Start();
+    }
+
+    /// <summary>X11 当前焦点是否在本应用（按 _NET_WM_PID == 当前进程 PID 判定）。
+    /// 查询失败时保守返回 true（不误隐藏）。</summary>
+    private bool IsSelfFocused()
+    {
+        try
+        {
+            var display = XOpenDisplay(null);
+            if (display == IntPtr.Zero)
+            {
+                return true;
+            }
+
+            try
+            {
+                XGetInputFocus(display, out var focus, out _);
+                return focus != IntPtr.Zero && GetWindowPid(display, focus) == Environment.ProcessId;
+            }
+            finally
+            {
+                XCloseDisplay(display);
+            }
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    private static int GetWindowPid(IntPtr display, IntPtr window)
+    {
+        try
+        {
+            var pidAtom = XInternAtom(display, "_NET_WM_PID", true);
+            if (pidAtom == IntPtr.Zero)
+            {
+                return 0;
+            }
+
+            const int XaCardinal = 6;
+            if (XGetWindowProperty(display, window, pidAtom, 0, 1, false, XaCardinal,
+                    out _, out _, out _, out _, out var data) != 0 || data == IntPtr.Zero)
+            {
+                return 0;
+            }
+
+            try
+            {
+                return Marshal.ReadInt32(data);
+            }
+            finally
+            {
+                XFree(data);
+            }
+        }
+        catch
+        {
+            return 0;
+        }
     }
 
     /// <summary>模态对话框守卫：对话框打开期间不触发失焦隐藏（ShowDialog 会让主窗口 Deactivated）。</summary>
@@ -1112,4 +1229,26 @@ public sealed partial class MainWindow : Window
             ReloadItems();
         }
     }
+
+    // ---- B2-1 失焦隐藏：X11 焦点轮询（libX11 加载走 HotkeyService 的 DllImportResolver）----
+    [DllImport("libX11")]
+    private static extern IntPtr XOpenDisplay(string? display);
+
+    [DllImport("libX11")]
+    private static extern int XGetInputFocus(IntPtr display, out IntPtr focusReturn, out int revertToReturn);
+
+    [DllImport("libX11")]
+    private static extern int XCloseDisplay(IntPtr display);
+
+    [DllImport("libX11")]
+    private static extern IntPtr XInternAtom(IntPtr display, string atomName, bool onlyIfExists);
+
+    [DllImport("libX11")]
+    private static extern int XGetWindowProperty(
+        IntPtr display, IntPtr window, IntPtr property, IntPtr longOffset, IntPtr longLength,
+        bool delete, int reqType, out IntPtr actualType, out int actualFormat,
+        out IntPtr nitems, out IntPtr bytesAfter, out IntPtr prop);
+
+    [DllImport("libX11")]
+    private static extern int XFree(IntPtr data);
 }

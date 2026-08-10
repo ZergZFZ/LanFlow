@@ -18,6 +18,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         _configStore = configStore;
         Config = _configStore.Load();
+        // B5-3：首启即落盘，确保 config.json 首次启动即生成（含版本号），
+        // 避免"启动后配置文件不存在"导致取证/换位置验证缺位。
+        _configStore.Save(Config);
         SelectedGroup = Config.Groups.FirstOrDefault();
     }
 

@@ -16,6 +16,31 @@ namespace LanFlow.Desktop.Services;
 /// </summary>
 public sealed class HotkeyService : IDisposable
 {
+    // UOS/Deepin（Debian 系）只安装 libX11.so.6（SONAME 带版本号），没有 libX11.so 无版本链接，
+    // .NET 对 [DllImport("libX11")] 解析为 dlopen("libX11") 会 DllNotFoundException，
+    // 导致 XOpenDisplay 抛异常、热键注册永远报"热键格式无效"（实机/VM 均复现）。
+    // 这里自定义解析器，按 libX11.so.6 -> libX11.so -> libX11 依次尝试加载。
+    static HotkeyService()
+    {
+        NativeLibrary.SetDllImportResolver(typeof(HotkeyService).Assembly, static (name, assembly, path) =>
+        {
+            if (name != "libX11")
+            {
+                return IntPtr.Zero;
+            }
+
+            foreach (var candidate in new[] { "libX11.so.6", "libX11.so", "libX11" })
+            {
+                if (NativeLibrary.TryLoad(candidate, assembly, path, out var handle))
+                {
+                    return handle;
+                }
+            }
+
+            return IntPtr.Zero;
+        });
+    }
+
     private const int KeyPress = 2;
     private const uint AnyModifier = 1 << 7;
     private const uint ControlMask = 1 << 2;
@@ -457,6 +482,13 @@ public sealed class HotkeyService : IDisposable
 
     private static string ToKeysymName(string token)
     {
+        // 单字母（A-Z/a-z）统一小写：X11 keysym 标准名为小写（XK_l），
+        // XStringToKeysym 对大小写敏感，大写形式查不到会导致"热键格式无效"。
+        if (token.Length == 1 && char.IsAsciiLetter(token[0]))
+        {
+            return token.ToLowerInvariant();
+        }
+
         return token.ToLowerInvariant() switch
         {
             "space" => "space",
