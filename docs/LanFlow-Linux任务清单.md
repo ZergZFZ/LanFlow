@@ -59,6 +59,7 @@
 | B5-2 | 项目区虚拟化 | 大数据量滚动性能（参考 Windows VirtualizingWrapPanel 思路） | 无 | 受限评估后不实施（见 §5 记录） |
 | B5-3 | 内存优化 | 内存 ≤450MB（D5 收口） | B5-2 | 部分完成（LRU 有界化，实机验证后置） |
 | B5-4 | 配置迁移 | 配置版本号 + 受控迁移 + 换位置 | 无 | 已完成 |
+| B5-5 | .deb 安装包 | dpkg-deb 打包：`DEBIAN/control` + 应用目录 `/opt/lanflow` + 菜单项 `/usr/share/applications` + postinst 刷新桌面/图标缓存。验收：UOS 双击安装、应用菜单出现、图标正常、`dpkg -r lanflow` 卸载干净。数据目录 `~/.config/LanFlow` 不受卸载影响 | 无 | 规划（方案见 §6） |
 
 ## 3. 完成记录
 
@@ -89,3 +90,57 @@
 - **结论**：不实施（记录留档）。
 - **依据**：Avalonia 无开箱 VirtualizingWrapPanel；ItemsRepeater（experimental）与现有拖放/编辑按钮/空状态叠加改造风险高；启动器个人场景项目量通常 < 数百，WrapPanel 全量渲染可接受。
 - **替代**：图标 LRU 有界化（B5-1）已收敛主要内存增长点；若实机大数据量滚动出现卡顿，再评估 ItemsRepeater + UniformGridLayout。
+
+## 6. B5-5 .deb 安装包方案（2026-08-10 规划）
+
+> 目标：UOS/Deepin 用户可双击安装、进应用菜单、图标正常；与现有 tar.gz 包共存（tar.gz 仍为 U 盘离线首选）。
+
+### 6.1 包结构
+
+```
+lanflow_<ver>_amd64.deb
+├── DEBIAN/
+│   ├── control          # 元数据
+│   └── postinst         # 安装后刷新桌面/图标缓存
+└── opt/
+│   └── lanflow/         # 解压后的完整应用目录（自包含 .NET，同 round 包）
+├── usr/share/applications/lanflow.desktop
+└── usr/share/icons/hicolor/256x256/apps/lanflow.png
+```
+
+### 6.2 control 文件要点
+
+```
+Package: lanflow
+Version: 0.1.0（随轮次递增，如 0.7.0 = round7）
+Architecture: amd64
+Maintainer: LanFlow
+Section: utils
+Description: LanFlow 轻量启动与整理工具（UOS/Deepin）
+Depends: （留空——自包含运行时，无需外部依赖；若目标机无 libgtk 需评估）
+```
+
+### 6.3 postinst 要点
+
+```sh
+#!/bin/sh
+set -e
+update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
+gtk-update-icon-cache /usr/share/icons/hicolor >/dev/null 2>&1 || true
+chmod +x /opt/lanflow/LanFlow /opt/lanflow/lanflow.sh
+```
+
+### 6.4 构建与验证
+
+- **构建**：在 UOS/VM 上执行 `dpkg-deb -b <stage_dir> lanflow_<ver>_amd64.deb`（目标系统打包最稳妥）；Windows 备选 nfpm，需在 UOS 上回归验证。
+- **安装验证**：`sudo apt install ./lanflow_<ver>_amd64.deb` → 菜单出现 LanFlow → 启动正常 → `[LanFlow]` 日志。
+- **卸载**：`sudo dpkg -r lanflow` → /opt/lanflow 与菜单项删除；`~/.config/LanFlow` 数据保留（dpkg 不碰 home）。
+- **升级**：版本号递增重装即可，配置自动保留。
+
+### 6.5 风险
+
+| 风险 | 影响 | 缓解 |
+|---|---|---|
+| postinst 在无 gtk 缓存工具的系统报错 | 安装中断 | `|| true` 容错已内置 |
+| /opt 权限 | 普通用户不可写应用目录 | 应用数据在 `~/.config`，/opt 只读可接受 |
+| 图标缺失 | 菜单无图标 | 用现有托盘图标生成的 256px PNG 兜底 |
