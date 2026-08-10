@@ -119,6 +119,7 @@ public sealed partial class SettingsWindow : Window
         OpacityBox.Value = _working.Opacity;
         TransparencyModeBox.SelectedIndex = _working.TransparencyMode == "wholeWindow" ? 1 : 0;
         RefreshOpacityFromMode();
+        UpdateTransparencyHint();
         LayoutBox.SelectedIndex = _working.LayoutMode == "card" ? 1 : 0;
         GroupBoxLayoutBox.SelectedIndex = _working.GroupLayout == "top" ? 1 : 0;
         IconSizeBox.Value = (decimal)_working.IconSize;
@@ -504,7 +505,11 @@ public sealed partial class SettingsWindow : Window
             : ThemeProfileBox.Text!;
 
     // ---- B3-2 透明度双模式 ----
-    private void OnTransparencyModeChanged(object? sender, SelectionChangedEventArgs e) => RefreshOpacityFromMode();
+    private void OnTransparencyModeChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        RefreshOpacityFromMode();
+        UpdateTransparencyHint();
+    }
 
     private void RefreshOpacityFromMode()
     {
@@ -516,6 +521,23 @@ public sealed partial class SettingsWindow : Window
         {
             OpacityBox.Value = _working.LayeredOpacity;
         }
+
+        OpacityValueText.Text = $"{(int)Math.Round(Math.Clamp(OpacityBox.Value, 0.55, 1.0) * 100)}%";
+    }
+
+    /// <summary>滑块拖动实时显示百分比，让透明度调节有直接反馈。</summary>
+    private void OnOpacityValueChanged(object? sender, Avalonia.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    {
+        var value = OpacityBox.Value;
+        OpacityValueText.Text = $"{(int)Math.Round(Math.Clamp(value, 0.55, 1.0) * 100)}%";
+    }
+
+    /// <summary>透明模式说明，避免用户误以为滑块"失效"。</summary>
+    private void UpdateTransparencyHint()
+    {
+        TransparencyHint.Text = TransparencyModeBox.SelectedIndex == 1
+            ? "整窗透明：整个窗口（含背景）半透明，可透出桌面与窗口管理器合成效果。"
+            : "分层透明：仅主界面项目区域内容半透明，顶部搜索栏、底部按钮栏与分组栏保持不透明。";
     }
 
     private void OnResetOpacity(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

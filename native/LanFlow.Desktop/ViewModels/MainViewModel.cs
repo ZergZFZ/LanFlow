@@ -88,6 +88,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
         settings.ThemeColors = source.ThemeColors;
         settings.CustomThemes = source.CustomThemes;
         settings.Opacity = Math.Clamp(source.Opacity, 0.55, 1.0);
+        settings.TransparencyMode = source.TransparencyMode == "wholeWindow" ? "wholeWindow" : "layered";
+        settings.LayeredOpacity = Math.Clamp(source.LayeredOpacity, 0.55, 1.0);
+        settings.WholeWindowOpacity = Math.Clamp(source.WholeWindowOpacity, 0.55, 1.0);
         settings.LayoutMode = source.LayoutMode == "card" ? "card" : "tile";
         settings.IconSize = Math.Clamp(source.IconSize, 24, 72);
         settings.CardWidth = Math.Clamp(source.CardWidth, 48, 320);

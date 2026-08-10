@@ -57,3 +57,15 @@
 | 修复 | B2-1 失焦隐藏：hotkey 唤回被吞、hide=true 启动即隐藏（见基线 round5-b2） |
 | 已知限制 | Deepin 唤回抢焦期（~300ms）内点桌面偶发被 WM 吞焦（需再点一次）；Topmost 抢焦成功率平台波动 |
 | 源码 commit | linux 分支 `7f14d50`（文档基线 `909be23`，ConfigDir `7b809eb`） |
+
+## 6. 本轮变更（round6，2026-08-10，包 final-r6）
+
+> 用户实机反馈的三大基础体验问题修复；验收点见包内 `TEST-CARD-r6.md`。
+
+| 类别 | 内容 |
+|---|---|
+| 修复 | 设置页开关「看起来不能动」：选中/未选中背景色差异几乎不可见 + 圆点不移动，点击后无任何视觉反馈。重做 ToggleButton 模板——圆点随 IsChecked 平滑滑动（ThicknessTransition），选中态背景切换 AccentBrush，hover 微反馈 |
+| 修复 | 浅色主题下设置窗口白底白字：`ApplyThemeColors` 切换画刷时同步 `RequestedThemeVariant = Light`（否则 FluentTheme 保持 Dark，控件默认前景仍为白色系）；设置窗口补 `Foreground` 兜底 |
+| 修复 | 透明度滑块「失效」感知：滑块无任何数值/说明反馈，且分层模式仅项目区内容透明、窗口背景不变。新增滑块实时百分比显示 + 透明模式说明文字 |
+| 说明 | 分层透明 = 仅项目区内容半透明（顶部搜索栏/底部按钮栏/分组栏保持不透明）；整窗透明 = 整个窗口半透明（X11 走 `_NET_WM_WINDOW_OPACITY`） |
+| 源码 commit | linux 分支（本轮，见 git log） |

@@ -6,6 +6,7 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using LanFlow.Desktop;
 using LanFlow.Desktop.Models;
@@ -54,6 +55,9 @@ public class App : Application
 
         var colors = settings.ThemeColors;
         var resources = Current.Resources;
+        // 浅色/深色切换必须同步 FluentTheme 变体，否则控件默认前景（Dark=白色系）
+        // 在浅色面板上形成白底白字。
+        Current.RequestedThemeVariant = settings.Theme == "light" ? ThemeVariant.Light : ThemeVariant.Dark;
         resources["PanelBrush"] = new SolidColorBrush(Color.Parse(colors.Panel));
         resources["PanelBorderBrush"] = new SolidColorBrush(Color.Parse(colors.PanelBorder));
         resources["SurfaceBrush"] = new SolidColorBrush(Color.Parse(colors.Surface));

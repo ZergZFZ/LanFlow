@@ -84,16 +84,35 @@
             <Setter Property="Template">
                 <ControlTemplate>
                     <Grid>
-                        <Border Width="44" Height="24" CornerRadius="12"
+                        <Border Name="PART_Track" Width="44" Height="24" CornerRadius="12"
                                 Background="{TemplateBinding Background}" />
-                        <Ellipse Width="18" Height="18" Fill="White" Margin="3,0,0,0"
-                                 HorizontalAlignment="Left" VerticalAlignment="Center" />
+                        <Ellipse Name="PART_Thumb" Width="18" Height="18" Fill="White"
+                                 Margin="3,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center" />
                     </Grid>
                 </ControlTemplate>
             </Setter>
         </Style>
+        <!-- 开关滑动动画：圆点 Margin 平滑过渡 -->
+        <Style Selector="ToggleButton /template/ Ellipse">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <ThicknessTransition Property="Margin" Duration="0:0:0.15" />
+                </Transitions>
+            </Setter>
+        </Style>
         <Style Selector="ToggleButton:checked">
             <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+        </Style>
+        <!-- checked：圆点滑到右侧（用 Margin 驱动，与 Transitions 平滑衔接），选中状态一眼可辨 -->
+        <Style Selector="ToggleButton:checked /template/ Ellipse">
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="Margin" Value="23,0,0,0" />
+        </Style>
+        <Style Selector="ToggleButton:pointerover /template/ Border">
+            <Setter Property="Opacity" Value="0.85" />
+        </Style>
+        <Style Selector="ToggleButton:disabled">
+            <Setter Property="Opacity" Value="0.4" />
         </Style>
 
         <Style Selector="ComboBox">

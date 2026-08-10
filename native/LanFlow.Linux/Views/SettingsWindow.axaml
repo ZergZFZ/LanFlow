@@ -7,7 +7,8 @@
         MinWidth="700" MinHeight="480"
         CanResize="True"
         WindowStartupLocation="CenterOwner"
-        Background="{DynamicResource PanelBrush}">
+        Background="{DynamicResource PanelBrush}"
+        Foreground="{DynamicResource TextPrimaryBrush}">
     <Grid RowDefinitions="*,Auto" ColumnDefinitions="190,*">
         <!-- 左侧分类导航（B3-1：对齐 Windows 8 分类结构） -->
         <Border Grid.Row="0" Grid.Column="0"
@@ -121,10 +122,18 @@
                         </ComboBox>
                     </Grid>
                     <Grid ColumnDefinitions="*,200">
-                        <TextBlock Grid.Column="0" Text="透明度（55%-100%）" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
-                        <Slider Grid.Column="1" x:Name="OpacityBox" Minimum="0.55" Maximum="1" Value="1" />
+                        <TextBlock Grid.Column="0" Text="透明度" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
+                        <Grid Grid.Column="1" ColumnDefinitions="*,Auto">
+                            <Slider Grid.Column="0" x:Name="OpacityBox" Minimum="0.55" Maximum="1" Value="1"
+                                    ValueChanged="OnOpacityValueChanged" />
+                            <TextBlock Grid.Column="1" x:Name="OpacityValueText" Margin="8,0,0,0"
+                                       FontSize="12" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextPrimaryBrush}" />
+                        </Grid>
                     </Grid>
                     <Button Content="恢复 85%" Width="120" HorizontalAlignment="Left" Click="OnResetOpacity" />
+                    <TextBlock x:Name="TransparencyHint" FontSize="11" TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextSecondaryBrush}" />
                 </StackPanel>
 
                 <!-- 5 交互 -->
