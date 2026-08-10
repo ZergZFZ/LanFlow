@@ -263,6 +263,9 @@ public sealed partial class SettingsWindow : Window
             }
         }
 
+        // D17 根因修复：切换主题必须同步"主题配置名称"文本框，否则 OnConfirm 会用
+        // 残留的旧名称（默认"深色"）覆盖 ThemeProfile，导致下次进入设置时主题回退深色。
+        ThemeProfileBox.Text = selected;
         UpdateColorButtons();
     }
 

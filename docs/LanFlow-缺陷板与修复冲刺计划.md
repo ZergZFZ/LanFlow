@@ -613,6 +613,7 @@ keysym 反查（含全键表扫描）得到 204，但用户物理 `\` 键产生�
 
 > 用户实机反馈"最基础的优化没做好"：开关不能动 / 浅色白底白字 / 透明度滑块失效。
 > 本机 Headless + Win32 双通道探针复现与复验，修复后打包 round6（`LanFlow-linux-x64-round6.tar.gz`）。
+> **实机验证（2026-08-10）：UOS 上全部通过，三项结案。**
 
 ### 21.1 D14 开关"看起来不能动"（视觉反馈缺失）
 
@@ -654,4 +655,40 @@ UOS round5 截图（b5-light4）深色文字存在（此前"白底白字"判定�
 
 - 包：`LanFlow-linux-x64-round6.tar.gz`（40MB，GNU tar `--mode=755`，可执行位已核验）。
 - 验收卡：`TEST-CARD-r6.md`（三问题 + 关键回归）。
-- 待实机：UOS 上验证 ① 开关滑动动画与选中态、② 浅色 8 页文字、③ 整窗/分层透明效果。
+- 实机验证（2026-08-10）：**全部通过**——① 开关滑动动画与选中态可见可操作、② 浅色 8 页深字正常、
+  ③ 整窗/分层透明效果正常。D14–D16 结案。
+
+## 22. 主题保存回退深色（D17，2026-08-10，round6 实机后反馈）
+
+> 用户实机验证 round6 全部通过后，发现新逻辑缺陷：选浅色保存后，再次进入设置改任何
+> 非主题项再保存，主题会默认切回深色。**主题应保持当前主题保存，而非固定深色。**
+
+### 22.1 D17 现象与根因
+
+**现象**：首次选"浅色"保存后界面正常（浅色）；再次进入设置，改动除主题外的任意项保存，
+主题回退为深色。
+
+**根因**（Headless 探针复现，两次设置会话状态链）：
+
+1. 打开设置时 `ThemeProfileBox`（主题配置名称）初始化残留默认值 `"深色"`（`InitializeState` 里
+   `ThemeProfileBox.Text = _working.ThemeProfile`，此时 ThemeProfile 为默认"深色"）。
+2. 用户选"浅色"触发 `OnProfileChanged`，只更新了 `_working.Theme="light"` 与
+   `_working.ThemeProfile="浅色"`，**未同步 `ThemeProfileBox.Text`**（仍是"深色"）。
+3. `OnConfirm` 中 `_working.ThemeProfile = ThemeProfileBox.Text`（非空）→ 把 ThemeProfile
+   覆盖回"深色"。结果：`Theme="light"` 与 `ThemeProfile="深色"` 不一致落盘。
+4. 再次进入设置：`ProfileBox.SelectedItem` 按 ThemeProfile="深色" 恢复 → `OnProfileChanged`
+   判定选中"深色" → `_working.Theme="dark"` → 保存即回退深色。
+
+探针输出证据：会话1 保存后 `Theme=light ThemeProfile=深色`；会话2 打开 `SelectedItem=深色`；
+会话2 保存后 `Theme=dark`。
+
+**修复**（`SettingsWindow.axaml.cs`）：`OnProfileChanged` 切换主题后同步
+`ThemeProfileBox.Text = selected`，确保 `OnConfirm` 不会用残留旧名称覆盖 ThemeProfile。
+
+**验证**（Headless 复现工程，二次会话断言）：会话1 选浅色保存 → `Theme=light ThemeProfile=浅色`；
+会话2 改布局模式保存 → `Theme=light ThemeProfile=浅色 LayoutMode=card`，`[PASS]`。
+
+### 22.2 包状态
+
+- 修复代码已提交，随 round7 打包发布：`LanFlow-linux-x64-round7.tar.gz`（release/ 目录）。
+- 待实机：复测「浅色保存 → 重进设置 → 改其它保存 → 仍为浅色」。
