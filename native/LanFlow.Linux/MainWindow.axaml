@@ -57,38 +57,33 @@
         <DataTemplate x:Key="CardTemplate">
             <Border Margin="{DynamicResource ItemMargin}" Width="{DynamicResource CardSize}" Height="{DynamicResource CardSize}"
                     Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource SurfaceBorderBrush}" BorderThickness="1"
-                    CornerRadius="10" Padding="8" PointerPressed="OnItemPointerPressed" PointerMoved="OnItemPointerMoved" PointerReleased="OnItemPointerReleased"
+                    CornerRadius="10" Padding="10" PointerPressed="OnItemPointerPressed" PointerMoved="OnItemPointerMoved" PointerReleased="OnItemPointerReleased"
                     Tapped="OnItemTapped" DoubleTapped="OnItemDoubleTapped" Cursor="Hand">
-                <Grid>
-                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <Grid>
-                            <Border Width="{DynamicResource IconSize}" Height="{DynamicResource IconSize}" CornerRadius="10"
-                                    Background="{DynamicResource IconSurfaceBrush}" HorizontalAlignment="Center">
-                                <TextBlock Text="{Binding DisplayName, Converter={StaticResource FirstChar}}"
-                                           Foreground="{DynamicResource TextSecondaryBrush}"
-                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <Image Source="{Binding IconImage}" Width="{DynamicResource IconSize}" Height="{DynamicResource IconSize}"
-                                   Stretch="Uniform" HorizontalAlignment="Center"
-                                   IsVisible="{Binding IconImage, Converter={StaticResource NotNull}}" />
-                            <Border IsVisible="{DynamicResource ShowBadge}" HorizontalAlignment="Right" VerticalAlignment="Top"
-                                    Background="{DynamicResource AccentBrush}" CornerRadius="6" Padding="4,1" Margin="0,2,2,0">
-                                <TextBlock Text="{Binding Hotkey}" FontSize="9" Foreground="White"
-                                           IsVisible="{Binding Hotkey, Converter={StaticResource NotEmpty}}" />
-                            </Border>
-                        </Grid>
-                        <TextBlock Text="{Binding DisplayName}" IsVisible="{DynamicResource ShowTitle}"
-                                   FontSize="{DynamicResource TextSize}" Foreground="{DynamicResource TextPrimaryBrush}"
-                                   HorizontalAlignment="Center" Margin="0,6,0,0" MaxWidth="{DynamicResource CardSize}"
-                                   TextTrimming="CharacterEllipsis" />
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                    <Grid Grid.Column="0" VerticalAlignment="Center">
+                        <Border Width="{DynamicResource IconSize}" Height="{DynamicResource IconSize}" CornerRadius="10"
+                                Background="{DynamicResource IconSurfaceBrush}">
+                            <TextBlock Text="{Binding DisplayName, Converter={StaticResource FirstChar}}"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <Image Source="{Binding IconImage}" Width="{DynamicResource IconSize}" Height="{DynamicResource IconSize}"
+                               Stretch="Uniform" HorizontalAlignment="Center"
+                               IsVisible="{Binding IconImage, Converter={StaticResource NotNull}}" />
+                    </Grid>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,8,0" Spacing="3">
+                        <TextBlock Text="{Binding DisplayName}" FontSize="{DynamicResource TextSize}"
+                                   Foreground="{DynamicResource TextPrimaryBrush}" TextTrimming="CharacterEllipsis" MaxWidth="{DynamicResource CardSize}" />
+                        <TextBlock Text="{Binding Hotkey}" FontSize="10" Foreground="{DynamicResource TextSecondaryBrush}"
+                                   IsVisible="{Binding Hotkey, Converter={StaticResource NotEmpty}}" />
                     </StackPanel>
-                    <Button Content="×" IsVisible="{DynamicResource EditMode}"
+                    <Button Content="×" Grid.Column="2" IsVisible="{DynamicResource EditMode}"
                             HorizontalAlignment="Right" VerticalAlignment="Top"
                             Width="18" Height="18" Padding="0" BorderThickness="0"
                             Background="#E5484D" Foreground="White" FontSize="12"
                             HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
                             Click="OnDeleteItem" />
-                    <StackPanel IsVisible="{DynamicResource EditMode}" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="2">
+                    <StackPanel Grid.Column="2" IsVisible="{DynamicResource EditMode}" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="2">
                         <Button Content="↑" Width="16" Height="16" Padding="0" BorderThickness="0" FontSize="10"
                                 Click="OnMoveItemUp" />
                         <Button Content="↓" Width="16" Height="16" Padding="0" BorderThickness="0" FontSize="10"
@@ -112,13 +107,11 @@
                 <TextBlock x:Name="InfoText" Grid.Row="0" Grid.Column="0" Text="{Binding InfoText}" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" VerticalAlignment="Center" />
                 <TextBlock x:Name="StatusText" Grid.Row="1" Grid.Column="0" Text="{Binding StatusText}" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" />
                 <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                    <Button x:Name="AddFileButton" Content="添加文件" Click="OnAddFilesBatch" />
+                    <Button x:Name="AddFileButton" Content="添加文件" Click="OnAddFilesBatch"
+                            IsVisible="{DynamicResource NotEditMode}" />
+                    <Button x:Name="AddMenuButton" Content="添加 ▾" IsVisible="{DynamicResource EditMode}" />
+                    <Button x:Name="GroupMenuButton" Content="分组 ▾" IsVisible="{DynamicResource EditMode}" />
                     <Button x:Name="EditToggleButton" Content="编辑" Click="OnToggleEdit" />
-                    <Button x:Name="AddGroupButton" Content="添加分组" IsVisible="{DynamicResource EditMode}" Click="OnAddGroup" />
-                    <Button x:Name="RenameGroupButton" Content="重命名分组" IsVisible="{DynamicResource EditMode}" Click="OnRenameGroup" />
-                    <Button x:Name="DeleteGroupButton" Content="删除分组" IsVisible="{DynamicResource EditMode}" Click="OnDeleteGroup" />
-                    <Button x:Name="AddItemButton" Content="添加项目" IsVisible="{DynamicResource EditMode}" Click="OnAddItem" />
-                    <Button x:Name="ImportDirButton" Content="从目录导入" IsVisible="{DynamicResource EditMode}" Click="OnImportDirectory" />
                 </StackPanel>
             </Grid>
         </Border>

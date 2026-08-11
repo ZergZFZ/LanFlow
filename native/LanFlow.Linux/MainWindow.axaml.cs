@@ -4,6 +4,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Markup.Xaml.Templates;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -50,6 +51,8 @@ public sealed partial class MainWindow : Window
         // 使用 None 作为安全回退。
         TransparencyLevelHint = new[] { WindowTransparencyLevel.None };
         App.ApplyThemeColors(_viewModel.Settings);
+        Resources["NotEditMode"] = true;
+        BuildEditFlyouts();
         ApplyMetrics(_viewModel.Settings);
         BuildGroupTabs();
         ReloadItems();
@@ -956,8 +959,48 @@ public sealed partial class MainWindow : Window
     {
         _editMode = !_editMode;
         Resources["EditMode"] = _editMode;
+        Resources["NotEditMode"] = !_editMode;
         EditToggleButton.Content = _editMode ? "完成" : "编辑";
         BuildGroupTabs();
+    }
+
+    /// <summary>B6-1：编辑模式操作收纳为两个 Flyout 菜单（添加/分组），避免底部一长串按钮。</summary>
+    private void BuildEditFlyouts()
+    {
+        AddMenuButton.Flyout = BuildMenuFlyout(
+            ("添加文件...", OnAddFilesBatch),
+            ("从目录导入...", OnImportDirectory),
+            ("添加项目...", OnAddItem));
+        GroupMenuButton.Flyout = BuildMenuFlyout(
+            ("添加分组...", OnAddGroup),
+            ("重命名分组...", OnRenameGroup),
+            ("删除分组...", OnDeleteGroup));
+    }
+
+    private static Flyout BuildMenuFlyout(params (string Title, EventHandler<RoutedEventArgs> Handler)[] items)
+    {
+        var flyout = new Flyout { Placement = PlacementMode.Top };
+        var panel = new StackPanel { MinWidth = 150, Spacing = 2, Margin = new Thickness(6) };
+        foreach (var (title, handler) in items)
+        {
+            var button = new Button
+            {
+                Content = title,
+                Height = 32,
+                Padding = new Thickness(12, 0),
+                HorizontalContentAlignment = HorizontalAlignment.Left,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+            };
+            button.Click += (s, e) =>
+            {
+                flyout.Hide();
+                handler(s, e);
+            };
+            panel.Children.Add(button);
+        }
+
+        flyout.Content = panel;
+        return flyout;
     }
 
     private void OnAddGroup(object? sender, RoutedEventArgs e)

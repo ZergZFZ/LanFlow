@@ -203,9 +203,9 @@ public sealed class ShellIconService
         {
             if (path.EndsWith(".svg", StringComparison.OrdinalIgnoreCase))
             {
-                // SVG 渲染暂禁用（D8 修复）：Avalonia.Svg.Skia 会把托管 SkiaSharp 抬到 3.116，
-                // 与 UOS glibc 2.28 环境不兼容，待过河后恢复
-                return null;
+                // B6-2：SVG 走轻量渲染器（自研，SkiaSharp 2.88.9，不抬依赖、不碰 glibc）。
+                // 替代此前 D8 修复的整体禁用——UOS/Deepin 系统图标以 SVG 为主，禁用导致图标全灭。
+                return SvgIconRenderer.Render(path, 128);
             }
 
             return new Bitmap(path);
