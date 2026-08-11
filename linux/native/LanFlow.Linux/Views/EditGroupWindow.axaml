@@ -1,0 +1,20 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:LanFlow.Desktop.Views"
+        x:Class="LanFlow.Desktop.Views.EditGroupWindow"
+        x:Name="Root"
+        Title="重命名分组"
+        Width="360" Height="150"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource PanelBrush}">
+    <Grid Margin="16" RowDefinitions="Auto,Auto">
+        <TextBox x:Name="NameBox"
+                 Grid.Row="0"
+                 Watermark="请输入分组名称"
+                 Text="{Binding GroupName, ElementName=Root, Mode=TwoWay}" />
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+            <Button Content="确定" Width="80" Margin="0,0,10,0" Click="OnConfirm" />
+            <Button Content="取消" Width="80" Click="OnCancel" />
+        </StackPanel>
+    </Grid>
+</Window>

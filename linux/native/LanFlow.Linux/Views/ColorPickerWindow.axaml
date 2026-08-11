@@ -1,0 +1,69 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:LanFlow.Desktop.Views"
+        x:Class="LanFlow.Desktop.Views.ColorPickerWindow"
+        Title="选择颜色"
+        Width="380" Height="360"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource PanelBrush}">
+    <Grid Margin="16" RowDefinitions="*,Auto" ColumnDefinitions="230,*">
+        <Canvas x:Name="SvCanvas" Grid.Row="0" Grid.Column="0" Width="210" Height="210"
+                Background="Transparent">
+            <Border Canvas.Left="0" Canvas.Top="0" Width="210" Height="210" x:Name="SvHueBase"
+                    Background="#FF0000" />
+            <Border Canvas.Left="0" Canvas.Top="0" Width="210" Height="210">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                        <GradientStop Offset="0" Color="White" />
+                        <GradientStop Offset="1" Color="#00FFFFFF" />
+                    </LinearGradientBrush>
+                </Border.Background>
+            </Border>
+            <Border Canvas.Left="0" Canvas.Top="0" Width="210" Height="210">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                        <GradientStop Offset="0" Color="#00000000" />
+                        <GradientStop Offset="1" Color="Black" />
+                    </LinearGradientBrush>
+                </Border.Background>
+            </Border>
+            <Ellipse x:Name="SvIndicator" Width="12" Height="12" Stroke="White" StrokeThickness="2" />
+            <Border x:Name="SvOverlay" Canvas.Left="0" Canvas.Top="0" Width="210" Height="210"
+                    Background="Transparent" />
+        </Canvas>
+
+        <Slider x:Name="HueSlider" Grid.Row="0" Grid.Column="0" Width="210"
+                Margin="0,222,0,0" VerticalAlignment="Top" Minimum="0" Maximum="360" Value="0">
+            <Slider.Background>
+                <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                    <GradientStop Offset="0.0" Color="#FF0000" />
+                    <GradientStop Offset="0.17" Color="#FFFF00" />
+                    <GradientStop Offset="0.33" Color="#00FF00" />
+                    <GradientStop Offset="0.5" Color="#00FFFF" />
+                    <GradientStop Offset="0.67" Color="#0000FF" />
+                    <GradientStop Offset="0.83" Color="#FF00FF" />
+                    <GradientStop Offset="1.0" Color="#FF0000" />
+                </LinearGradientBrush>
+            </Slider.Background>
+        </Slider>
+
+        <StackPanel Grid.Row="0" Grid.Column="1" Spacing="6" Margin="12,0,0,0">
+            <Border x:Name="Preview" Width="64" Height="64" CornerRadius="8"
+                    BorderBrush="{DynamicResource SurfaceBorderBrush}" BorderThickness="1" />
+            <TextBlock Text="十六进制" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" />
+            <TextBox x:Name="HexBox" MaxLength="7" />
+            <TextBlock Text="红" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" />
+            <NumericUpDown x:Name="RedBox" Minimum="0" Maximum="255" Increment="1" />
+            <TextBlock Text="绿" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" />
+            <NumericUpDown x:Name="GreenBox" Minimum="0" Maximum="255" Increment="1" />
+            <TextBlock Text="蓝" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11" />
+            <NumericUpDown x:Name="BlueBox" Minimum="0" Maximum="255" Increment="1" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                    Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10" Margin="0,14,0,0">
+            <Button Content="确定" Width="80" Click="OnConfirm" />
+            <Button Content="取消" Width="80" Click="OnCancel" />
+        </StackPanel>
+    </Grid>
+</Window>

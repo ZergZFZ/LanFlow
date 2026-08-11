@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>LanFlow</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <!-- 版本号与 Windows 版（GitHub Latest v1.4.8）同步，见 docs/LanFlow-Linux任务清单.md -->
+    <Version>1.4.8</Version>
+    <AssemblyVersion>1.4.8.0</AssemblyVersion>
+    <FileVersion>1.4.8.0</FileVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.18" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.18" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.18" />
+    <!-- 注意（D7/D8 教训）：暂不引入 Avalonia.Svg.Skia——它会把托管 SkiaSharp 抬到 3.116，
+         其传递的 2.88.9 原生库随即错配（D7），而 3.116 原生库又要求 glibc 2.29（UOS 为 2.28，D8）。
+         SVG 图标支持待过河后单独恢复。 -->
+    <!-- 显式钉住托管 SkiaSharp=2.88.9：NuGet 缓存存在 3.116.1 时，Avalonia 的 >=2.88
+         约束会解析到 3.116.1 托管，与 2.88.9 原生错配导致 UOS 启动崩溃（D7 复现）。 -->
+    <PackageReference Include="SkiaSharp" Version="2.88.9" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="2.88.9" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LanFlow.Core\LanFlow.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 项目图标与启动/安装脚本随包发布：图标供 Window.Icon（标题栏/任务栏）与 install-lanflow.sh 引用 -->
+    <None Include="lanflow.png;lanflow.sh;install-lanflow.sh" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

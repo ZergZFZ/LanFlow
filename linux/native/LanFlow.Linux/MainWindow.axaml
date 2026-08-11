@@ -1,0 +1,143 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:LanFlow.Desktop.Views"
+        x:Class="LanFlow.Desktop.MainWindow"
+        Title="LanFlow"
+        Width="780" Height="540"
+        Background="{DynamicResource PanelBrush}"
+        Foreground="{DynamicResource TextPrimaryBrush}">
+    <Window.Resources>
+        <views:FirstCharConverter x:Key="FirstChar" />
+        <views:NotNullConverter x:Key="NotNull" />
+        <views:NotEmptyConverter x:Key="NotEmpty" />
+
+        <DataTemplate x:Key="TileTemplate">
+            <Border Margin="{DynamicResource ItemMargin}" Background="Transparent"
+                    PointerPressed="OnItemPointerPressed" PointerMoved="OnItemPointerMoved" PointerReleased="OnItemPointerReleased"
+                    Tapped="OnItemTapped" DoubleTapped="OnItemDoubleTapped" Cursor="Hand">
+                <Grid>
+                    <StackPanel HorizontalAlignment="Center">
+                        <Grid>
+                            <Border Width="{DynamicResource IconSize}" Height="{DynamicResource IconSize}" CornerRadius="10"
+                                    Background="{DynamicResource IconSurfaceBrush}" HorizontalAlignment="Center">
+                                <TextBlock Text="{Binding DisplayName, Converter={StaticResource FirstChar}}"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <Image Source="{Binding IconImage}" Width="{DynamicResource IconSize}" Height="{DynamicResource IconSize}"
+                                   Stretch="Uniform" HorizontalAlignment="Center"
+                                   IsVisible="{Binding IconImage, Converter={StaticResource NotNull}}" />
+                            <Border IsVisible="{DynamicResource ShowBadge}" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                    Background="{DynamicResource AccentBrush}" CornerRadius="6" Padding="4,1" Margin="0,2,2,0">
+                                <TextBlock Text="{Binding Hotkey}" FontSize="9" Foreground="White"
+                                           IsVisible="{Binding Hotkey, Converter={StaticResource NotEmpty}}" />
+                            </Border>
+                        </Grid>
+                        <TextBlock Text="{Binding DisplayName}" IsVisible="{DynamicResource ShowTitle}"
+                                   FontSize="{DynamicResource TextSize}" Foreground="{DynamicResource TextPrimaryBrush}"
+                                   HorizontalAlignment="Center" Margin="0,5,0,0" MaxWidth="{DynamicResource IconSize}"
+                                   TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <Button Content="×" IsVisible="{DynamicResource EditMode}"
+                            HorizontalAlignment="Right" VerticalAlignment="Top"
+                            Width="18" Height="18" Padding="0" BorderThickness="0"
+                            Background="#E5484D" Foreground="White" FontSize="12"
+                            HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                            Click="OnDeleteItem" />
+                    <StackPanel IsVisible="{DynamicResource EditMode}" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="2">
+                        <Button Content="↑" Width="16" Height="16" Padding="0" BorderThickness="0" FontSize="10"
+                                Click="OnMoveItemUp" />
+                        <Button Content="↓" Width="16" Height="16" Padding="0" BorderThickness="0" FontSize="10"
+                                Click="OnMoveItemDown" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <DataTemplate x:Key="CardTemplate">
+            <Border Margin="{DynamicResource ItemMargin}" Width="{DynamicResource CardSize}" Height="{DynamicResource CardSize}"
+                    Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource SurfaceBorderBrush}" BorderThickness="1"
+                    CornerRadius="10" Padding="10" PointerPressed="OnItemPointerPressed" PointerMoved="OnItemPointerMoved" PointerReleased="OnItemPointerReleased"
+                    Tapped="OnItemTapped" DoubleTapped="OnItemDoubleTapped" Cursor="Hand">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                    <Grid Grid.Column="0" VerticalAlignment="Center">
+                        <Border Width="{DynamicResource IconSize}" Height="{DynamicResource IconSize}" CornerRadius="10"
+                                Background="{DynamicResource IconSurfaceBrush}">
+                            <TextBlock Text="{Binding DisplayName, Converter={StaticResource FirstChar}}"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <Image Source="{Binding IconImage}" Width="{DynamicResource IconSize}" Height="{DynamicResource IconSize}"
+                               Stretch="Uniform" HorizontalAlignment="Center"
+                               IsVisible="{Binding IconImage, Converter={StaticResource NotNull}}" />
+                    </Grid>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,8,0" Spacing="3">
+                        <TextBlock Text="{Binding DisplayName}" FontSize="{DynamicResource TextSize}"
+                                   Foreground="{DynamicResource TextPrimaryBrush}" TextTrimming="CharacterEllipsis" MaxWidth="{DynamicResource CardSize}" />
+                        <TextBlock Text="{Binding Hotkey}" FontSize="10" Foreground="{DynamicResource TextSecondaryBrush}"
+                                   IsVisible="{Binding Hotkey, Converter={StaticResource NotEmpty}}" />
+                    </StackPanel>
+                    <Button Content="×" Grid.Column="2" IsVisible="{DynamicResource EditMode}"
+                            HorizontalAlignment="Right" VerticalAlignment="Top"
+                            Width="18" Height="18" Padding="0" BorderThickness="0"
+                            Background="#E5484D" Foreground="White" FontSize="12"
+                            HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                            Click="OnDeleteItem" />
+                    <StackPanel Grid.Column="2" IsVisible="{DynamicResource EditMode}" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="2">
+                        <Button Content="↑" Width="16" Height="16" Padding="0" BorderThickness="0" FontSize="10"
+                                Click="OnMoveItemUp" />
+                        <Button Content="↓" Width="16" Height="16" Padding="0" BorderThickness="0" FontSize="10"
+                                Click="OnMoveItemDown" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
+    </Window.Resources>
+
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="0,0,0,1">
+            <Grid ColumnDefinitions="*,Auto" Margin="12,10">
+                <TextBox x:Name="SearchBox" Grid.Column="0" Watermark="搜索应用程序..." TextChanged="OnSearchChanged" KeyDown="OnSearchKeyDown" />
+                <Button x:Name="SettingsButton" Grid.Column="1" Content="设置" Margin="10,0,0,0" Click="OnOpenSettings" />
+            </Grid>
+        </Border>
+
+        <Border DockPanel.Dock="Bottom" Background="{DynamicResource FooterBrush}" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="0,1,0,0">
+            <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto" Margin="12,8" RowSpacing="4">
+                <TextBlock x:Name="InfoText" Grid.Row="0" Grid.Column="0" Text="{Binding InfoText}" Foreground="{DynamicResource TextSecondaryBrush}" FontSize="12" VerticalAlignment="Center" />
+                <TextBlock x:Name="StatusText" Grid.Row="1" Grid.Column="0" Text="{Binding StatusText}" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" />
+                <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                    <Button x:Name="AddFileButton" Content="添加文件" Click="OnAddFilesBatch"
+                            IsVisible="{DynamicResource NotEditMode}" />
+                    <Button x:Name="AddMenuButton" Content="添加 ▾" IsVisible="{DynamicResource EditMode}" />
+                    <Button x:Name="GroupMenuButton" Content="分组 ▾" IsVisible="{DynamicResource EditMode}" />
+                    <Button x:Name="EditToggleButton" Content="编辑" Click="OnToggleEdit" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Border x:Name="GroupsHost" DockPanel.Dock="Left" Background="{DynamicResource PanelBrush}"
+                BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="0,0,1,0" Padding="8">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel x:Name="GroupTabs" Orientation="Vertical" Spacing="6" />
+            </ScrollViewer>
+        </Border>
+
+        <Grid x:Name="ItemsHost">
+            <ScrollViewer x:Name="ItemsScroller">
+                <ItemsControl x:Name="ItemsControl" ItemTemplate="{DynamicResource TileTemplate}"
+                              DragDrop.AllowDrop="True" DragDrop.DragOver="OnItemsDragOver" DragDrop.Drop="OnItemsDrop">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel x:Name="ItemsWrap" Orientation="Horizontal" Margin="{DynamicResource ContentPadding}" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+            </ScrollViewer>
+            <!-- B2-3 空状态提示：分组无项目 / 搜索无结果时显示引导文案 -->
+            <TextBlock x:Name="EmptyStateText" HorizontalAlignment="Center" VerticalAlignment="Center"
+                       Foreground="{DynamicResource TextSecondaryBrush}" FontSize="13"
+                       TextWrapping="Wrap" TextAlignment="Center" IsVisible="False" />
+        </Grid>
+    </DockPanel>
+</Window>
