@@ -59,7 +59,7 @@
 | B5-2 | 项目区虚拟化 | 大数据量滚动性能（参考 Windows VirtualizingWrapPanel 思路） | 无 | 受限评估后不实施（见 §5 记录） |
 | B5-3 | 内存优化 | 内存 ≤450MB（D5 收口） | B5-2 | 部分完成（LRU 有界化，实机验证后置） |
 | B5-4 | 配置迁移 | 配置版本号 + 受控迁移 + 换位置 | 无 | 已完成 |
-| B5-5 | .deb 安装包 | dpkg-deb 打包：`DEBIAN/control` + 应用目录 `/opt/lanflow` + 菜单项 `/usr/share/applications` + postinst 刷新桌面/图标缓存。验收：UOS 双击安装、应用菜单出现、图标正常、`dpkg -r lanflow` 卸载干净。数据目录 `~/.config/LanFlow` 不受卸载影响 | 无 | 规划（方案见 §6） |
+| B5-5 | .deb 安装包 | dpkg-deb 打包：`DEBIAN/control` + 应用目录 `/opt/lanflow` + 菜单项 `/usr/share/applications` + postinst 刷新桌面/图标缓存。验收：UOS 双击安装、应用菜单出现、图标正常、`dpkg -r lanflow` 卸载干净。数据目录 `~/.config/LanFlow` 不受卸载影响 | 无 | 已完成（2026-08-11 Windows 构建出包 `lanflow_0.10.0_amd64.deb`，ar/control/data 结构验证通过；UOS 实机安装验证待做） |
 
 ## 3. 完成记录
 
@@ -84,6 +84,7 @@
 - 2026-08-07：最终打包——`LanFlow-linux-x64-round4.tar.gz`（39.9MB，B1–B5 全量，commit 690061f）；生成测试基线文件 `docs/LanFlow-Linux测试基线.md`；包内附 TEST-CARD-r4.md + RELEASE-NOTES.md。待 UOS 实机验证。
 - 2026-08-10：B1 功能闭环探针复验（Headless）——批量添加（3 文件入库）、自动命名（.desktop Name=微信/WPS Office、脚本 my-tool.sh→my-tool）、重复拖入去重、无分组自动建组、上移/下移排序 + 重载持久化，**10 项全 PASS**。代码未改动（89dcd65 已含），外部拖放属 X11 平台行为，实机用 round7 包验证。
 - 2026-08-10：B3-6 修复完成——ConfigStore 提取静态 `ResolveConfigDirectory()`（含 LANFLOW_CONFIG_DIR 覆盖），SettingsWindow 性能页复用该解析替代硬编码路径（7b809eb）。VM 验证：覆盖目录 config 落盘 PASS；设置窗口打开 PASS（根因：桌面遮挡窗口，清理后正常）；性能页路径显示以源码链路确认，UI OCR 留实机。构建 0 错误。
+- 2026-08-11：B5-5 .deb 打包完成——Windows 上无 dpkg-deb，改用 GNU tar（`--owner=0 --group=0 --mode=755`）生成 control.tar.gz/data.tar.gz + bsdtar `--format=ar` 组合出 `lanflow_0.10.0_amd64.deb`（38.1MB，Version 0.10.0 = round10 产物）。ar 三成员、data.tar.gz（/opt/lanflow 4 文件 + desktop + 图标 + copyright，root/0 755）、control.tar.gz（control/md5sums/postinst）、debian-binary=2.0 结构验证全部通过。产物放 `release\lanflow_0.10.0_amd64.deb`（发布包唯一存放位置规则）。UOS 实机安装验证待做。
 
 ## 5. B5-2 虚拟化受限评估记录
 
@@ -132,7 +133,7 @@ chmod +x /opt/lanflow/LanFlow /opt/lanflow/lanflow.sh
 
 ### 6.4 构建与验证
 
-- **构建**：在 UOS/VM 上执行 `dpkg-deb -b <stage_dir> lanflow_<ver>_amd64.deb`（目标系统打包最稳妥）；Windows 备选 nfpm，需在 UOS 上回归验证。
+- **构建**：目标机/VM 上 `dpkg-deb -b <stage_dir> lanflow_<ver>_amd64.deb` 最稳妥；**Windows 实测可用** GNU tar（`--owner=0 --group=0 --mode=755`）产出 control.tar.gz/data.tar.gz + bsdtar `--format=ar` 组合（debian-binary=2.0），已出包验证结构（2026-08-11）。
 - **安装验证**：`sudo apt install ./lanflow_<ver>_amd64.deb` → 菜单出现 LanFlow → 启动正常 → `[LanFlow]` 日志。
 - **卸载**：`sudo dpkg -r lanflow` → /opt/lanflow 与菜单项删除；`~/.config/LanFlow` 数据保留（dpkg 不碰 home）。
 - **升级**：版本号递增重装即可，配置自动保留。

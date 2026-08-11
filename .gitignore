@@ -33,6 +33,7 @@ pnpm-debug.log*
 native/**/bin/
 native/**/obj/
 native/**/publish/
+publish/
 release/
 
 # Local assistant workspace and TypeScript build cache

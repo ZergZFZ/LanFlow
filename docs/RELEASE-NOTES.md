@@ -1,6 +1,6 @@
 # LanFlow Linux 发布说明
 
-> 状态：活跃 ｜ 最近更新：2026-08-10
+> 状态：活跃 ｜ 最近更新：2026-08-11
 
 > 更新机制决策（基线 §5）：Linux 版**不做应用内更新**，采用「发布说明 + 手动解压替换」。本文件即发布说明，随每个测试包分发（`RELEASE-NOTES.md`）。
 
@@ -114,3 +114,16 @@
 | Flyout 黑框 | 深色主题下「添加 ▾ / 分组 ▾」弹出菜单默认深灰背景（2B2B2B）+ 白底按钮突兀。修复：`FlyoutPresenter` 主题化（背景 SurfaceBrush / 边框 SurfaceBorderBrush）+ 菜单项专用 `Button.menu` 样式（透明底 + hover 高亮）。Win32 渲染验证：菜单区域颜色由 2B2B2B 变为主题色 22283A |
 | 项目图标 | ① 窗口标题栏/任务栏图标：随包发布 `lanflow.png`，`Window.Icon` 加载；② 包内新增 `install-lanflow.sh`——生成带项目图标的桌面快捷方式（应用菜单出现 LanFlow） |
 | 源码 commit | linux 分支（本轮，见 git log） |
+
+## 11. .deb 安装包（2026-08-11，B5-5）
+
+> 新增 Debian 系安装包，与 tar.gz 共存（tar.gz 仍为 U 盘离线首选，无 apt 环境同样可用）。
+
+| 项 | 值 |
+|---|---|
+| 安装包 | `lanflow_0.10.0_amd64.deb`（38.1MB，对应 round10 产物，Version 0.10.0） |
+| 安装 | `sudo apt install ./lanflow_0.10.0_amd64.deb`，或文件管理器双击 → 应用菜单出现 LanFlow |
+| 内容 | `/opt/lanflow`（LanFlow ELF + lanflow.sh + lanflow.png + install-lanflow.sh）+ 菜单项 `/usr/share/applications/lanflow.desktop` + 图标（hicolor 256x256）+ `/usr/share/doc/lanflow/copyright` |
+| 卸载 | `sudo dpkg -r lanflow`；数据目录 `~/.config/LanFlow` 保留不受影响 |
+| 构建 | Windows 上 GNU tar（root/0、755）生成 control/data 归档 + bsdtar `--format=ar` 组合，替代无 dpkg-deb 的局限；ar 三成员、归档内容与权限结构验证通过 |
+| 待验证 | UOS 实机：安装 → 菜单出现 → 启动 `[LanFlow]` 日志 → 卸载干净 |
