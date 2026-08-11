@@ -103,4 +103,4 @@
 | 图标 | SVG 图标恢复（B6-2）：自研轻量 SVG 渲染器（SkiaSharp 2.88.9，零新依赖、不碰 glibc），替代 D8 的整体禁用——UOS/Deepin 系统图标以 SVG 为主，此前图标全灭只剩首字母占位；支持 path/rect/circle/ellipse/polygon/polyline + fill/stroke |
 | 卡片模式 | 布局改为图标在左、文字在右（B6-3）：文字不再依赖「显示项目标题」开关，卡片恒显名称与热键 |
 | 按钮区 | 编辑模式底部 6 个按钮收纳为 2 个 Flyout 菜单（添加 ▾ / 分组 ▾），常态保持「添加文件 + 编辑」；按钮内边距 14→18 缓解文字贴边 |
-| 源码 commit | linux 分支（本轮，见 git log） |
+| 源码 commit | linux 分支 `c2e9815`（B6 UI 体验优化） |
