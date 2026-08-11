@@ -27,4 +27,9 @@
     <ProjectReference Include="..\LanFlow.Core\LanFlow.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- 项目图标与启动/安装脚本随包发布：图标供 Window.Icon（标题栏/任务栏）与 install-lanflow.sh 引用 -->
+    <None Include="lanflow.png;lanflow.sh;install-lanflow.sh" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

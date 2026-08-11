@@ -10,6 +10,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using LanFlow.Desktop.Models;
@@ -53,6 +54,7 @@ public sealed partial class MainWindow : Window
         App.ApplyThemeColors(_viewModel.Settings);
         Resources["NotEditMode"] = true;
         BuildEditFlyouts();
+        SetWindowIcon();
         ApplyMetrics(_viewModel.Settings);
         BuildGroupTabs();
         ReloadItems();
@@ -964,6 +966,23 @@ public sealed partial class MainWindow : Window
         BuildGroupTabs();
     }
 
+    /// <summary>B6-5：窗口图标——使用随包发布的项目图标 lanflow.png（标题栏/任务栏）。</summary>
+    private void SetWindowIcon()
+    {
+        try
+        {
+            var iconPath = Path.Combine(AppContext.BaseDirectory, "lanflow.png");
+            if (File.Exists(iconPath))
+            {
+                Icon = new WindowIcon(new Bitmap(iconPath));
+            }
+        }
+        catch
+        {
+            // 图标加载失败不阻断启动，沿用默认
+        }
+    }
+
     /// <summary>B6-1：编辑模式操作收纳为两个 Flyout 菜单（添加/分组），避免底部一长串按钮。</summary>
     private void BuildEditFlyouts()
     {
@@ -979,18 +998,17 @@ public sealed partial class MainWindow : Window
 
     private static Flyout BuildMenuFlyout(params (string Title, EventHandler<RoutedEventArgs> Handler)[] items)
     {
-        var flyout = new Flyout { Placement = PlacementMode.Top };
+        var flyout = new Flyout { Placement = PlacementMode.Top }; // 背景/边框由 App.axaml FlyoutPresenter 主题样式统一
         var panel = new StackPanel { MinWidth = 150, Spacing = 2, Margin = new Thickness(6) };
         foreach (var (title, handler) in items)
         {
             var button = new Button
             {
                 Content = title,
-                Height = 32,
-                Padding = new Thickness(12, 0),
                 HorizontalContentAlignment = HorizontalAlignment.Left,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
             };
+            button.Classes.Add("menu");
             button.Click += (s, e) =>
             {
                 flyout.Hide();
