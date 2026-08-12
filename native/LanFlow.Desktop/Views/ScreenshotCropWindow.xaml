@@ -11,12 +11,117 @@
         ResizeMode="NoResize"
         Focusable="True"
         PreviewKeyDown="Window_PreviewKeyDown">
+    <Window.Resources>
+        <Style x:Key="ToolbarButtonStyle" TargetType="Button">
+            <Setter Property="Foreground" Value="#EDF1F7" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="Margin" Value="2,0" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#333A4E" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#414A63" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="ColorDotStyle" TargetType="Button">
+            <Setter Property="Width" Value="22" />
+            <Setter Property="Height" Value="22" />
+            <Setter Property="Margin" Value="3" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="11" BorderBrush="#59FFFFFF" BorderThickness="1">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderThickness" Value="2" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
     <Grid x:Name="RootGrid" Cursor="Cross">
-        <Image x:Name="FrozenImage" Stretch="None" HorizontalAlignment="Left" VerticalAlignment="Top" />
-        <Canvas x:Name="OverlayCanvas" HorizontalAlignment="Left" VerticalAlignment="Top" />
-        <Border HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,16,0,0"
+        <Image x:Name="FrozenImage" Stretch="Fill" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+        <Canvas x:Name="OverlayCanvas" Background="Transparent" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" ClipToBounds="True" />
+
+        <!-- 编辑工作区：选区图 + 马赛克层 + 标注层 -->
+        <Border x:Name="EditFrame" Visibility="Collapsed"
+                BorderBrush="#FF4C9AFF" BorderThickness="1"
+                HorizontalAlignment="Left" VerticalAlignment="Top"
+                ClipToBounds="True">
+            <Grid x:Name="EditRoot" Background="Transparent">
+                <Image x:Name="EditImage" Stretch="Fill" />
+                <Image x:Name="MosaicLayer" Stretch="Fill" IsHitTestVisible="False" />
+                <Canvas x:Name="EditCanvas" Background="Transparent" ClipToBounds="True" />
+            </Grid>
+        </Border>
+
+        <!-- 编辑工具条 -->
+        <Border x:Name="Toolbar" Visibility="Collapsed"
+                HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,12,0,0"
+                Background="#E61B1F27" CornerRadius="6" Padding="6">
+            <StackPanel Orientation="Horizontal">
+                <Button x:Name="ArrowButton" Style="{StaticResource ToolbarButtonStyle}" Content="➤ 箭头" Tag="arrow" Click="Tool_Click" />
+                <Button x:Name="RectButton" Style="{StaticResource ToolbarButtonStyle}" Content="▭ 框选" Tag="rect" Click="Tool_Click" />
+                <Button x:Name="ColorButton" Style="{StaticResource ToolbarButtonStyle}" Tag="color" Click="Tool_Click">
+                    <StackPanel Orientation="Horizontal">
+                        <Ellipse x:Name="ColorIndicator" Width="12" Height="12" Fill="#E8453B" VerticalAlignment="Center" />
+                        <TextBlock Text=" 颜色" />
+                    </StackPanel>
+                </Button>
+                <Button x:Name="MosaicButton" Style="{StaticResource ToolbarButtonStyle}" Content="▦ 马赛克" Tag="mosaic" Click="Tool_Click" />
+                <Button Style="{StaticResource ToolbarButtonStyle}" Content="↩ 撤销" Tag="undo" Click="Tool_Click" />
+                <Button Style="{StaticResource ToolbarButtonStyle}" Content="💾 另存为" Tag="save" Click="Tool_Click" />
+                <Button Style="{StaticResource ToolbarButtonStyle}" Content="✓ 复制" Tag="done" Click="Tool_Click" />
+            </StackPanel>
+        </Border>
+
+        <!-- 选区调整手柄层：置于编辑框之上，仅手柄/虚线框可交互，空白区域穿透不挡下层 -->
+        <Canvas x:Name="HandleCanvas"
+                HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                ClipToBounds="True" />
+
+        <!-- 颜色选择弹层：8 个色点 -->
+        <Popup x:Name="ColorPalettePopup" PlacementTarget="{Binding ElementName=ColorButton}" Placement="Bottom"
+               StaysOpen="False" AllowsTransparency="True" IsOpen="False">
+            <Border Background="#F01B1F27" CornerRadius="6" Padding="6">
+                <UniformGrid Columns="4" Rows="2">
+                    <Button Style="{StaticResource ColorDotStyle}" Background="#E8453B" Tag="0" Click="ColorDot_Click" />
+                    <Button Style="{StaticResource ColorDotStyle}" Background="#F5A623" Tag="1" Click="ColorDot_Click" />
+                    <Button Style="{StaticResource ColorDotStyle}" Background="#F5D92B" Tag="2" Click="ColorDot_Click" />
+                    <Button Style="{StaticResource ColorDotStyle}" Background="#35C46B" Tag="3" Click="ColorDot_Click" />
+                    <Button Style="{StaticResource ColorDotStyle}" Background="#4C9AFF" Tag="4" Click="ColorDot_Click" />
+                    <Button Style="{StaticResource ColorDotStyle}" Background="#9B59F6" Tag="5" Click="ColorDot_Click" />
+                    <Button Style="{StaticResource ColorDotStyle}" Background="White" Tag="6" Click="ColorDot_Click" />
+                    <Button Style="{StaticResource ColorDotStyle}" Background="#1F2430" Tag="7" Click="ColorDot_Click" />
+                </UniformGrid>
+            </Border>
+        </Popup>
+
+        <!-- 框选阶段提示条 -->
+        <Border x:Name="HintBar" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,16,0,0"
                 Background="#B0000000" CornerRadius="4" Padding="16,6">
-            <TextBlock Text="拖动框选截图区域　Esc 取消" Foreground="White" FontSize="13" />
+            <TextBlock x:Name="HintText" Text="拖动框选截图区域　Esc 取消" Foreground="White" FontSize="13" />
         </Border>
     </Grid>
 </Window>
