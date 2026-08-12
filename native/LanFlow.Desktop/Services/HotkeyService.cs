@@ -7,18 +7,24 @@ namespace LanFlow.Desktop.Services;
 
 public sealed class HotkeyService : IDisposable
 {
-    private const int HotkeyId = 1;
     private const int WmHotkey = 0x0312;
     private const uint ModAlt = 0x0001;
     private const uint ModControl = 0x0002;
     private const uint ModShift = 0x0004;
     private const uint ModWin = 0x0008;
 
+    private readonly int _hotkeyId;
     private HwndSource? _source;
     private Action? _onTriggered;
     private uint _modifiers;
     private uint _virtualKey;
     private bool _isRegistered;
+
+    /// <summary>创建一个全局热键注册器。同一窗口可注册多个实例，每个实例需使用不同的 hotkeyId（如主窗=1，截图=2）。</summary>
+    public HotkeyService(int hotkeyId = 1)
+    {
+        _hotkeyId = hotkeyId;
+    }
 
     public bool Register(Window window, Action onTriggered, string hotkey = "Alt+Space")
     {
@@ -28,7 +34,7 @@ public sealed class HotkeyService : IDisposable
         _source.AddHook(WindowProcedure);
         _modifiers = modifiers;
         _virtualKey = virtualKey;
-        _isRegistered = RegisterHotKey(_source.Handle, HotkeyId, modifiers, virtualKey);
+        _isRegistered = RegisterHotKey(_source.Handle, _hotkeyId, modifiers, virtualKey);
         return _isRegistered;
     }
 
@@ -40,9 +46,9 @@ public sealed class HotkeyService : IDisposable
         var oldModifiers = _modifiers;
         var oldVirtualKey = _virtualKey;
         var hadOldRegistration = _isRegistered;
-        if (hadOldRegistration) UnregisterHotKey(_source.Handle, HotkeyId);
+        if (hadOldRegistration) UnregisterHotKey(_source.Handle, _hotkeyId);
 
-        if (RegisterHotKey(_source.Handle, HotkeyId, modifiers, virtualKey))
+        if (RegisterHotKey(_source.Handle, _hotkeyId, modifiers, virtualKey))
         {
             _modifiers = modifiers;
             _virtualKey = virtualKey;
@@ -50,7 +56,7 @@ public sealed class HotkeyService : IDisposable
             return true;
         }
 
-        _isRegistered = hadOldRegistration && RegisterHotKey(_source.Handle, HotkeyId, oldModifiers, oldVirtualKey);
+        _isRegistered = hadOldRegistration && RegisterHotKey(_source.Handle, _hotkeyId, oldModifiers, oldVirtualKey);
         _modifiers = oldModifiers;
         _virtualKey = oldVirtualKey;
         return false;
@@ -95,7 +101,7 @@ public sealed class HotkeyService : IDisposable
     public void Dispose()
     {
         if (_source is null) return;
-        if (_isRegistered) UnregisterHotKey(_source.Handle, HotkeyId);
+        if (_isRegistered) UnregisterHotKey(_source.Handle, _hotkeyId);
         _source.RemoveHook(WindowProcedure);
         _source = null;
         _onTriggered = null;
@@ -104,7 +110,7 @@ public sealed class HotkeyService : IDisposable
 
     private IntPtr WindowProcedure(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
-        if (message != WmHotkey || wParam.ToInt32() != HotkeyId) return IntPtr.Zero;
+        if (message != WmHotkey || wParam.ToInt32() != _hotkeyId) return IntPtr.Zero;
         _onTriggered?.Invoke();
         handled = true;
         return IntPtr.Zero;

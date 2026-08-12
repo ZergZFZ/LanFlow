@@ -310,6 +310,16 @@
                             <StackPanel>
                                 <TextBlock Text="快捷键" Style="{StaticResource SettingsSectionHeaderStyle}" />
                                 <Border Padding="0,12"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="220" /></Grid.ColumnDefinitions><StackPanel><TextBlock Text="全局快捷键" Style="{StaticResource SettingsFieldTitleStyle}" /><TextBlock Text="聚焦输入框后按下新的组合键。" Style="{StaticResource SettingsFieldDescriptionStyle}" /></StackPanel><TextBox x:Name="HotkeyBox" Grid.Column="1" IsReadOnly="True" KeyDown="HotkeyBox_KeyDown" /></Grid></Border>
+                                <Border Padding="0,12,0,0">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="220" /></Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="截图快捷键" Style="{StaticResource SettingsFieldTitleStyle}" />
+                                            <TextBlock Text="触发后拖拽框选截图区域，松开自动复制到剪贴板。" Style="{StaticResource SettingsFieldDescriptionStyle}" />
+                                        </StackPanel>
+                                        <TextBox x:Name="ScreenshotHotkeyBox" Grid.Column="1" IsReadOnly="True" KeyDown="ScreenshotHotkeyBox_KeyDown" />
+                                    </Grid>
+                                </Border>
                             </StackPanel>
                         </Border>
                         <Border Style="{StaticResource SettingsSectionStyle}">

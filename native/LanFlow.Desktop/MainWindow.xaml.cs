@@ -27,6 +27,8 @@ public partial class MainWindow : System.Windows.Window
     private readonly MainViewModel _viewModel;
     private readonly LauncherService _launcherService = new();
     private readonly HotkeyService _hotkeyService = new();
+    private readonly HotkeyService _screenshotHotkeyService = new(hotkeyId: 2);
+    private ScreenshotCropWindow? _cropWindow;
     private readonly StartupService _startupService = new();
     private readonly IIconService _iconService = new ShellIconService();
     private readonly ViewportIconCoordinator _iconCoordinator;
@@ -146,6 +148,11 @@ public partial class MainWindow : System.Windows.Window
             {
                 _viewModel.StatusText = $"全局快捷键 {_viewModel.Settings.Hotkey} 注册失败";
             }
+
+            if (!_screenshotHotkeyService.Register(this, ShowScreenshotCrop, _viewModel.Settings.ScreenshotHotkey))
+            {
+                _viewModel.StatusText = $"截图快捷键 {_viewModel.Settings.ScreenshotHotkey} 注册失败";
+            }
         };
         Closed += MainWindow_Closed;
     }
@@ -165,6 +172,7 @@ public partial class MainWindow : System.Windows.Window
         _groupSwitchCoordinator.Dispose();
         _iconCoordinator.Dispose();
         _hotkeyService.Dispose();
+        _screenshotHotkeyService.Dispose();
         await _iconService.DisposeAsync();
     }
 
@@ -174,6 +182,34 @@ public partial class MainWindow : System.Windows.Window
         WindowState = WindowState.Normal;
         Activate();
         Focus();
+    }
+
+    // 截图热键回调：抓屏 → 弹出全屏框选窗口 → 松开自动复制并关闭。
+    private void ShowScreenshotCrop()
+    {
+        if (_cropWindow is not null) return; // 防重入
+
+        var shot = ScreenshotService.CaptureAllScreens();
+        if (shot is null)
+        {
+            _viewModel.StatusText = "截图失败：无法抓取屏幕";
+            return;
+        }
+
+        var wasVisible = IsVisible;
+        if (wasVisible) Hide(); // 截图前隐藏自身，避免 LanFlow 入镜
+
+        _cropWindow = new ScreenshotCropWindow(shot);
+        _cropWindow.Closed += (_, _) =>
+        {
+            _cropWindow = null;
+            if (wasVisible && !IsVisible && !_isClosed)
+            {
+                Show();
+                WindowState = WindowState.Normal;
+            }
+        };
+        _cropWindow.Show();
     }
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -466,6 +502,12 @@ public partial class MainWindow : System.Windows.Window
                         {
                             result.Hotkey = original.Hotkey;
                             _viewModel.StatusText = "快捷键被其他程序占用，已保留原组合键";
+                        }
+
+                        if (!_screenshotHotkeyService.TryRegister(result.ScreenshotHotkey))
+                        {
+                            result.ScreenshotHotkey = original.ScreenshotHotkey;
+                            _viewModel.StatusText = "截图快捷键被其他程序占用，已保留原组合键";
                         }
 
                         var requestedStartup = result.StartWithWindows;
