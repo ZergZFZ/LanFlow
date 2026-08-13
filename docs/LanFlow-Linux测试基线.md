@@ -1,19 +1,19 @@
 # LanFlow Linux 测试基线
 
-> 状态：活跃 ｜ 最近更新：2026-08-10
+> 状态：活跃 ｜ 最近更新：2026-08-13
 
 > 本文件记录当前有效测试基线：包、commit、覆盖范围与验收点。每次出包更新此处；实机结果回填后在此登记。
 
-## 1. 当前基线（round5）
+## 1. 当前基线（round11）
 
 | 项 | 值 |
 |---|---|
-| 测试包 | `publish/final-b5/`（自包含 linux-x64，含 B5-3 首启落盘 + 热键注册修复） |
-| 源码 commit | 待提交（linux 分支；B5-3 首启落盘 + libX11 加载修复） |
-| 运行时 | Avalonia 11.3.18 / .NET 8 自包含 linux-x64（glibc ≥ 2.28，X11） |
-| 测试卡 | 包内 `TEST-CARD-r4.md`（B1–B5 全量回归） |
+| 测试包 | `release/LanFlow-linux-x64-round11.tar.gz`（36MB，单文件发布）+ `release/lanflow_1.4.8_amd64.deb`（36.4MB） |
+| 源码 commit | linux 分支 `0fa9f23`（版本 1.4.8，AssemblyVersion/FileVersion 同步） |
+| 运行时 | Avalonia 11.3.18 / .NET 8 自包含 linux-x64（glibc ≥ 2.28，X11；SkiaSharp 2.88.9 基线） |
+| 测试卡 | `release/TEST-CARD-deb.md`（.deb 安装验证 10 项，待勾测） |
 | 发布说明 | 包内 `RELEASE-NOTES.md` |
-| 状态 | VM 验证全部 PASS；待 UOS 实机终验（拖放/渲染细节） |
+| 状态 | 构建 0 错误、包结构/可执行位/二进制一致性机器验证通过（2026-08-13）；待 UOS 实机终验（.deb 安装 / 拖放 / 渲染细节 / 热键复核） |
 
 ## 2. 覆盖范围（B1–B5）
 

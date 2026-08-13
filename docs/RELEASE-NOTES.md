@@ -1,6 +1,6 @@
 # LanFlow Linux 发布说明
 
-> 状态：活跃 ｜ 最近更新：2026-08-11
+> 状态：活跃 ｜ 最近更新：2026-08-13
 
 > 更新机制决策（基线 §5）：Linux 版**不做应用内更新**，采用「发布说明 + 手动解压替换」。本文件即发布说明，随每个测试包分发（`RELEASE-NOTES.md`）。
 
@@ -8,7 +8,8 @@
 
 | 项 | 值 |
 |---|---|
-| 包名 | `LanFlow-linux-x64-roundN.tar.gz`（N = 轮次，见 §3） |
+| 当前版本 | 1.4.8（round11，2026-08-11；源码 commit `0fa9f23`） |
+| 包名 | `LanFlow-linux-x64-roundN.tar.gz`（N = 轮次，见 §3）+ `lanflow_{version}_amd64.deb` |
 | 目标系统 | UOS 20 Pro / Deepin（x86_64，glibc ≥ 2.28，X11） |
 | 运行时 | .NET 8 自包含（无需预装 .NET） |
 | 源码分支 | github.com/ZergZFZ/LanFlow（linux 分支） |
@@ -42,7 +43,7 @@
 |---|---|
 | 更新 | 无应用内更新；手动解压替换（本文件 §2） |
 | 热键 | 推荐字母/数字 + 修饰键（Ctrl+Alt+Q 等）；符号键在中文布局不保证（D13 结案） |
-| 图标 | SVG 图标因 glibc 2.28 兼容回退暂缺（D8）；PNG/系统图标可用 |
+| 图标 | SVG 图标经自研轻量渲染器恢复（round9，SkiaSharp 2.88.9 基线）；PNG/系统图标可用 |
 | 外观 | Deepin 原生装饰窗口；无 Windows 无边框+阴影效果 |
 | 内存 | 目标 ≤450MB（启用取证期间，D5 收口） |
 
@@ -121,9 +122,19 @@
 
 | 项 | 值 |
 |---|---|
-| 安装包 | `lanflow_0.10.0_amd64.deb`（38.1MB，对应 round10 产物，Version 0.10.0） |
-| 安装 | `sudo apt install ./lanflow_0.10.0_amd64.deb`，或文件管理器双击 → 应用菜单出现 LanFlow |
+| 安装包 | `lanflow_1.4.8_amd64.deb`（36.4MB，对应 round11 产物，Version 1.4.8） |
+| 安装 | `sudo apt install ./lanflow_1.4.8_amd64.deb`，或文件管理器双击 → 应用菜单出现 LanFlow |
 | 内容 | `/opt/lanflow`（LanFlow ELF + lanflow.sh + lanflow.png + install-lanflow.sh）+ 菜单项 `/usr/share/applications/lanflow.desktop` + 图标（hicolor 256x256）+ `/usr/share/doc/lanflow/copyright` |
 | 卸载 | `sudo dpkg -r lanflow`；数据目录 `~/.config/LanFlow` 保留不受影响 |
 | 构建 | Windows 上 GNU tar（root/0、755）生成 control/data 归档 + bsdtar `--format=ar` 组合，替代无 dpkg-deb 的局限；ar 三成员、归档内容与权限结构验证通过 |
 | 待验证 | UOS 实机：安装 → 菜单出现 → 启动 `[LanFlow]` 日志 → 卸载干净 |
+
+## 12. 本轮变更（round11，2026-08-11，版本 1.4.8）
+
+> round10 三大 UI 优化（SVG 图标恢复 / 卡片横排 / Flyout 收纳）后的发布收口轮。
+
+| 类别 | 内容 |
+|---|---|
+| 版本同步 | 版本号与 Windows 主线对齐为 1.4.8（`Version` / `AssemblyVersion` / `FileVersion`） |
+| .deb 定名 | 安装包定名为 `lanflow_1.4.8_amd64.deb`（Version 1.4.8，内容为 round11 产物，与 tar.gz 同二进制；发布前校验 SHA256 一致） |
+| 源码 commit | linux 分支 `0fa9f23` |
