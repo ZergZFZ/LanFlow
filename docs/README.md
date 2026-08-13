@@ -5,6 +5,7 @@
 
 | 文档 | 状态 | 说明 |
 |---|---|---|
+| [../CHANGELOG.md](../CHANGELOG.md) | **活跃** | 版本变更日志（v1.4.9 起，每次发布同步更新） |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | **活跃** | 架构与发布/更新规范 |
 | [DEVELOPMENT-ROADMAP.md](DEVELOPMENT-ROADMAP.md) | **活跃** | 产品发展路线 |
 | [import-manifest.example.json](import-manifest.example.json) | **活跃** | 导入清单契约样例 |
