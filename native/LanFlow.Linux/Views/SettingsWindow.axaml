@@ -58,6 +58,12 @@
 
                 <!-- 2 布局与项目 -->
                 <StackPanel x:Name="PanelLayout" Spacing="8" IsVisible="False">
+                    <TextBlock Text="实时预览" Foreground="{DynamicResource TextSecondaryBrush}" FontWeight="Bold" />
+                    <Border Height="150" Background="{DynamicResource SurfaceBrush}"
+                            BorderBrush="{DynamicResource SurfaceBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="12">
+                        <Grid x:Name="PreviewHost" />
+                    </Border>
+
                     <TextBlock Text="排列方式" Foreground="{DynamicResource TextSecondaryBrush}" FontWeight="Bold" />
                     <Grid ColumnDefinitions="*,200">
                         <TextBlock Grid.Column="0" Text="布局模式" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
@@ -66,31 +72,43 @@
                             <ComboBoxItem Content="卡片" />
                         </ComboBox>
                     </Grid>
+
                     <TextBlock Text="尺寸与密度" Foreground="{DynamicResource TextSecondaryBrush}" FontWeight="Bold" Margin="0,8,0,0" />
-                    <Grid ColumnDefinitions="*,200">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0" Text="卡片宽度" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
+                        <TextBlock Grid.Column="1" x:Name="CardWidthValue" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
+                    </Grid>
+                    <Slider x:Name="CardWidthSlider" Minimum="48" Maximum="320" ValueChanged="OnLayoutSliderChanged" />
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0" Text="卡片高度" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
+                        <TextBlock Grid.Column="1" x:Name="CardHeightValue" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
+                    </Grid>
+                    <Slider x:Name="CardHeightSlider" Minimum="48" Maximum="240" ValueChanged="OnLayoutSliderChanged" />
+                    <Grid ColumnDefinitions="*,Auto">
                         <TextBlock Grid.Column="0" Text="图标尺寸" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
-                        <NumericUpDown Grid.Column="1" x:Name="IconSizeBox" Minimum="24" Maximum="72" />
+                        <TextBlock Grid.Column="1" x:Name="IconSizeValue" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
                     </Grid>
-                    <Grid ColumnDefinitions="*,200">
+                    <Slider x:Name="IconSizeSlider" Minimum="24" Maximum="72" ValueChanged="OnLayoutSliderChanged" />
+                    <Grid ColumnDefinitions="*,Auto">
                         <TextBlock Grid.Column="0" Text="文字尺寸" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
-                        <NumericUpDown Grid.Column="1" x:Name="TextSizeBox" Minimum="10" Maximum="18" />
+                        <TextBlock Grid.Column="1" x:Name="TextSizeValue" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
                     </Grid>
-                    <Grid ColumnDefinitions="*,200" x:Name="CardSizeRow">
-                        <TextBlock Grid.Column="0" Text="卡片尺寸" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
-                        <NumericUpDown Grid.Column="1" x:Name="CardSizeBox" Minimum="76" Maximum="160" />
-                    </Grid>
-                    <Grid ColumnDefinitions="*,200">
+                    <Slider x:Name="TextSizeSlider" Minimum="10" Maximum="18" ValueChanged="OnLayoutSliderChanged" />
+                    <Grid ColumnDefinitions="*,Auto">
                         <TextBlock Grid.Column="0" Text="项目间距" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
-                        <NumericUpDown Grid.Column="1" x:Name="ItemSpacingBox" Minimum="0" Maximum="64" />
+                        <TextBlock Grid.Column="1" x:Name="ItemSpacingValue" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
                     </Grid>
-                    <Grid ColumnDefinitions="*,200">
+                    <Slider x:Name="ItemSpacingSlider" Minimum="0" Maximum="64" ValueChanged="OnLayoutSliderChanged" />
+                    <Grid ColumnDefinitions="*,Auto">
                         <TextBlock Grid.Column="0" Text="行间距" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
-                        <NumericUpDown Grid.Column="1" x:Name="RowSpacingBox" Minimum="0" Maximum="80" />
+                        <TextBlock Grid.Column="1" x:Name="RowSpacingValue" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
                     </Grid>
-                    <Grid ColumnDefinitions="*,200">
+                    <Slider x:Name="RowSpacingSlider" Minimum="0" Maximum="80" ValueChanged="OnLayoutSliderChanged" />
+                    <Grid ColumnDefinitions="*,Auto">
                         <TextBlock Grid.Column="0" Text="内容边距" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
-                        <NumericUpDown Grid.Column="1" x:Name="ContentPaddingBox" Minimum="6" Maximum="40" />
+                        <TextBlock Grid.Column="1" x:Name="ContentPaddingValue" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
                     </Grid>
+                    <Slider x:Name="ContentPaddingSlider" Minimum="6" Maximum="40" ValueChanged="OnLayoutSliderChanged" />
                 </StackPanel>
 
                 <!-- 3 分组标签 -->

@@ -12,11 +12,12 @@
         <views:NotEmptyConverter x:Key="NotEmpty" />
 
         <DataTemplate x:Key="TileTemplate">
-            <Border Margin="{DynamicResource ItemMargin}" Background="Transparent"
+            <Border Margin="{DynamicResource ItemMargin}" Width="{DynamicResource CardWidth}" Height="{DynamicResource CardHeight}"
+                    Background="Transparent"
                     PointerPressed="OnItemPointerPressed" PointerMoved="OnItemPointerMoved" PointerReleased="OnItemPointerReleased"
                     Tapped="OnItemTapped" DoubleTapped="OnItemDoubleTapped" Cursor="Hand">
                 <Grid>
-                    <StackPanel HorizontalAlignment="Center">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                         <Grid>
                             <Border Width="{DynamicResource IconSize}" Height="{DynamicResource IconSize}" CornerRadius="10"
                                     Background="{DynamicResource IconSurfaceBrush}" HorizontalAlignment="Center">
@@ -35,7 +36,8 @@
                         </Grid>
                         <TextBlock Text="{Binding DisplayName}" IsVisible="{DynamicResource ShowTitle}"
                                    FontSize="{DynamicResource TextSize}" Foreground="{DynamicResource TextPrimaryBrush}"
-                                   HorizontalAlignment="Center" Margin="0,5,0,0" MaxWidth="{DynamicResource IconSize}"
+                                   HorizontalAlignment="Center" Margin="0,5,0,0" MaxWidth="{DynamicResource CardWidth}"
+                                   TextWrapping="Wrap" TextAlignment="Center" MaxLines="2"
                                    TextTrimming="CharacterEllipsis" />
                     </StackPanel>
                     <Button Content="×" IsVisible="{DynamicResource EditMode}"
@@ -55,7 +57,7 @@
         </DataTemplate>
 
         <DataTemplate x:Key="CardTemplate">
-            <Border Margin="{DynamicResource ItemMargin}" Width="{DynamicResource CardSize}" Height="{DynamicResource CardSize}"
+            <Border Margin="{DynamicResource ItemMargin}" Width="{DynamicResource CardWidth}" Height="{DynamicResource CardHeight}"
                     Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource SurfaceBorderBrush}" BorderThickness="1"
                     CornerRadius="10" Padding="10" PointerPressed="OnItemPointerPressed" PointerMoved="OnItemPointerMoved" PointerReleased="OnItemPointerReleased"
                     Tapped="OnItemTapped" DoubleTapped="OnItemDoubleTapped" Cursor="Hand">
@@ -73,7 +75,7 @@
                     </Grid>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,8,0" Spacing="3">
                         <TextBlock Text="{Binding DisplayName}" FontSize="{DynamicResource TextSize}"
-                                   Foreground="{DynamicResource TextPrimaryBrush}" TextTrimming="CharacterEllipsis" MaxWidth="{DynamicResource CardSize}" />
+                                   Foreground="{DynamicResource TextPrimaryBrush}" TextTrimming="CharacterEllipsis" />
                         <TextBlock Text="{Binding Hotkey}" FontSize="10" Foreground="{DynamicResource TextSecondaryBrush}"
                                    IsVisible="{Binding Hotkey, Converter={StaticResource NotEmpty}}" />
                     </StackPanel>

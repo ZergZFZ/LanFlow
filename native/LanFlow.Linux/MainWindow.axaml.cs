@@ -355,7 +355,8 @@ public sealed partial class MainWindow : Window
         var resources = Resources;
         resources["IconSize"] = settings.IconSize;
         resources["TextSize"] = settings.TextSize;
-        resources["CardSize"] = settings.CardSize;
+        resources["CardWidth"] = settings.CardWidth;
+        resources["CardHeight"] = settings.CardHeight;
         resources["ShowTitle"] = settings.ShowItemTitle;
         resources["ShowBadge"] = settings.ShowShortcutBadge;
         resources["EditMode"] = _editMode;

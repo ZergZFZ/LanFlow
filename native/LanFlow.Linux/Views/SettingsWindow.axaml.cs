@@ -122,13 +122,15 @@ public sealed partial class SettingsWindow : Window
         UpdateTransparencyHint();
         LayoutBox.SelectedIndex = _working.LayoutMode == "card" ? 1 : 0;
         GroupBoxLayoutBox.SelectedIndex = _working.GroupLayout == "top" ? 1 : 0;
-        IconSizeBox.Value = (decimal)_working.IconSize;
-        TextSizeBox.Value = (decimal)_working.TextSize;
-        CardSizeBox.Value = (decimal)_working.CardSize;
-        ItemSpacingBox.Value = (decimal)_working.ItemSpacing;
-        RowSpacingBox.Value = (decimal)_working.RowSpacing;
-        ContentPaddingBox.Value = (decimal)_working.ContentPadding;
-        CardSizeRow.IsVisible = _working.LayoutMode == "card";
+        IconSizeSlider.Value = _working.IconSize;
+        TextSizeSlider.Value = _working.TextSize;
+        CardWidthSlider.Value = _working.CardWidth;
+        CardHeightSlider.Value = _working.CardHeight;
+        ItemSpacingSlider.Value = _working.ItemSpacing;
+        RowSpacingSlider.Value = _working.RowSpacing;
+        ContentPaddingSlider.Value = _working.ContentPadding;
+        RefreshLayoutValues();
+        RefreshPreview();
         ThemeProfileBox.Text = _working.ThemeProfile;
 
         OpenSingleClickToggle.IsChecked = _working.OpenItemsOnSingleClick;
@@ -269,8 +271,116 @@ public sealed partial class SettingsWindow : Window
         UpdateColorButtons();
     }
 
-    private void OnLayoutChanged(object? sender, SelectionChangedEventArgs e) =>
-        CardSizeRow.IsVisible = LayoutBox.SelectedIndex == 1;
+    private void OnLayoutChanged(object? sender, SelectionChangedEventArgs e) => RefreshPreview();
+
+    // ---- 布局实时预览：滑块改动即时重绘样张 + 刷新数值 ----
+    private void OnLayoutSliderChanged(object? sender, Avalonia.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    {
+        RefreshLayoutValues();
+        RefreshPreview();
+    }
+
+    private void RefreshLayoutValues()
+    {
+        CardWidthValue.Text = $"{(int)CardWidthSlider.Value}";
+        CardHeightValue.Text = $"{(int)CardHeightSlider.Value}";
+        IconSizeValue.Text = $"{(int)IconSizeSlider.Value}";
+        TextSizeValue.Text = $"{(int)TextSizeSlider.Value}";
+        ItemSpacingValue.Text = $"{(int)ItemSpacingSlider.Value}";
+        RowSpacingValue.Text = $"{(int)RowSpacingSlider.Value}";
+        ContentPaddingValue.Text = $"{(int)ContentPaddingSlider.Value}";
+    }
+
+    private void RefreshPreview()
+    {
+        var cell = LayoutBox.SelectedIndex == 0 ? BuildPreviewTile() : BuildPreviewCard();
+        cell.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center;
+        cell.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center;
+        PreviewHost.Children.Clear();
+        PreviewHost.Children.Add(cell);
+    }
+
+    private Border BuildPreviewTile()
+    {
+        var icon = BuildPreviewIcon();
+        var title = new TextBlock
+        {
+            Text = "示例项目",
+            FontSize = TextSizeSlider.Value,
+            Foreground = GetThemeBrush("TextPrimaryBrush"),
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            Margin = new Thickness(0, 5, 0, 0),
+            MaxWidth = CardWidthSlider.Value,
+            TextWrapping = TextWrapping.Wrap,
+            TextAlignment = TextAlignment.Center,
+            MaxLines = 2,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+        var stack = new StackPanel
+        {
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
+        stack.Children.Add(icon);
+        stack.Children.Add(title);
+        return new Border { Width = CardWidthSlider.Value, Height = CardHeightSlider.Value, Child = stack };
+    }
+
+    private Border BuildPreviewCard()
+    {
+        var icon = BuildPreviewIcon();
+        var title = new TextBlock
+        {
+            Text = "示例项目",
+            FontSize = TextSizeSlider.Value,
+            Foreground = GetThemeBrush("TextPrimaryBrush"),
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            MaxWidth = Math.Max(0, CardWidthSlider.Value - IconSizeSlider.Value - 24),
+        };
+        var stack = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 12,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
+        stack.Children.Add(icon);
+        stack.Children.Add(title);
+        return new Border
+        {
+            Width = CardWidthSlider.Value,
+            Height = CardHeightSlider.Value,
+            Padding = new Thickness(10),
+            Background = GetThemeBrush("SurfaceBrush"),
+            BorderBrush = GetThemeBrush("SurfaceBorderBrush"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(10),
+            Child = stack,
+        };
+    }
+
+    private Border BuildPreviewIcon()
+    {
+        var letter = new TextBlock
+        {
+            Text = "示",
+            Foreground = GetThemeBrush("TextSecondaryBrush"),
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
+        return new Border
+        {
+            Width = IconSizeSlider.Value,
+            Height = IconSizeSlider.Value,
+            CornerRadius = new CornerRadius(10),
+            Background = GetThemeBrush("IconSurfaceBrush"),
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            Child = letter,
+        };
+    }
+
+    private IBrush GetThemeBrush(string key) =>
+        Application.Current?.Resources[key] as IBrush ?? Brushes.Gray;
 
     /// <summary>热键框"按键即录入"：按住修饰键再按值键直接生成组合键文本，免手动输入。</summary>
     private void OnHotkeyBoxKeyDown(object? sender, Avalonia.Input.KeyEventArgs e)
@@ -440,12 +550,13 @@ public sealed partial class SettingsWindow : Window
         }
         _working.LayoutMode = LayoutBox.SelectedIndex == 1 ? "card" : "tile";
         _working.GroupLayout = GroupBoxLayoutBox.SelectedIndex == 1 ? "top" : "left";
-        _working.IconSize = (double)IconSizeBox.Value.GetValueOrDefault();
-        _working.TextSize = (double)TextSizeBox.Value.GetValueOrDefault();
-        _working.CardSize = (double)CardSizeBox.Value.GetValueOrDefault();
-        _working.ItemSpacing = (double)ItemSpacingBox.Value.GetValueOrDefault();
-        _working.RowSpacing = (double)RowSpacingBox.Value.GetValueOrDefault();
-        _working.ContentPadding = (double)ContentPaddingBox.Value.GetValueOrDefault();
+        _working.IconSize = IconSizeSlider.Value;
+        _working.TextSize = TextSizeSlider.Value;
+        _working.CardWidth = CardWidthSlider.Value;
+        _working.CardHeight = CardHeightSlider.Value;
+        _working.ItemSpacing = ItemSpacingSlider.Value;
+        _working.RowSpacing = RowSpacingSlider.Value;
+        _working.ContentPadding = ContentPaddingSlider.Value;
         _working.OpenItemsOnSingleClick = OpenSingleClickToggle.IsChecked == true;
         _working.ShowShortcutBadge = ShowBadgeToggle.IsChecked == true;
         _working.ShowFullItemName = ShowFullToggle.IsChecked == true;

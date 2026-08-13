@@ -1,0 +1,4 @@
+# 强制 shell/desktop 等可执行脚本在检出时保持 LF，避免 Windows autocrlf 注入 CRLF
+# 导致目标机报 "解释器错误: /bin/sh^M"（round12 踩坑）。
+*.sh       text eol=lf
+*.desktop  text eol=lf
