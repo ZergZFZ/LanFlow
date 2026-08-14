@@ -78,37 +78,37 @@
                         <TextBlock Grid.Column="0" Text="卡片宽度" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
                         <TextBlock Grid.Column="1" x:Name="CardWidthValue" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
                     </Grid>
-                    <Slider x:Name="CardWidthSlider" Minimum="48" Maximum="320" ValueChanged="OnLayoutSliderChanged" />
+                    <Slider x:Name="CardWidthSlider" Minimum="48" Maximum="320" />
                     <Grid ColumnDefinitions="*,Auto">
                         <TextBlock Grid.Column="0" Text="卡片高度" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
                         <TextBlock Grid.Column="1" x:Name="CardHeightValue" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
                     </Grid>
-                    <Slider x:Name="CardHeightSlider" Minimum="48" Maximum="240" ValueChanged="OnLayoutSliderChanged" />
+                    <Slider x:Name="CardHeightSlider" Minimum="48" Maximum="240" />
                     <Grid ColumnDefinitions="*,Auto">
                         <TextBlock Grid.Column="0" Text="图标尺寸" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
                         <TextBlock Grid.Column="1" x:Name="IconSizeValue" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
                     </Grid>
-                    <Slider x:Name="IconSizeSlider" Minimum="24" Maximum="72" ValueChanged="OnLayoutSliderChanged" />
+                    <Slider x:Name="IconSizeSlider" Minimum="24" Maximum="72" />
                     <Grid ColumnDefinitions="*,Auto">
                         <TextBlock Grid.Column="0" Text="文字尺寸" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
                         <TextBlock Grid.Column="1" x:Name="TextSizeValue" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
                     </Grid>
-                    <Slider x:Name="TextSizeSlider" Minimum="10" Maximum="18" ValueChanged="OnLayoutSliderChanged" />
+                    <Slider x:Name="TextSizeSlider" Minimum="10" Maximum="18" />
                     <Grid ColumnDefinitions="*,Auto">
                         <TextBlock Grid.Column="0" Text="项目间距" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
                         <TextBlock Grid.Column="1" x:Name="ItemSpacingValue" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
                     </Grid>
-                    <Slider x:Name="ItemSpacingSlider" Minimum="0" Maximum="64" ValueChanged="OnLayoutSliderChanged" />
+                    <Slider x:Name="ItemSpacingSlider" Minimum="0" Maximum="64" />
                     <Grid ColumnDefinitions="*,Auto">
                         <TextBlock Grid.Column="0" Text="行间距" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
                         <TextBlock Grid.Column="1" x:Name="RowSpacingValue" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
                     </Grid>
-                    <Slider x:Name="RowSpacingSlider" Minimum="0" Maximum="80" ValueChanged="OnLayoutSliderChanged" />
+                    <Slider x:Name="RowSpacingSlider" Minimum="0" Maximum="80" />
                     <Grid ColumnDefinitions="*,Auto">
                         <TextBlock Grid.Column="0" Text="内容边距" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
                         <TextBlock Grid.Column="1" x:Name="ContentPaddingValue" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource TextPrimaryBrush}" />
                     </Grid>
-                    <Slider x:Name="ContentPaddingSlider" Minimum="6" Maximum="40" ValueChanged="OnLayoutSliderChanged" />
+                    <Slider x:Name="ContentPaddingSlider" Minimum="6" Maximum="40" />
                 </StackPanel>
 
                 <!-- 3 分组标签 -->

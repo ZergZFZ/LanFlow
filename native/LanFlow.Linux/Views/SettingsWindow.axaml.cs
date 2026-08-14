@@ -63,6 +63,16 @@ public sealed partial class SettingsWindow : Window
         HotkeyBox.AddHandler(InputElement.KeyDownEvent, OnHotkeyBoxKeyDown,
             Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
         InitializeState();
+        // 滑块实时预览接线放在 InitializeState 之后：XAML 里不挂 ValueChanged，
+        // 否则解析期 Minimum 会把默认 Value(0) 强转到下限、在其余具名控件尚未创建时触发
+        // RefreshLayoutValues 的空引用（表现为「设置」按钮点了没反应、窗口弹不出）。
+        CardWidthSlider.ValueChanged += OnLayoutSliderChanged;
+        CardHeightSlider.ValueChanged += OnLayoutSliderChanged;
+        IconSizeSlider.ValueChanged += OnLayoutSliderChanged;
+        TextSizeSlider.ValueChanged += OnLayoutSliderChanged;
+        ItemSpacingSlider.ValueChanged += OnLayoutSliderChanged;
+        RowSpacingSlider.ValueChanged += OnLayoutSliderChanged;
+        ContentPaddingSlider.ValueChanged += OnLayoutSliderChanged;
         // B3-1：默认选中第一个分类（外观与主题）
         CategoryList.SelectedIndex = 0;
         ShowPanel(0);
