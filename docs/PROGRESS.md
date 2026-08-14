@@ -62,6 +62,7 @@ dotnet run --project tools/packtool/pack.csproj -- .build/linux-wt/publish/final
 ```
 > 包内需含 `RELEASE-NOTES.md`（`vm-verify.sh` 的 B4-2 检查项）与 `lanflow.desktop` / `collect-env.sh`（从 `release/usb-test/` 拷入）。
 > **dpkg 兼容性（两次踩坑，务必保持）**：packtool 必须输出 **USTAR**（`TarEntryFormat.Ustar`，非 PAX——UOS dpkg 报「不支持的 PAX tar 头部类型 'x'」）+ **目录条目**（先写目录再写文件——否则全新安装报「没有那个文件或目录」）。
+> **.deb 的 .desktop（第三次踩坑）**：`.deb` 的 `/usr/share/applications/lanflow.desktop` 必须用 `tools/packtool/debian/lanflow.desktop`（`Exec=/opt/lanflow/LanFlow` + `Icon=/opt/lanflow/lanflow.png`），**不要**用 `release/usb-test/lanflow.desktop`（那是 U 盘模板，`Exec` 是占位符、`Icon` 被注释，装上后菜单无图标）。tar.gz 的 `lanflow.desktop` 才是 U 盘模板（用户自行改路径）。
 
 ## 7. 待办
 

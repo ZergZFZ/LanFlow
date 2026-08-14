@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=LanFlow
+Name[zh_CN]=LanFlow
+Comment=LanFlow 轻量启动与整理工具
+Exec=/opt/lanflow/LanFlow
+Icon=/opt/lanflow/lanflow.png
+Terminal=false
+Categories=Utility;
