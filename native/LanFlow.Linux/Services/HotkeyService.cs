@@ -79,8 +79,11 @@ public sealed class HotkeyService : IDisposable
 
     private static int OnXError(IntPtr display, IntPtr errorEvent)
     {
-        // XErrorEvent.error_code 在 64 位下偏移 24
-        _xErrorCode = Marshal.ReadByte(errorEvent, 24);
+        // XErrorEvent.error_code 在 x86_64 下偏移 32：
+        // type(int,4) + pad(4) + display(ptr,8) + resourceid(XID=ulong,8) + serial(ulong,8) = 32。
+        // 早先误读偏移 24（读到 serial 低字节），导致 BadAccess(10) 被判成随机的 serial 字节、
+        // 偶发「误报失败」或「误报成功」——这正是「快捷键时不时注册失败」的根因之一。
+        _xErrorCode = Marshal.ReadByte(errorEvent, 32);
         return 0;
     }
 

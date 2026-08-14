@@ -25,23 +25,25 @@
         </Style>
 
         <Style Selector="Button">
-            <Setter Property="Background" Value="#FFFFFF" />
-            <Setter Property="Foreground" Value="#1E2533" />
-            <Setter Property="BorderBrush" Value="#D0D6E2" />
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SurfaceBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="6" />
-            <Setter Property="Padding" Value="18,0" />
+            <Setter Property="Padding" Value="16,0" />
             <Setter Property="Height" Value="34" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="Template">
                 <ControlTemplate>
+                    <!-- 关键：Border 必须绑定 Padding，否则按钮 Padding 不生效、文字紧贴左右边框 -->
                     <Border Name="PART_Border"
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="{TemplateBinding CornerRadius}">
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Padding="{TemplateBinding Padding}">
                         <ContentPresenter Name="PART_ContentPresenter"
                                           Content="{TemplateBinding Content}"
                                           HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
@@ -52,10 +54,10 @@
             </Setter>
         </Style>
         <Style Selector="Button:pointerover">
-            <Setter Property="Background" Value="#F1F4FA" />
+            <Setter Property="Background" Value="{DynamicResource HoverBrush}" />
         </Style>
         <Style Selector="Button:pressed">
-            <Setter Property="Background" Value="#E6EAF2" />
+            <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
         </Style>
         <Style Selector="Button:disabled">
             <Setter Property="Opacity" Value="0.5" />

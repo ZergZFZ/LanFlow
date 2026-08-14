@@ -303,27 +303,54 @@ public sealed partial class SettingsWindow : Window
 
     private void RefreshPreview()
     {
-        var cell = LayoutBox.SelectedIndex == 0 ? BuildPreviewTile() : BuildPreviewCard();
-        cell.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center;
-        cell.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center;
+        // 2×2 样张（两横两竖）：直观预览项目间距（列间距）与行间距（行间距）调节效果。
+        // 样张是真实值的固定 0.5 倍等比缩小版，卡片宽/高/图标/文字/间距全部随滑块实时变化；
+        // 超大卡片使 2×2 超出预览框时由 Border 的 ClipToBounds 裁剪，避免整体再缩小导致
+        // 「调大卡片反而变小」的反直觉效果。
+        const double scale = 0.5;
+        var isCard = LayoutBox.SelectedIndex == 1;
+        var pw = CardWidthSlider.Value * scale;
+        var ph = CardHeightSlider.Value * scale;
+        var iconSize = IconSizeSlider.Value * scale;
+        var textSize = TextSizeSlider.Value * scale;
+        var colGap = ItemSpacingSlider.Value * scale;
+        var rowGap = RowSpacingSlider.Value * scale;
+
+        var grid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("Auto,Auto"),
+            RowDefinitions = new RowDefinitions("Auto,Auto"),
+            ColumnSpacing = colGap,
+            RowSpacing = rowGap,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
+        for (var i = 0; i < 4; i++)
+        {
+            var cell = isCard ? BuildPreviewCard(pw, ph, iconSize, textSize) : BuildPreviewTile(pw, ph, iconSize, textSize);
+            Grid.SetRow(cell, i / 2);
+            Grid.SetColumn(cell, i % 2);
+            grid.Children.Add(cell);
+        }
+
         PreviewHost.Children.Clear();
-        PreviewHost.Children.Add(cell);
+        PreviewHost.Children.Add(grid);
     }
 
-    private Border BuildPreviewTile()
+    private Border BuildPreviewTile(double pw, double ph, double iconSize, double textSize)
     {
-        var icon = BuildPreviewIcon();
+        var icon = BuildPreviewIcon(iconSize);
         var title = new TextBlock
         {
             Text = "示例项目",
-            FontSize = TextSizeSlider.Value,
+            FontSize = textSize,
             Foreground = GetThemeBrush("TextPrimaryBrush"),
             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
-            Margin = new Thickness(0, 5, 0, 0),
-            MaxWidth = CardWidthSlider.Value,
+            Margin = new Thickness(0, 3, 0, 0),
+            MaxWidth = pw,
             TextWrapping = TextWrapping.Wrap,
             TextAlignment = TextAlignment.Center,
-            MaxLines = 2,
+            MaxLines = 1,
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
         var stack = new StackPanel
@@ -333,56 +360,54 @@ public sealed partial class SettingsWindow : Window
         };
         stack.Children.Add(icon);
         stack.Children.Add(title);
-        return new Border { Width = CardWidthSlider.Value, Height = CardHeightSlider.Value, Child = stack };
+        return new Border { Width = pw, Height = ph, Child = stack };
     }
 
-    private Border BuildPreviewCard()
+    private Border BuildPreviewCard(double pw, double ph, double iconSize, double textSize)
     {
-        var icon = BuildPreviewIcon();
+        var icon = BuildPreviewIcon(iconSize);
         var title = new TextBlock
         {
             Text = "示例项目",
-            FontSize = TextSizeSlider.Value,
+            FontSize = textSize,
             Foreground = GetThemeBrush("TextPrimaryBrush"),
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
-            MaxWidth = Math.Max(0, CardWidthSlider.Value - IconSizeSlider.Value - 24),
+            Margin = new Thickness(6, 0, 0, 0),
         };
-        var stack = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 12,
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-        };
-        stack.Children.Add(icon);
-        stack.Children.Add(title);
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
+        Grid.SetColumn(icon, 0);
+        Grid.SetColumn(title, 1);
+        grid.Children.Add(icon);
+        grid.Children.Add(title);
         return new Border
         {
-            Width = CardWidthSlider.Value,
-            Height = CardHeightSlider.Value,
-            Padding = new Thickness(10),
+            Width = pw,
+            Height = ph,
+            Padding = new Thickness(4),
             Background = GetThemeBrush("SurfaceBrush"),
             BorderBrush = GetThemeBrush("SurfaceBorderBrush"),
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(10),
-            Child = stack,
+            CornerRadius = new CornerRadius(4),
+            Child = grid,
         };
     }
 
-    private Border BuildPreviewIcon()
+    private Border BuildPreviewIcon(double iconSize)
     {
         var letter = new TextBlock
         {
             Text = "示",
+            FontSize = iconSize * 0.5,
             Foreground = GetThemeBrush("TextSecondaryBrush"),
             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
         };
         return new Border
         {
-            Width = IconSizeSlider.Value,
-            Height = IconSizeSlider.Value,
-            CornerRadius = new CornerRadius(10),
+            Width = iconSize,
+            Height = iconSize,
+            CornerRadius = new CornerRadius(4),
             Background = GetThemeBrush("IconSurfaceBrush"),
             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
             Child = letter,
@@ -620,6 +645,8 @@ public sealed partial class SettingsWindow : Window
         PanelStartup.IsVisible = index == 5;
         PanelPerformance.IsVisible = index == 6;
         PanelAbout.IsVisible = index == 7;
+        // 置顶预览区仅「布局与项目」页显示，其余页收起以释放空间
+        PreviewPanel.IsVisible = index == 1;
     }
 
     // ---- B3-4 主题配置命名 ----

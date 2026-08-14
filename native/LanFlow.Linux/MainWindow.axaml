@@ -4,7 +4,7 @@
         x:Class="LanFlow.Desktop.MainWindow"
         Title="LanFlow"
         Width="780" Height="540"
-        Background="{DynamicResource PanelBrush}"
+        Background="Transparent"
         Foreground="{DynamicResource TextPrimaryBrush}">
     <Window.Resources>
         <views:FirstCharConverter x:Key="FirstChar" />
@@ -125,7 +125,7 @@
             </ScrollViewer>
         </Border>
 
-        <Grid x:Name="ItemsHost">
+        <Grid x:Name="ItemsHost" Background="{DynamicResource PanelBrush}">
             <ScrollViewer x:Name="ItemsScroller">
                 <ItemsControl x:Name="ItemsControl" ItemTemplate="{DynamicResource TileTemplate}"
                               DragDrop.AllowDrop="True" DragDrop.DragOver="OnItemsDragOver" DragDrop.Drop="OnItemsDrop">

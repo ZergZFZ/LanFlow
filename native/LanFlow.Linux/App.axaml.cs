@@ -81,6 +81,9 @@ public class App : Application
         var showItem = new NativeMenuItem("显示 / 隐藏");
         showItem.Click += (_, _) => MainWindowInstance.ToggleVisibility();
 
+        var restartItem = new NativeMenuItem("重启软件");
+        restartItem.Click += (_, _) => MainWindowInstance.Restart();
+
         var exitItem = new NativeMenuItem("退出");
         exitItem.Click += (_, _) => MainWindowInstance.Quit();
 
@@ -91,6 +94,7 @@ public class App : Application
             Menu = new NativeMenu
             {
                 showItem,
+                restartItem,
                 new NativeMenuItemSeparator(),
                 exitItem,
             },
@@ -100,7 +104,30 @@ public class App : Application
         TrayIcon.GetIcons(this)?.Add(trayIcon);
     }
 
-    private static unsafe WindowIcon CreateTrayIcon()
+    /// <summary>托盘图标：优先用随包发布的项目图标 lanflow.png（缩放到托盘尺寸），
+    /// 避免早先纯色方块在托盘显示成「黑框」。</summary>
+    private static WindowIcon CreateTrayIcon()
+    {
+        try
+        {
+            var iconPath = Path.Combine(AppContext.BaseDirectory, "lanflow.png");
+            if (File.Exists(iconPath))
+            {
+                using var src = new Bitmap(iconPath);
+                // scaled 交给 WindowIcon 持有，不能 using 释放，否则托盘图标拿到的位图已失效
+                var scaled = src.CreateScaledBitmap(new PixelSize(32, 32), BitmapInterpolationMode.HighQuality);
+                return new WindowIcon(scaled);
+            }
+        }
+        catch
+        {
+            // 图标加载/缩放失败：回落纯色方块兜底
+        }
+
+        return CreateSolidIcon();
+    }
+
+    private static unsafe WindowIcon CreateSolidIcon()
     {
         const int size = 32;
         var bitmap = new WriteableBitmap(new PixelSize(size, size), new Vector(96, 96), PixelFormat.Bgra8888);

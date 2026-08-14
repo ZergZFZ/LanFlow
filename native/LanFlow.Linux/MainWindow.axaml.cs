@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
 using Avalonia;
@@ -33,6 +34,7 @@ public sealed partial class MainWindow : Window
     private readonly LauncherService _launcher = new();
     private readonly ShellIconService _shellIcon = new();
     private HotkeyService? _hotkey;
+    private DispatcherTimer? _hotkeyRetryTimer;
     private bool _editMode;
     private bool _exiting;
     private LauncherItem? _dragItem;
@@ -47,10 +49,11 @@ public sealed partial class MainWindow : Window
         _viewModel = new MainViewModel(new ConfigStore("Ctrl+Alt+L"));
         DataContext = _viewModel;
 
-        // Linux/X11 下避免使用 Transparent 级别的 TransparencyLevelHint，
-        // 否则调整窗口大小会触发 X11 窗口 visual 重建导致卡死。
-        // 使用 None 作为安全回退。
-        TransparencyLevelHint = new[] { WindowTransparencyLevel.None };
+        // 分层透明需要 32 位 ARGB 视觉：窗口根背景改为 Transparent 后，ItemsHost.Opacity
+        // 才能真正透出桌面。Transparent 在构造函数（Show 之前）一次性设定，窗口以 ARGB
+        // 创建，运行时调 Opacity 不会触发 visual 重建（round1 踩坑）。整窗透明另走
+        // Window.Opacity（X11 经 _NET_WM_WINDOW_OPACITY），两者互不影响。
+        TransparencyLevelHint = new[] { WindowTransparencyLevel.Transparent };
         App.ApplyThemeColors(_viewModel.Settings);
         Resources["NotEditMode"] = true;
         BuildEditFlyouts();
@@ -107,16 +110,55 @@ public sealed partial class MainWindow : Window
     {
         _hotkey = new HotkeyService();
         var registered = _hotkey.Register(this, () => Dispatcher.UIThread.Post(ToggleVisibility), _viewModel.Settings.Hotkey);
+        ReportHotkeyResult(registered);
+        // 首注册失败即进入自愈：定时重试，抢占冲突解除后自动恢复，无需重启软件
         if (!registered)
         {
-            var message = string.IsNullOrEmpty(_hotkey.LastError) ? "全局热键不可用" : _hotkey.LastError;
-            _viewModel.StatusText = message;
-            Console.WriteLine("[LanFlow] 全局热键注册失败: " + message);
+            StartHotkeyRetry();
         }
-        else
+    }
+
+    private void ReportHotkeyResult(bool ok)
+    {
+        if (ok)
         {
             Console.WriteLine("[LanFlow] 全局热键注册成功: " + _viewModel.Settings.Hotkey);
         }
+        else
+        {
+            var message = string.IsNullOrEmpty(_hotkey?.LastError) ? "全局热键不可用" : _hotkey!.LastError;
+            _viewModel.StatusText = "热键：" + message;
+            Console.WriteLine("[LanFlow] 全局热键注册失败: " + message);
+        }
+    }
+
+    /// <summary>快捷键自愈：注册失败后每 15s 重试一次，直到成功为止（失败多为启动期时序抢占）。</summary>
+    private void StartHotkeyRetry()
+    {
+        if (_hotkeyRetryTimer is not null)
+        {
+            return;
+        }
+
+        _hotkeyRetryTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
+        _hotkeyRetryTimer.Tick += (_, _) =>
+        {
+            if (_hotkey is null || _exiting)
+            {
+                _hotkeyRetryTimer?.Stop();
+                _hotkeyRetryTimer = null;
+                return;
+            }
+
+            if (_hotkey.TryRegister(_viewModel.Settings.Hotkey))
+            {
+                _hotkeyRetryTimer.Stop();
+                _hotkeyRetryTimer = null;
+                _viewModel.StatusText = string.Empty;
+                Console.WriteLine("[LanFlow] 全局热键自愈重试成功: " + _viewModel.Settings.Hotkey);
+            }
+        };
+        _hotkeyRetryTimer.Start();
     }
 
     public void ToggleVisibility()
@@ -152,8 +194,39 @@ public sealed partial class MainWindow : Window
     {
         _exiting = true;
         _focusTimer?.Stop();
+        _hotkeyRetryTimer?.Stop();
+        _hotkeyRetryTimer = null;
         _hotkey?.Dispose();
         Close();
+    }
+
+    /// <summary>托盘「重启软件」：拉起新进程后退出当前进程，用于快捷键失效时的兜底恢复。</summary>
+    public void Restart()
+    {
+        Console.WriteLine("[LanFlow] 用户请求重启");
+        try
+        {
+            var exe = Environment.ProcessPath;
+            if (!string.IsNullOrEmpty(exe) && File.Exists(exe))
+            {
+                var psi = new ProcessStartInfo(exe)
+                {
+                    WorkingDirectory = Path.GetDirectoryName(exe) ?? AppContext.BaseDirectory,
+                    UseShellExecute = false,
+                };
+                Process.Start(psi);
+            }
+            else
+            {
+                Console.WriteLine("[LanFlow] 重启失败：找不到可执行文件 " + (exe ?? "(null)"));
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("[LanFlow] 重启失败: " + ex.Message);
+        }
+
+        Quit();
     }
 
     private void OnClosing(object? sender, WindowClosingEventArgs e)
@@ -347,6 +420,7 @@ public sealed partial class MainWindow : Window
         if (_hotkey?.TryRegister(_viewModel.Settings.Hotkey) == false)
         {
             Console.WriteLine("[LanFlow] 热键重注册失败: " + _hotkey.LastError);
+            StartHotkeyRetry();
         }
     }
 

@@ -1,6 +1,6 @@
 # LanFlow Linux 发布说明
 
-> 状态：活跃 ｜ 最近更新：2026-08-13
+> 状态：活跃 ｜ 最近更新：2026-08-14
 
 > 更新机制决策（基线 §5）：Linux 版**不做应用内更新**，采用「发布说明 + 手动解压替换」。本文件即发布说明，随每个测试包分发（`RELEASE-NOTES.md`）。
 
@@ -8,7 +8,7 @@
 
 | 项 | 值 |
 |---|---|
-| 当前版本 | 1.4.8（round11，2026-08-11；源码 commit `0fa9f23`） |
+| 当前版本 | 1.4.9（round14，2026-08-14；与 Windows 主线同步） |
 | 包名 | `LanFlow-linux-x64-roundN.tar.gz`（N = 轮次，见 §3）+ `lanflow_{version}_amd64.deb` |
 | 目标系统 | UOS 20 Pro / Deepin（x86_64，glibc ≥ 2.28，X11） |
 | 运行时 | .NET 8 自包含（无需预装 .NET） |
@@ -138,3 +138,34 @@
 | 版本同步 | 版本号与 Windows 主线对齐为 1.4.8（`Version` / `AssemblyVersion` / `FileVersion`） |
 | .deb 定名 | 安装包定名为 `lanflow_1.4.8_amd64.deb`（Version 1.4.8，内容为 round11 产物，与 tar.gz 同二进制；发布前校验 SHA256 一致） |
 | 源码 commit | linux 分支 `0fa9f23` |
+
+## 13. 本轮变更（round12，2026-08-13，版本仍 1.4.8）
+
+| 类别 | 内容 |
+|---|---|
+| 布局 | 平铺/卡片标题可见性修复 + 布局设置滑块实时预览 |
+| 修复 | 设置窗口滑块 ValueChanged 初始化期空引用修复 |
+| 收口 | .deb 定名 1.4.8 与文档同步 |
+| 源码 commit | linux 分支 `9ed1cd8` |
+
+## 14. 本轮变更（round13，2026-08-14，版本仍 1.4.8）
+
+> round13 实机反馈的三项修复（设置窗口）。
+
+| 类别 | 内容 |
+|---|---|
+| 分层透明 | 恢复 Transparent 后设置窗口缩放不卡死（D6 冻结排除） |
+| 设置 UI | 透明度/布局滑块单行 + 2×2 预览置顶跟随滚动 |
+| 修复 | 设置窗口缩放卡死回归修复 |
+
+## 15. 本轮变更（round14，2026-08-14，版本 1.4.9）
+
+> 用户提出 4 项 UI/健壮性优化；本轮升版本 1.4.9 与 Windows 主线对齐。验收见 `release/TEST-CARD-r14.md`。
+
+| 类别 | 内容 |
+|---|---|
+| 按钮美化 | `App.axaml` Button 模板 `Border` 补 `Padding` 绑定；配色主题感知（SurfaceBrush/TextPrimary/Hover/Accent），`Padding=16,0`、`Height=34` |
+| 托盘图标 | `App.axaml.cs` `CreateTrayIcon()` 加载随包 `lanflow.png` 缩放 32×32（非纯色黑框），失败回落纯色 |
+| 托盘重启 | 托盘菜单新增「重启软件」；`MainWindow.Restart()` 拉起新进程后退出当前进程 |
+| 快捷键 | `HotkeyService.OnXError` 错误码偏移 24→32（x86_64 正确读 error_code）；注册失败后每 15s 自愈重试 |
+| 版本 | 升 1.4.9（`Version`/`AssemblyVersion`/`FileVersion`） |
