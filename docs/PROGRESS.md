@@ -55,12 +55,13 @@ round13 实机通过后，用户提出 4 项 UI/健壮性优化：
 | tar.gz 发布包 | `E:\AI\LanFlow-main\release\LanFlow-linux-x64-round14.tar.gz` |
 | 解压目录（VM 共享直连） | `E:\AI\LanFlow-main\.build\linux-wt\publish\final-r14\`（VM 里对应 `/mnt/hgfs/lanflow/final-r14/`） |
 
-打包（Windows 侧；GNU tar 在 DSH 沙箱下不可用，改用 .NET `System.Formats.Tar` 打包工具 `.build/linux-wt/packtool/`）：
+打包（Windows 侧；GNU tar 在 DSH 沙箱下不可用，改用 .NET `System.Formats.Tar` 打包工具 `tools/packtool/`）：
 ```bash
 dotnet publish native/LanFlow.Linux/LanFlow.Linux.csproj -c Release -r linux-x64 --self-contained -o .build/linux-wt/publish/final-r14
-dotnet run --project .build/linux-wt/packtool/pack.csproj -- .build/linux-wt/publish/final-r14 release/LanFlow-linux-x64-round14.tar.gz
+dotnet run --project tools/packtool/pack.csproj -- .build/linux-wt/publish/final-r14 release/LanFlow-linux-x64-round14.tar.gz
 ```
 > 包内需含 `RELEASE-NOTES.md`（`vm-verify.sh` 的 B4-2 检查项）与 `lanflow.desktop` / `collect-env.sh`（从 `release/usb-test/` 拷入）。
+> **dpkg 兼容性（两次踩坑，务必保持）**：packtool 必须输出 **USTAR**（`TarEntryFormat.Ustar`，非 PAX——UOS dpkg 报「不支持的 PAX tar 头部类型 'x'」）+ **目录条目**（先写目录再写文件——否则全新安装报「没有那个文件或目录」）。
 
 ## 7. 待办
 

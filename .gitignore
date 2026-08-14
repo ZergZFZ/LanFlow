@@ -45,6 +45,8 @@ vite.config.d.ts
 # Local Linux build / VM shared output / packaging artifacts
 .build/
 artifacts/
+tools/packtool/bin/
+tools/packtool/obj/
 
 # Keep generated icons committed so the repo builds out-of-the-box.
 # To regenerate from source: `cargo tauri icon src-tauri/icons/icon-source.png`
