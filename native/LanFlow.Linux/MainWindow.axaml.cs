@@ -252,7 +252,7 @@ public sealed partial class MainWindow : Window
 
     private void TryAutoHide()
     {
-        if (_modalDepth > 0 || !_viewModel.Settings.HideOnDeactivate)
+        if (_modalDepth > 0 || _editMode || !_viewModel.Settings.HideOnDeactivate)
         {
             return;
         }
@@ -278,7 +278,7 @@ public sealed partial class MainWindow : Window
         {
             if (!_viewModel.Settings.HideOnDeactivate) return; // 开关关闭零 X 开销
             if (!IsVisible) return;                            // 已隐藏：跳过 X 查询，避免冗余调用
-            if (_modalDepth > 0) return;                       // 模态对话框不隐藏
+            if (_modalDepth > 0 || _editMode) return;          // 模态对话框/编辑态不隐藏
             if (DateTime.UtcNow < _suppressHideUntilUtc) return;
             if (IsSelfFocused()) return;
             Hide();
@@ -407,6 +407,15 @@ public sealed partial class MainWindow : Window
         var settingsWindow = new Views.SettingsWindow(_viewModel);
         settingsWindow.OnApplied = RefreshAfterSettings;
         await ShowDialogGuarded(settingsWindow);
+        // 设置窗口确认/取消关闭后：把焦点还给主窗口，否则焦点落空会触发失焦隐藏（「确定后主窗消失」）。
+        // Deepin/X11 下 Activate 可能不立即抢焦，短暂置顶兜底（同 ToggleVisibility 唤回逻辑）。
+        _suppressHideUntilUtc = DateTime.UtcNow.AddMilliseconds(600);
+        Show();
+        Activate();
+        Topmost = true;
+        var restoreTopmost = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+        restoreTopmost.Tick += (_, _) => { restoreTopmost.Stop(); Topmost = false; };
+        restoreTopmost.Start();
     }
 
     private void RefreshAfterSettings()
