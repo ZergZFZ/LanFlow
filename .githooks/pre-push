@@ -1,0 +1,39 @@
+#!/bin/sh
+# .githooks/pre-push — main 分支只允许发布相关推送
+# 拦截把 feat:/fix:/refactor:/perf:/test:/style: 等开发性提交直接推到 main。
+# 安装：git config core.hooksPath .githooks
+set -u
+
+ZERO=0000000000000000000000000000000000000000
+# main 上禁止的直接提交类型（按 first-parent 链检查，仅拦 main 自己长出的提交）
+BAD='^(feat|fix|refactor|perf|test|style)(\(|:| )'
+
+while read local_ref local_sha remote_ref remote_sha; do
+  # 兼容 CRLF 输入（Windows 下管道可能带 \r）
+  local_ref=${local_ref%$'\r'}
+  local_sha=${local_sha%$'\r'}
+  remote_ref=${remote_ref%$'\r'}
+  remote_sha=${remote_sha%$'\r'}
+  # 只守卫 main
+  [ "$remote_ref" = "refs/heads/main" ] || continue
+  # 删除分支的推送不检查
+  [ "$local_sha" = "$ZERO" ] && continue
+
+  if [ "$remote_sha" = "$ZERO" ]; then
+    range="$local_sha"
+  else
+    range="$remote_sha..$local_sha"
+  fi
+
+  bad=$(git log --first-parent --pretty=%s "$range" 2>/dev/null \
+        | grep -E "$BAD" | head -5)
+  if [ -n "$bad" ]; then
+    echo "❌ 禁止把开发性提交直接推到 main（main 只做打包发布）：" >&2
+    echo "$bad" >&2
+    echo "   功能/修复请提交到 dev/windows 或 dev/linux；main 仅接收 merge、" >&2
+    echo "   版本号 bump（build:/chore(release):）与发布整理。" >&2
+    exit 1
+  fi
+done
+
+exit 0

@@ -37,6 +37,20 @@
 - PRD、临时设计稿、调试记录或其他开发过程文档；
 - 本地运行配置、凭据或用户数据。
 
+## 自动代理红线
+
+自动开发代理（Agent）开工前必须阅读根目录 `AGENTS.md`（分支红线摘要，比本文件更简短、更强制）。Agent 框架应自动注入该文件；若未注入，任务开始时必须显式要求 Agent 先读 `AGENTS.md` 再动手。
+
+## 本地防护钩子（推荐安装）
+
+```powershell
+git config core.hooksPath .githooks
+```
+
+`pre-push` 钩子会拦截「把 `feat:`/`fix:`/`refactor:`/`perf:`/`test:`/`style:` 等开发性提交直接推送到 `main`」的操作（按 main 的 first-parent 链检查，不影响 merge 与版本号 bump）。
+
+CI 守卫（`.github/workflows/main-branch-guard.yml`，调用 `scripts/guard-main-release.sh`）会在 PR / 推送 `main` 时自动检查：冲突标记、业务代码越界改动、csproj 版本号一致性。
+
 ## 发布前最小检查
 
 ```powershell
