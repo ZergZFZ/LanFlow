@@ -147,6 +147,7 @@ public partial class SettingsWindow : Window
         }
 
         HotkeyBox.Text = Working.Hotkey;
+        ScreenshotHotkeyBox.Text = Working.ScreenshotHotkey;
         RunAtStartupCheck.IsChecked = Working.StartWithWindows;
         LoadColorControls();
         RefreshValueLabels();
@@ -571,6 +572,31 @@ public partial class SettingsWindow : Window
 
         _viewModel.Update(settings => settings.Hotkey = normalized);
         HotkeyBox.Text = normalized;
+    }
+
+    private void ScreenshotHotkeyBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        e.Handled = true;
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin) return;
+
+        var modifiers = Keyboard.Modifiers;
+        var parts = new List<string>();
+        if (modifiers.HasFlag(ModifierKeys.Control)) parts.Add("Ctrl");
+        if (modifiers.HasFlag(ModifierKeys.Alt)) parts.Add("Alt");
+        if (modifiers.HasFlag(ModifierKeys.Shift)) parts.Add("Shift");
+        if (modifiers.HasFlag(ModifierKeys.Windows)) parts.Add("Win");
+        var candidate = string.Join('+', parts.Append(key.ToString()));
+        if (!HotkeyService.TryNormalize(candidate, out var normalized)) return;
+
+        if (string.Equals(normalized, Working.Hotkey, StringComparison.OrdinalIgnoreCase))
+        {
+            ScreenshotHotkeyBox.Text = Working.ScreenshotHotkey; // 与全局快捷键相同 → 还原不保存
+            return;
+        }
+
+        _viewModel.Update(settings => settings.ScreenshotHotkey = normalized);
+        ScreenshotHotkeyBox.Text = normalized;
     }
 
     private void ClearIconCache_Click(object sender, RoutedEventArgs e)

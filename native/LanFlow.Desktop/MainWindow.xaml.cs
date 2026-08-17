@@ -28,6 +28,8 @@ public partial class MainWindow : System.Windows.Window
     private readonly MainViewModel _viewModel;
     private readonly LauncherService _launcherService = new();
     private readonly HotkeyService _hotkeyService = new();
+    private readonly HotkeyService _screenshotHotkeyService = new(hotkeyId: 2);
+    private ScreenshotCropWindow? _cropWindow;
     private readonly StartupService _startupService = new();
     private readonly IIconService _iconService = new ShellIconService();
     private readonly ViewportIconCoordinator _iconCoordinator;
@@ -76,6 +78,8 @@ public partial class MainWindow : System.Windows.Window
         get => (bool)GetValue(IsEditModeProperty);
         set => SetValue(IsEditModeProperty, value);
     }
+
+    public string CurrentHotkey => _viewModel.Settings.Hotkey;
 
     private int _openContextMenus;
     private bool _isContextMenuActivationPending;
@@ -158,6 +162,11 @@ public partial class MainWindow : System.Windows.Window
             _windowAppearanceController.EnableNativeShadow(this);
 
             RegisterHotkeyWithRetry();
+
+            if (!_screenshotHotkeyService.Register(this, ShowScreenshotCrop, _viewModel.Settings.ScreenshotHotkey))
+            {
+                _viewModel.StatusText = $"截图快捷键 {_viewModel.Settings.ScreenshotHotkey} 注册失败";
+            }
         };
         SystemEvents.SessionSwitch += OnSessionSwitch;
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
@@ -344,7 +353,9 @@ public partial class MainWindow : System.Windows.Window
         _animationPreferenceService.Dispose();
         _groupSwitchCoordinator.Dispose();
         _iconCoordinator.Dispose();
+        StopHotkeyRetryLoop();
         _hotkeyService.Dispose();
+        _screenshotHotkeyService.Dispose();
         await _iconService.DisposeAsync();
     }
 
@@ -377,6 +388,83 @@ public partial class MainWindow : System.Windows.Window
     {
         SearchBox.Focus();
         SearchBox.SelectAll();
+    }
+
+    public bool ReRegisterHotkey()
+    {
+        var hotkey = _viewModel.Settings.Hotkey;
+        if (_hotkeyService.TryRegister(hotkey))
+        {
+            StopHotkeyRetryLoop();
+            _viewModel.StatusText = $"全局快捷键 {hotkey} 注册成功";
+            return true;
+        }
+
+        _viewModel.StatusText = $"全局快捷键 {hotkey} 注册失败，可能被其他程序占用";
+        StartHotkeyRetryLoop();
+        return false;
+    }
+
+    /// <summary>重启前释放主热键，避免新进程启动时旧进程仍占用导致注册失败。</summary>
+    public void PrepareForRestart()
+    {
+        StopHotkeyRetryLoop();
+        _hotkeyService.Dispose();
+        _screenshotHotkeyService.Dispose();
+    }
+
+    private void StartHotkeyRetryLoop()
+    {
+        StopHotkeyRetryLoop();
+        _hotkeyRetryTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
+        _hotkeyRetryTimer.Tick += HotkeyRetryTimer_Tick;
+        _hotkeyRetryTimer.Start();
+    }
+
+    private void StopHotkeyRetryLoop()
+    {
+        if (_hotkeyRetryTimer is null) return;
+        _hotkeyRetryTimer.Stop();
+        _hotkeyRetryTimer.Tick -= HotkeyRetryTimer_Tick;
+        _hotkeyRetryTimer = null;
+    }
+
+    private void HotkeyRetryTimer_Tick(object? sender, EventArgs e)
+    {
+        var hotkey = _viewModel.Settings.Hotkey;
+        if (_hotkeyService.TryRegister(hotkey))
+        {
+            StopHotkeyRetryLoop();
+            _viewModel.StatusText = $"全局快捷键 {hotkey} 注册成功";
+        }
+    }
+
+    // 截图热键回调：抓屏 → 弹出全屏框选窗口 → 松开自动复制并关闭。
+    private void ShowScreenshotCrop()
+    {
+        if (_cropWindow is not null) return; // 防重入
+
+        var shot = ScreenshotService.CaptureAllScreens();
+        if (shot is null)
+        {
+            _viewModel.StatusText = "截图失败：无法抓取屏幕";
+            return;
+        }
+
+        var wasVisible = IsVisible;
+        if (wasVisible) Hide(); // 截图前隐藏自身，避免 LanFlow 入镜
+
+        _cropWindow = new ScreenshotCropWindow(shot);
+        _cropWindow.Closed += (_, _) =>
+        {
+            _cropWindow = null;
+            if (wasVisible && !IsVisible && !_isClosed)
+            {
+                Show();
+                WindowState = WindowState.Normal;
+            }
+        };
+        _cropWindow.Show();
     }
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -720,6 +808,15 @@ public partial class MainWindow : System.Windows.Window
                         {
                             result.Hotkey = original.Hotkey;
                             _viewModel.StatusText = "快捷键被其他程序占用，已保留原组合键";
+                            if (!_hotkeyService.IsRegistered) StartHotkeyRetryLoop();
+                        }
+
+                        if (_hotkeyService.IsRegistered) StopHotkeyRetryLoop();
+
+                        if (!_screenshotHotkeyService.TryRegister(result.ScreenshotHotkey))
+                        {
+                            result.ScreenshotHotkey = original.ScreenshotHotkey;
+                            _viewModel.StatusText = "截图快捷键被其他程序占用，已保留原组合键";
                         }
 
                         var requestedStartup = result.StartWithWindows;
@@ -1252,7 +1349,6 @@ public partial class MainWindow : System.Windows.Window
         _viewModel.Save();
         _viewModel.StatusText = "分组顺序已更新";
     }
-
     private void GroupSwitchCoordinator_SwitchRequested(
         object? sender,
         GroupSwitchRequestedEventArgs e)
@@ -1329,7 +1425,6 @@ public partial class MainWindow : System.Windows.Window
             _viewModel.StatusText = "分组切换已生效，但保存失败：" + ex.Message;
         }
     }
-
     private async Task CompleteGroupSwitchAsync(Group group, long generation, bool cacheHit)
     {
         if (generation != _latestGroupSwitchGeneration ||
@@ -1897,6 +1992,24 @@ public partial class MainWindow : System.Windows.Window
         item.IconImage = null;
         _iconService.Invalidate(oldPath);
         _iconService.Invalidate(item.Path);
+        _viewModel.RefreshVisibleItems();
+        _viewModel.Save();
+    }
+
+    private void RenameSelectedItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel.SelectedGroup is null || ItemList.SelectedItem is not LauncherItem item)
+        {
+            return;
+        }
+
+        var dialog = new Views.EditItemWindow(item.Name, item.Path, "编辑名称") { Owner = this };
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        item.Name = dialog.ItemName;
         _viewModel.RefreshVisibleItems();
         _viewModel.Save();
     }

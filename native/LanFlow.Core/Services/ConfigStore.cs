@@ -140,6 +140,12 @@ public sealed class ConfigStore : IConfigStore
             settings.Hotkey = _defaultHotkey;
         }
 
+        // 截图快捷键：空值回默认（旧配置无此字段时走这里）。
+        if (string.IsNullOrWhiteSpace(settings.ScreenshotHotkey))
+        {
+            settings.ScreenshotHotkey = "Ctrl+Shift+A";
+        }
+
         settings.Theme = settings.Theme == "light" ? "light" : "dark";
         settings.ThemeProfile = string.IsNullOrWhiteSpace(settings.ThemeProfile)
             ? (settings.Theme == "light" ? "浅色" : "深色")

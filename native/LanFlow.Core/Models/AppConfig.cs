@@ -109,6 +109,9 @@ public sealed class Settings
     [JsonPropertyName("hotkey")]
     public string Hotkey { get; set; } = "Alt+Space";
 
+    [JsonPropertyName("screenshotHotkey")]
+    public string ScreenshotHotkey { get; set; } = "Ctrl+Shift+A";
+
     [JsonPropertyName("theme")]
     public string Theme { get; set; } = "dark";
 
@@ -207,6 +210,7 @@ public sealed class Settings
     public Settings Clone() => new()
     {
         Hotkey = Hotkey,
+        ScreenshotHotkey = ScreenshotHotkey,
         Theme = Theme,
         ThemeProfile = ThemeProfile,
         ThemeColors = ThemeColors.Clone(),

@@ -19,7 +19,6 @@ public enum HotkeyRegistrationFailure
 
 public sealed class HotkeyService : IDisposable
 {
-    private const int HotkeyId = 1;
     private const int WmHotkey = 0x0312;
     private const uint ModAlt = 0x0001;
     private const uint ModControl = 0x0002;
@@ -30,6 +29,7 @@ public sealed class HotkeyService : IDisposable
     // 这是唯一值得无限重试的失败原因——冲突方释放后即可注册成功。
     public const int ErrorHotkeyAlreadyRegistered = 1409;
 
+    private readonly int _hotkeyId;
     private HwndSource? _source;
     private HwndSource? _registeredSource;
     private Action? _onTriggered;
@@ -40,6 +40,14 @@ public sealed class HotkeyService : IDisposable
     private bool _isPaused;
     private int _lastErrorCode;
     private HotkeyRegistrationFailure _failureKind;
+
+    /// <summary>创建一个全局热键注册器。同一窗口可注册多个实例，每个实例需使用不同的 hotkeyId（如主窗=1，截图=2）。</summary>
+    public HotkeyService(int hotkeyId = 1)
+    {
+        _hotkeyId = hotkeyId;
+    }
+
+    public bool IsRegistered => _isRegistered;
 
     // 最近一次 RegisterHotKey/UnregisterHotKey 的 Win32 错误码（GetLastError）。
     // 0 表示最近一次调用成功或尚未调用；供诊断“开机自启注册失败”使用。
@@ -108,7 +116,7 @@ public sealed class HotkeyService : IDisposable
         }
 
         _failureKind = HotkeyRegistrationFailure.Win32;
-        _isRegistered = TryRegisterHotKey(source.Handle, HotkeyId, modifiers, virtualKey);
+        _isRegistered = TryRegisterHotKey(source.Handle, _hotkeyId, modifiers, virtualKey);
         if (_isRegistered)
         {
             _failureKind = HotkeyRegistrationFailure.None;
@@ -125,10 +133,10 @@ public sealed class HotkeyService : IDisposable
         var oldModifiers = _modifiers;
         var oldVirtualKey = _virtualKey;
         var hadOldRegistration = _isRegistered;
-        if (hadOldRegistration) UnregisterHotKey(_source.Handle, HotkeyId);
+        if (hadOldRegistration) UnregisterHotKey(_source.Handle, _hotkeyId);
 
         _failureKind = HotkeyRegistrationFailure.Win32;
-        if (TryRegisterHotKey(_source.Handle, HotkeyId, modifiers, virtualKey))
+        if (TryRegisterHotKey(_source.Handle, _hotkeyId, modifiers, virtualKey))
         {
             _modifiers = modifiers;
             _virtualKey = virtualKey;
@@ -139,7 +147,7 @@ public sealed class HotkeyService : IDisposable
             return true;
         }
 
-        _isRegistered = hadOldRegistration && TryRegisterHotKey(_source.Handle, HotkeyId, oldModifiers, oldVirtualKey);
+        _isRegistered = hadOldRegistration && TryRegisterHotKey(_source.Handle, _hotkeyId, oldModifiers, oldVirtualKey);
         _modifiers = oldModifiers;
         _virtualKey = oldVirtualKey;
         if (_isRegistered)
@@ -170,7 +178,7 @@ public sealed class HotkeyService : IDisposable
             }
 
             _failureKind = HotkeyRegistrationFailure.Win32;
-            _isRegistered = TryRegisterHotKey(_source.Handle, HotkeyId, _modifiers, _virtualKey);
+            _isRegistered = TryRegisterHotKey(_source.Handle, _hotkeyId, _modifiers, _virtualKey);
             if (_isRegistered)
             {
                 _failureKind = HotkeyRegistrationFailure.None;
@@ -182,7 +190,7 @@ public sealed class HotkeyService : IDisposable
         _isPaused = true;
         if (_isRegistered)
         {
-            TryUnregisterHotKey(_source.Handle, HotkeyId);
+            TryUnregisterHotKey(_source.Handle, _hotkeyId);
         }
 
         _isRegistered = false;
@@ -228,8 +236,8 @@ public sealed class HotkeyService : IDisposable
     public void Dispose()
     {
         if (_source is null) return;
-        if (_isRegistered) TryUnregisterHotKey(_source.Handle, HotkeyId);
-        _source.RemoveHook(WindowProcedure);
+        if (_isRegistered) TryUnregisterHotKey(_source.Handle, _hotkeyId);
+        if (_hookAdded) _source.RemoveHook(WindowProcedure);
         _source = null;
         _registeredSource = null;
         _onTriggered = null;
@@ -240,7 +248,7 @@ public sealed class HotkeyService : IDisposable
 
     private IntPtr WindowProcedure(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
-        if (message != WmHotkey || wParam.ToInt32() != HotkeyId) return IntPtr.Zero;
+        if (message != WmHotkey || wParam.ToInt32() != _hotkeyId) return IntPtr.Zero;
         _onTriggered?.Invoke();
         handled = true;
         return IntPtr.Zero;
