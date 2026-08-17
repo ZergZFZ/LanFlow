@@ -51,6 +51,7 @@ public partial class MainWindow : System.Windows.Window
     private VirtualizingWrapPanel? _wrapPanel;
     private ScrollViewer? _itemScrollViewer;
     private bool _isClosed;
+    private DispatcherTimer? _hotkeyRetryTimer;
     private CancellationTokenSource? _contentTransitionCancellation;
     private string _activeLayoutMode = "tile";
     private string? _lastSelectedItemId;
@@ -71,6 +72,8 @@ public partial class MainWindow : System.Windows.Window
     {
         get => (bool)GetValue(IsEditModeProperty);
         set => SetValue(IsEditModeProperty, value);
+
+    public string CurrentHotkey => _viewModel.Settings.Hotkey;
     }
 
     private int _openContextMenus;
@@ -146,7 +149,8 @@ public partial class MainWindow : System.Windows.Window
 
             if (!_hotkeyService.Register(this, ShowFromHotkey, _viewModel.Settings.Hotkey))
             {
-                _viewModel.StatusText = $"全局快捷键 {_viewModel.Settings.Hotkey} 注册失败";
+                _viewModel.StatusText = $"全局快捷键 {_viewModel.Settings.Hotkey} 注册失败，正在重试…";
+                StartHotkeyRetryLoop();
             }
 
             if (!_screenshotHotkeyService.Register(this, ShowScreenshotCrop, _viewModel.Settings.ScreenshotHotkey))
@@ -171,6 +175,7 @@ public partial class MainWindow : System.Windows.Window
         _animationPreferenceService.Dispose();
         _groupSwitchCoordinator.Dispose();
         _iconCoordinator.Dispose();
+        StopHotkeyRetryLoop();
         _hotkeyService.Dispose();
         _screenshotHotkeyService.Dispose();
         await _iconService.DisposeAsync();
@@ -182,6 +187,55 @@ public partial class MainWindow : System.Windows.Window
         WindowState = WindowState.Normal;
         Activate();
         Focus();
+    }
+
+    public bool ReRegisterHotkey()
+    {
+        var hotkey = _viewModel.Settings.Hotkey;
+        if (_hotkeyService.TryRegister(hotkey))
+        {
+            StopHotkeyRetryLoop();
+            _viewModel.StatusText = $"全局快捷键 {hotkey} 注册成功";
+            return true;
+        }
+
+        _viewModel.StatusText = $"全局快捷键 {hotkey} 注册失败，可能被其他程序占用";
+        StartHotkeyRetryLoop();
+        return false;
+    }
+
+    /// <summary>重启前释放主热键，避免新进程启动时旧进程仍占用导致注册失败。</summary>
+    public void PrepareForRestart()
+    {
+        StopHotkeyRetryLoop();
+        _hotkeyService.Dispose();
+        _screenshotHotkeyService.Dispose();
+    }
+
+    private void StartHotkeyRetryLoop()
+    {
+        StopHotkeyRetryLoop();
+        _hotkeyRetryTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
+        _hotkeyRetryTimer.Tick += HotkeyRetryTimer_Tick;
+        _hotkeyRetryTimer.Start();
+    }
+
+    private void StopHotkeyRetryLoop()
+    {
+        if (_hotkeyRetryTimer is null) return;
+        _hotkeyRetryTimer.Stop();
+        _hotkeyRetryTimer.Tick -= HotkeyRetryTimer_Tick;
+        _hotkeyRetryTimer = null;
+    }
+
+    private void HotkeyRetryTimer_Tick(object? sender, EventArgs e)
+    {
+        var hotkey = _viewModel.Settings.Hotkey;
+        if (_hotkeyService.TryRegister(hotkey))
+        {
+            StopHotkeyRetryLoop();
+            _viewModel.StatusText = $"全局快捷键 {hotkey} 注册成功";
+        }
     }
 
     // 截图热键回调：抓屏 → 弹出全屏框选窗口 → 松开自动复制并关闭。
@@ -502,7 +556,10 @@ public partial class MainWindow : System.Windows.Window
                         {
                             result.Hotkey = original.Hotkey;
                             _viewModel.StatusText = "快捷键被其他程序占用，已保留原组合键";
+                            if (!_hotkeyService.IsRegistered) StartHotkeyRetryLoop();
                         }
+
+                            if (_hotkeyService.IsRegistered) StopHotkeyRetryLoop();
 
                         if (!_screenshotHotkeyService.TryRegister(result.ScreenshotHotkey))
                         {

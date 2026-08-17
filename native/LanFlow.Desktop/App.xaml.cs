@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -104,6 +104,8 @@ public partial class App : Application
     {
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("显示启动器", null, (_, _) => ShowMainWindow());
+        menu.Items.Add("重新注册快捷键", null, (_, _) => ReRegisterHotkeyFromTray());
+        menu.Items.Add("重启软件", null, (_, _) => RestartFromTray());
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("退出 LanFlow", null, (_, _) => RequestShutdown());
 
@@ -229,6 +231,52 @@ public partial class App : Application
         MainWindow.WindowState = WindowState.Normal;
         MainWindow.Activate();
         MainWindow.Focus();
+    }
+
+    private void ReRegisterHotkeyFromTray()
+    {
+        if (MainWindow is not MainWindow mainWindow)
+        {
+            _trayIcon?.ShowBalloonTip(3000, "LanFlow", "启动器尚未就绪，请稍后再试。", Forms.ToolTipIcon.Info);
+            return;
+        }
+
+        if (mainWindow.ReRegisterHotkey())
+        {
+            _trayIcon?.ShowBalloonTip(3000, "LanFlow", $"快捷键 {mainWindow.CurrentHotkey} 注册成功", Forms.ToolTipIcon.Info);
+        }
+        else
+        {
+            _trayIcon?.ShowBalloonTip(3000, "LanFlow", $"快捷键 {mainWindow.CurrentHotkey} 注册失败，可能被其他程序占用", Forms.ToolTipIcon.Warning);
+        }
+    }
+
+    private void RestartFromTray()
+    {
+        if (MainWindow is MainWindow mainWindow)
+        {
+            mainWindow.PrepareForRestart();
+        }
+
+        try
+        {
+            var exe = Environment.ProcessPath;
+            if (!string.IsNullOrEmpty(exe) && File.Exists(exe))
+            {
+                var startInfo = new System.Diagnostics.ProcessStartInfo(exe)
+                {
+                    WorkingDirectory = Path.GetDirectoryName(exe) ?? AppContext.BaseDirectory,
+                    UseShellExecute = false,
+                };
+                System.Diagnostics.Process.Start(startInfo);
+            }
+        }
+        catch (Exception ex)
+        {
+            WriteCrashLog("RestartFromTray", ex);
+        }
+
+        RequestShutdown();
     }
 
     // 首次显示主窗口：规避 “根 Visual 不能具有父级” 的偶发时序竞争。

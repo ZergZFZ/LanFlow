@@ -19,6 +19,7 @@ public sealed class HotkeyService : IDisposable
     private uint _modifiers;
     private uint _virtualKey;
     private bool _isRegistered;
+    private bool _hookAdded;
 
     /// <summary>创建一个全局热键注册器。同一窗口可注册多个实例，每个实例需使用不同的 hotkeyId（如主窗=1，截图=2）。</summary>
     public HotkeyService(int hotkeyId = 1)
@@ -26,12 +27,15 @@ public sealed class HotkeyService : IDisposable
         _hotkeyId = hotkeyId;
     }
 
+    public bool IsRegistered => _isRegistered;
+
     public bool Register(Window window, Action onTriggered, string hotkey = "Alt+Space")
     {
         _source = PresentationSource.FromVisual(window) as HwndSource;
         if (_source is null || !TryParse(hotkey, out var modifiers, out var virtualKey)) return false;
         _onTriggered = onTriggered;
         _source.AddHook(WindowProcedure);
+        _hookAdded = true;
         _modifiers = modifiers;
         _virtualKey = virtualKey;
         _isRegistered = RegisterHotKey(_source.Handle, _hotkeyId, modifiers, virtualKey);
@@ -102,10 +106,11 @@ public sealed class HotkeyService : IDisposable
     {
         if (_source is null) return;
         if (_isRegistered) UnregisterHotKey(_source.Handle, _hotkeyId);
-        _source.RemoveHook(WindowProcedure);
+        if (_hookAdded) _source.RemoveHook(WindowProcedure);
         _source = null;
         _onTriggered = null;
         _isRegistered = false;
+        _hookAdded = false;
     }
 
     private IntPtr WindowProcedure(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
