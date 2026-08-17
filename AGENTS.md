@@ -7,22 +7,24 @@
 
 | 分支 | 用途 | 允许的提交类型 |
 |---|---|---|
-| `windows` / `dev/windows` | Windows（WPF）功能开发 | `feat:` `fix:` `refactor:` `perf:` `test:` `docs:` 等开发性提交 |
-| `linux` / `dev/linux` | Linux（Avalonia）开发 | 同上 |
-| `main` / `origin/main` | **仅打包与发布** | 仅 `merge` 提交、版本号 bump（`build:` / `chore(release):`）、annotated tag、发布基础设施 |
+| `windows`（推送 `origin/windows`） | Windows（WPF）功能开发 | `feat:` `fix:` `refactor:` `perf:` `test:` `docs:` 等开发性提交 |
+| `linux`（推送 `origin/linux`） | Linux（Avalonia）开发 | 同上 |
+| `main`（推送 `origin/main`） | **仅打包与发布** | 仅 `merge` 提交、版本号 bump（`build:` / `chore(release):`）、annotated tag、发布基础设施 |
+
+> ⚠️ `dev` 远端（LanFlow-dev.git）已归档为只读，**不要向其推送**；开发与发布统一走 `origin`（LanFlow.git）。
 
 ## 禁止（RED LINE）
 
 - ❌ 在 `main` 上直接提交 `feat:` / `fix:` / `refactor:` / `perf:` / `test:` / `style:`。
 - ❌ 在 `main` 上改动业务代码（`native/**`、`linux/native/**`），`*.csproj` 版本号除外。
-- ❌ 把 Linux 代码合入 `windows` / `dev/windows`；把 Windows 代码合入 `linux` / `dev/linux`。
+- ❌ 把 Linux 代码合入 `windows`；把 Windows 代码合入 `linux`。
 - ❌ 在 `main` 上提交过程文档（`docs/archive/**`、PRD、反馈、方案、调试记录）、构建产物（`artifacts/`、`release/`、`bin/`、`obj/`、`.build/`）。
 - ❌ 提交残留冲突标记（`<<<<<<<` / `=======` / `>>>>>>>`）。
 - ❌ 未构建验证就推送 `main`。
 
 ## main 上唯一允许的动作
 
-1. 发布合并：`git merge dev/windows --no-ff` 或 `git merge dev/linux --no-ff`。
+1. 发布合并：`git merge windows --no-ff` 或 `git merge linux --no-ff`。
 2. 版本号 bump：仅改 `*.csproj` 的 `Version` / `AssemblyVersion` / `FileVersion`（三者必须一致），提交类型 `build:` 或 `chore(release):`。
 3. 打 annotated tag：`git tag -a vX.Y.Z -m "..."`。
 4. 发布基础设施维护（AGENTS.md、CI、git 钩子、打包脚本、README/CHANGELOG 等长期说明）。
