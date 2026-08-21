@@ -13,6 +13,7 @@ using Microsoft.Win32;
 using LanFlow.Desktop.Controls;
 using LanFlow.Desktop.Diagnostics;
 using LanFlow.Desktop.Presentation;
+using LanFlow.Core.Workspace;
 using LanFlow.Desktop.Views;
 using LanFlow.Desktop.Models;
 using LanFlow.Desktop.Services;
@@ -1348,12 +1349,23 @@ public partial class MainWindow : System.Windows.Window
         var groups = _viewModel.Config.Groups;
         var sourceIndex = groups.IndexOf(source);
         var targetIndex = groups.IndexOf(target);
-        if (sourceIndex < 0 || targetIndex < 0 || sourceIndex == targetIndex)
+
+        // 顺序规则在 Core（P2/W1）：UI 只传索引并应用返回的新顺序，不做索引运算。
+        var result = WorkspaceOrganizer.MoveGroup(groups, sourceIndex, targetIndex);
+        if (!result.IsMoved)
         {
             return;
         }
 
-        groups.Move(sourceIndex, targetIndex);
+        for (var i = 0; i < result.Groups.Count; i++)
+        {
+            var currentIndex = groups.IndexOf(result.Groups[i]);
+            if (currentIndex != i)
+            {
+                groups.Move(currentIndex, i);
+            }
+        }
+
         _groupSwitchCoordinator.SelectedGroupId = _viewModel.SelectedGroup?.Id;
         _viewModel.RefreshGroups();
         _viewModel.Save();
