@@ -56,6 +56,7 @@ public partial class MainWindow : System.Windows.Window
     private System.Windows.Threading.DispatcherTimer? _hotkeyRetryTimer;
     private int _hotkeyRetryAttempts;
     private bool _hotkeyFailureNotified;
+    private CancellationTokenSource? _workingSetReclaimDebounce;
     private string _activeLayoutMode = "tile";
     private string? _lastSelectedItemId;
     private string? _configLoadWarning;
@@ -350,6 +351,8 @@ public partial class MainWindow : System.Windows.Window
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
         _contentTransitionCancellation?.Cancel();
         _contentTransitionCancellation?.Dispose();
+        _workingSetReclaimDebounce?.Cancel();
+        _workingSetReclaimDebounce?.Dispose();
         _animationPreferenceService.Dispose();
         _groupSwitchCoordinator.Dispose();
         _iconCoordinator.Dispose();
@@ -1468,7 +1471,50 @@ public partial class MainWindow : System.Windows.Window
 
             cancellation.Dispose();
         }
+
+        ScheduleWorkingSetReclaim();
     }
+
+    private void ScheduleWorkingSetReclaim()
+    {
+        if (_isClosed)
+        {
+            return;
+        }
+
+        _workingSetReclaimDebounce?.Cancel();
+        _workingSetReclaimDebounce?.Dispose();
+        var debounce = new CancellationTokenSource();
+        _workingSetReclaimDebounce = debounce;
+        _ = ReclaimWorkingSetAfterIdleAsync(debounce.Token);
+    }
+
+    private static async Task ReclaimWorkingSetAfterIdleAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(800, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        await Task.Run(() =>
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            using var process = System.Diagnostics.Process.GetCurrentProcess();
+            SetProcessWorkingSetSize(process.Handle, new IntPtr(-1), new IntPtr(-1));
+        }, CancellationToken.None);
+    }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetProcessWorkingSetSize(
+        IntPtr process,
+        IntPtr minimumWorkingSetSize,
+        IntPtr maximumWorkingSetSize);
 
     private void AnimationPreferenceService_PreferenceChanged(object? sender, EventArgs e)
     {

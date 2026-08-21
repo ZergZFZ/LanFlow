@@ -106,6 +106,31 @@ public partial class ScreenshotCropWindow : Window
         Focus();
     }
 
+    protected override void OnClosed(EventArgs e)
+    {
+        // 全屏整图位图占用较大，窗口关闭后立即断开引用，避免大位图随窗口生命周期驻留。
+        FrozenImage.Source = null;
+        EditImage.Source = null;
+        MosaicLayer.Source = null;
+        OverlayCanvas.Children.Clear();
+        EditCanvas.Children.Clear();
+        HandleCanvas.Children.Clear();
+        _annotations.Clear();
+        _mosaicRects.Clear();
+        _undoStack.Clear();
+        _draftElement = null;
+
+        base.OnClosed(e);
+
+        // 后台触发一次完整 GC，尽快把整图/裁剪位图的托管与原生内存还给系统。
+        _ = System.Threading.Tasks.Task.Run(() =>
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+        });
+    }
+
     // ---------- 框选阶段 ----------
 
     private void OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
