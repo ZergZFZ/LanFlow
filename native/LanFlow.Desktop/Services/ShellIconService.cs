@@ -244,7 +244,13 @@ public sealed class ShellIconService : IIconService
             if (image is not null && image.CanFreeze && !image.IsFrozen) image.Freeze();
             if (_inflight.TryGetValue(entry.Key, out var current) && ReferenceEquals(current, entry))
             {
-                AddCached(entry.Key, image);
+                // 提取失败（null）不写入缓存：否则失败结果被长期缓存，图标会一直空白且无法自愈。
+                // 仅缓存成功的图标；失败结果由 extractor 的重试以及下次请求重新提取。
+                if (image is not null)
+                {
+                    AddCached(entry.Key, image);
+                }
+
                 entry.Complete(image);
             }
         }

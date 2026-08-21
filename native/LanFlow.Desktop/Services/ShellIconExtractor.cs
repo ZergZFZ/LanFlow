@@ -18,12 +18,29 @@ public sealed class ShellIconExtractor : IIconExtractor
         int pixelSize,
         CancellationToken cancellationToken)
     {
-        var image = await Task.Run(
-            () => Extract(path, Math.Max(1, pixelSize), cancellationToken),
-            cancellationToken).ConfigureAwait(false);
+        // 开机早期 Windows Shell 图标缓存可能尚未就绪，SHGetFileInfo 偶发失败。
+        // 失败后做少量短延迟重试，尽量在 Shell 就绪后拿到图标，避免失败结果长期停留在界面上。
+        const int maxAttempts = 3;
+        for (var attempt = 0; attempt < maxAttempts; attempt++)
+        {
+            var image = await Task.Run(
+                () => Extract(path, Math.Max(1, pixelSize), cancellationToken),
+                cancellationToken).ConfigureAwait(false);
 
-        if (image is not null && image.CanFreeze && !image.IsFrozen) image.Freeze();
-        return image;
+            if (image is not null)
+            {
+                if (image.CanFreeze && !image.IsFrozen) image.Freeze();
+                return image;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            if (attempt < maxAttempts - 1)
+            {
+                await Task.Delay(150, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        return null;
     }
 
     private static ImageSource? Extract(string path, int pixelSize, CancellationToken cancellationToken)

@@ -72,9 +72,9 @@ public partial class MainWindow : System.Windows.Window
     {
         get => (bool)GetValue(IsEditModeProperty);
         set => SetValue(IsEditModeProperty, value);
+    }
 
     public string CurrentHotkey => _viewModel.Settings.Hotkey;
-    }
 
     private int _openContextMenus;
     private bool _isContextMenuActivationPending;
@@ -966,6 +966,13 @@ public partial class MainWindow : System.Windows.Window
             if (_isClosed || !ItemList.IsLoaded)
             {
                 return;
+            }
+
+            // 双向选中绑定在延迟显示（开机自启）时可能把分组选中同步为 null，
+            // 这里把导航选中与 ViewModel 恢复一致，避免进入“有标签、无内容”的状态。
+            if (_viewModel.SelectedGroup is { } group && !ReferenceEquals(GroupNavigation.SelectedItem, group))
+            {
+                GroupNavigation.SelectedItem = group;
             }
 
             // The initial ItemsSource is populated before the virtualizing panel joins the visual tree.
