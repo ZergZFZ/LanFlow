@@ -4,6 +4,13 @@
 > 版本号与 `native/LanFlow.Desktop/LanFlow.Desktop.csproj` 中的 `Version` / `AssemblyVersion` / `FileVersion` 保持一致。
 > 发布闸门与资产命名规范见 `docs/ARCHITECTURE.md` §6。
 
+## [1.5.2] - 2026-08-21
+
+### 优化：内存占用回收
+
+- 分组 / 标签切换动画结束后，延迟 800ms 防抖触发一次垃圾回收并修剪进程工作集（`SetProcessWorkingSetSize`），降低常驻内存占用；连续快速切换时只保留最后一次回收。
+- 截图窗口关闭时立即释放整图位图引用（预览图、编辑画布、马赛克层、标注与撤销栈），并在后台补一次完整 GC，避免大位图随窗口生命周期驻留。
+
 ## [1.5.1] - 2026-08-21
 
 ### 修复
