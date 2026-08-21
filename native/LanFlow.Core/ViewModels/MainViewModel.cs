@@ -36,6 +36,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
         set
         {
             if (_selectedGroup == value) return;
+            // 双向选中绑定在启动/列表初始化时可能把 null 回写进来（尤其开机自启延迟显示），
+            // 已有有效选中分组时不采纳 null，避免内容区被误清空为空白。
+            if (value is null && _selectedGroup is not null)
+            {
+                return;
+            }
+
             _selectedGroup = value;
             Config.Settings.LastGroupId = value?.Id;
             OnPropertyChanged();
