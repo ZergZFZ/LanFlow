@@ -161,6 +161,3 @@ for ($run = 1; $run -le $Runs; $run++) {
 
 $results | Format-Table -AutoSize | Out-String -Width 200
 $results | ConvertTo-Json -Depth 3
-
-
-
