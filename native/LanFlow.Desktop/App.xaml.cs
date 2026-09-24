@@ -16,6 +16,7 @@ public partial class App : Application
     private Forms.NotifyIcon? _trayIcon;
     private Forms.ToolStripMenuItem? _toggleHotkeyMenuItem;
     private readonly SingleInstanceGuard _singleInstanceGuard = new();
+    private ConfigLocationResolution? _startupConfigLocation;
 
     internal bool IsExiting { get; private set; }
 
@@ -47,8 +48,10 @@ public partial class App : Application
         IsSilentStart = e.Args.Any(a =>
             string.Equals(a, "--silent", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(a, "/silent", StringComparison.OrdinalIgnoreCase));
+        WriteDiagnosticLog($"startup:begin;silent={IsSilentStart};args={e.Args.Length}");
         if (!_singleInstanceGuard.TryAcquire(ShowMainWindow))
         {
+            WriteDiagnosticLog($"startup:existing-instance;silent={IsSilentStart}");
             if (!IsSilentStart)
             {
                 _singleInstanceGuard.NotifyExistingShow();
@@ -73,23 +76,30 @@ public partial class App : Application
         try
         {
             base.OnStartup(e);
-            ResolveConfigLocationAtStartup();
+            _startupConfigLocation = ResolveConfigLocationAtStartup();
+            WriteDiagnosticLog($"startup:config-ready;directory={_startupConfigLocation.DirectoryPath};configExists={File.Exists(_startupConfigLocation.ConfigPath)};warning={_startupConfigLocation.Warning ?? "none"}");
             CreateTrayIcon();
+            WriteDiagnosticLog("startup:tray-ready");
 
-            var mainWindow = new MainWindow();
+            var mainWindow = new MainWindow(_startupConfigLocation);
             MainWindow = mainWindow;
             if (IsSilentStart)
             {
                 // 静默启动：仅创建窗口句柄（用于注册全局热键、DWM 阴影挂钩与托盘交互），
                 // 不调用 Show()，避免开机后主窗口弹出占据屏幕。
                 new WindowInteropHelper(mainWindow).EnsureHandle();
+                WriteDiagnosticLog("startup:window-handle-ready");
             }
             else
             {
                 // 延迟到 Dispatcher 消息循环启动后再 Show。
                 // 规避极少数情况下（尤其由更新脚本 start 拉起时）在 OnStartup 内直接 Show()
                 // 触发的 “VisualTarget 的根 Visual 不能具有父级” 异常（WPF 视觉树时序竞争）。
-                Dispatcher.BeginInvoke(DispatcherPriority.Loaded, (Action)(() => ShowMainWindowSafe(mainWindow)));
+                Dispatcher.BeginInvoke(DispatcherPriority.Loaded, (Action)(() =>
+                {
+                    WriteDiagnosticLog("startup:show-dispatch");
+                    ShowMainWindowSafe(mainWindow);
+                }));
             }
         }
         catch (Exception ex)
@@ -239,7 +249,7 @@ public partial class App : Application
     /// <summary>
     /// 启动时解析配置目录（默认或 locator 指定），确保目录存在并写入诊断日志。
     /// </summary>
-    private static void ResolveConfigLocationAtStartup()
+    private static ConfigLocationResolution ResolveConfigLocationAtStartup()
     {
         try
         {
@@ -247,14 +257,17 @@ public partial class App : Application
             var resolution = location.Resolve();
             Directory.CreateDirectory(resolution.DirectoryPath);
             WriteDiagnosticLog(
-                "Config directory=" + resolution.DirectoryPath +
-                "; isDefault=" + resolution.IsDefault +
-                "; exists=" + File.Exists(resolution.ConfigPath) +
-                "; warning=" + (resolution.Warning ?? "none"));
+                "config-location:directory=" + resolution.DirectoryPath +
+                ";isDefault=" + resolution.IsDefault +
+                ";exists=" + File.Exists(resolution.ConfigPath) +
+                ";warning=" + (resolution.Warning ?? "none"));
+            return resolution;
         }
         catch (Exception ex)
         {
-            WriteDiagnosticLog("ResolveConfigLocationAtStartup failed: " + ex.Message);
+            WriteDiagnosticLog("config-location:failed=" + ex.Message);
+            var fallback = new ConfigLocationService().Resolve();
+            return fallback;
         }
     }
 
@@ -321,6 +334,10 @@ public partial class App : Application
             mainWindow.PrepareForRestart();
         }
 
+        _trayIcon?.Dispose();
+        _trayIcon = null;
+        _singleInstanceGuard.Dispose();
+
         try
         {
             var exe = Environment.ProcessPath;
@@ -332,6 +349,11 @@ public partial class App : Application
                     UseShellExecute = false,
                 };
                 System.Diagnostics.Process.Start(startInfo);
+                WriteDiagnosticLog("restart:process-started");
+            }
+            else
+            {
+                WriteDiagnosticLog("restart:process-path-unavailable");
             }
         }
         catch (Exception ex)
@@ -349,6 +371,7 @@ public partial class App : Application
         try
         {
             mainWindow.Show();
+            WriteDiagnosticLog("startup:window-shown");
             return;
         }
         catch (Exception ex) when (IsRootVisualParentError(ex))
@@ -373,6 +396,7 @@ public partial class App : Application
             var fresh = new MainWindow();
             MainWindow = fresh;
             fresh.Show();
+            WriteDiagnosticLog("startup:window-shown-retry");
         }
         catch (Exception ex)
         {

@@ -62,7 +62,8 @@ public partial class MainWindow : System.Windows.Window
     private string? _lastSelectedItemId;
     private string? _configLoadWarning;
     private bool _configLoadWarningShown;
-
+    private int _initialItemRealizationAttempt;
+    private bool _initialItemRealizationCompleted;
     private sealed record ViewStateSnapshot(
         string? SelectedItemId,
         string? FocusedItemId,
@@ -90,10 +91,17 @@ public partial class MainWindow : System.Windows.Window
     private Popup? _dragGhost;
 
     public MainWindow()
+        : this(new ConfigLocationService().Resolve())
     {
+    }
+
+    internal MainWindow(ConfigLocationResolution configLocation)
+    {
+        ArgumentNullException.ThrowIfNull(configLocation);
         InitializeComponent();
-        var configStore = CreateConfigStore();
+        var configStore = CreateConfigStore(configLocation);
         _viewModel = new MainViewModel(configStore);
+        App.WriteDiagnosticLog($"startup:viewmodel-ready;groups={_viewModel.Config.Groups.Count};selected={_viewModel.SelectedGroup?.Id ?? "none"};visible={_viewModel.VisibleItems.Count};warning={configStore.LastLoadWarning ?? "none"}");
         // 开机启动时把 Run 值排到最前，避免每次开机最后启动；幂等，已在最前时不写注册表。
         if (_viewModel.Settings.StartWithWindows)
         {
@@ -133,7 +141,7 @@ public partial class MainWindow : System.Windows.Window
         {
             AttachVirtualizingPanel();
             ScheduleInitialItemRealization();
-            _ = LoadVisibleIconsAsync();
+            App.WriteDiagnosticLog($"startup:item-list-loaded;items={ItemList.Items.Count};status={ItemList.ItemContainerGenerator.Status}");
         };
         ItemList.SizeChanged += ItemList_SizeChanged;
         _settingsCoordinator.Restore(_viewModel.Settings);
@@ -764,11 +772,10 @@ public partial class MainWindow : System.Windows.Window
         }
     }
     // 配置目录由 locator 解析：默认 %APPDATA%\LanFlow，或用户自定义位置。
-    private static ConfigStore CreateConfigStore()
+    private static ConfigStore CreateConfigStore(ConfigLocationResolution location)
     {
-        var location = new ConfigLocationService();
         // 平台默认 Alt+Space；用户显式保存的热键在 ConfigStore 中不再被改写。
-        return new ConfigStore(configDirectory: location.Resolve().DirectoryPath);
+        return new ConfigStore(configDirectory: location.DirectoryPath);
     }
 
     private static SettingsMaintenanceService CreateMaintenanceService()
@@ -1217,22 +1224,26 @@ public partial class MainWindow : System.Windows.Window
 
     private void ScheduleInitialItemRealization()
     {
+        _initialItemRealizationAttempt = 0;
+        _initialItemRealizationCompleted = false;
+        ScheduleInitialItemRealizationAttempt();
+    }
+
+    private void ScheduleInitialItemRealizationAttempt()
+    {
         Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () =>
         {
-            if (_isClosed || !ItemList.IsLoaded)
+            if (_isClosed || !ItemList.IsLoaded || _initialItemRealizationCompleted)
             {
                 return;
             }
 
-            // 双向选中绑定在延迟显示（开机自启）时可能把分组选中同步为 null，
-            // 这里把导航选中与 ViewModel 恢复一致，避免进入“有标签、无内容”的状态。
+            _initialItemRealizationAttempt++;
             if (_viewModel.SelectedGroup is { } group && !ReferenceEquals(GroupNavigation.SelectedItem, group))
             {
                 GroupNavigation.SelectedItem = group;
             }
 
-            // The initial ItemsSource is populated before the virtualizing panel joins the visual tree.
-            // Synchronize that binding, then emit the same reset that a group change produces so the panel realizes it.
             AttachVirtualizingPanel();
             ItemList.GetBindingExpression(ItemsControl.ItemsSourceProperty)?.UpdateTarget();
             _viewModel.RefreshVisibleItems();
@@ -1240,7 +1251,20 @@ public partial class MainWindow : System.Windows.Window
             ItemList.InvalidateArrange();
             _wrapPanel?.InvalidateMeasure();
             _wrapPanel?.InvalidateArrange();
-            _ = LoadVisibleIconsAsync();
+
+            var itemCount = ItemList.Items.Count;
+            var realizedCount = _wrapPanel?.RealizedIndices.Count ?? 0;
+            var generatorStatus = ItemList.ItemContainerGenerator.Status;
+            App.WriteDiagnosticLog($"startup:item-realization;attempt={_initialItemRealizationAttempt};items={itemCount};realized={realizedCount};status={generatorStatus}");
+
+            if (itemCount == 0 || realizedCount > 0 || _initialItemRealizationAttempt >= 4)
+            {
+                _initialItemRealizationCompleted = true;
+                _ = LoadVisibleIconsAsync();
+                return;
+            }
+
+            ScheduleInitialItemRealizationAttempt();
         });
     }
 

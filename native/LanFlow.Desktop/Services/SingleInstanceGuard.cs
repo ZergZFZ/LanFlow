@@ -14,7 +14,8 @@ public sealed class SingleInstanceGuard : IDisposable
 {
     private const string MutexName = @"Local\LanFlow.SingleInstance";
     private const string PipeName = @"LanFlow.SingleInstance.Pipe";
-    private static readonly TimeSpan PipeConnectTimeout = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan PipeConnectTimeout = TimeSpan.FromMilliseconds(800);
+    private static readonly TimeSpan PipeResponseTimeout = TimeSpan.FromMilliseconds(800);
 
     private Mutex? _mutex;
     private CancellationTokenSource? _listenerCancellation;
@@ -65,20 +66,24 @@ public sealed class SingleInstanceGuard : IDisposable
             using var client = new NamedPipeClientStream(
                 ".",
                 PipeName,
-                PipeDirection.Out,
-                PipeOptions.None);
+                PipeDirection.InOut,
+                PipeOptions.Asynchronous);
             client.Connect(PipeConnectTimeout);
             using var writer = new StreamWriter(client, new UTF8Encoding(false))
             {
                 AutoFlush = true,
             };
             writer.WriteLine("show");
+            client.ReadTimeout = (int)PipeResponseTimeout.TotalMilliseconds;
+            using var reader = new StreamReader(client, new UTF8Encoding(false), leaveOpen: true);
+            var response = reader.ReadLine();
+            App.WriteDiagnosticLog("single-instance:show-response=" + (response ?? "none"));
         }
         catch (Exception exception) when (exception is IOException
             or TimeoutException
             or UnauthorizedAccessException)
         {
-            // 已有实例可能正在退出；不阻塞，由调用方直接退出。
+            App.WriteDiagnosticLog("single-instance:show-failed=" + exception.GetType().Name);
         }
     }
 
@@ -117,7 +122,7 @@ public sealed class SingleInstanceGuard : IDisposable
             {
                 using var server = new NamedPipeServerStream(
                     PipeName,
-                    PipeDirection.In,
+                    PipeDirection.InOut,
                     maxNumberOfServerInstances: 1,
                     PipeTransmissionMode.Byte,
                     PipeOptions.Asynchronous);
@@ -128,7 +133,15 @@ public sealed class SingleInstanceGuard : IDisposable
                 if (string.Equals(command, "show", StringComparison.OrdinalIgnoreCase))
                 {
                     Application.Current?.Dispatcher.Invoke(
-                        () => _onShowRequested?.Invoke(),
+                        () =>
+                        {
+                            _onShowRequested?.Invoke();
+                            using var responseWriter = new StreamWriter(server, new UTF8Encoding(false), leaveOpen: true)
+                            {
+                                AutoFlush = true,
+                            };
+                            responseWriter.WriteLine("ok");
+                        },
                         System.Windows.Threading.DispatcherPriority.Send);
                 }
             }

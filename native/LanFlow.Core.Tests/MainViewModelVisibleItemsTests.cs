@@ -32,6 +32,62 @@ public sealed class MainViewModelVisibleItemsTests
         Assert.Same(visible, viewModel.VisibleItems);
         Assert.Equal("Beta", Assert.Single(viewModel.VisibleItems).Name);
     }
+    [Fact]
+    public void Startup_RestoresLastNonEmptyGroup()
+    {
+        var empty = new Group { Name = "Empty", Items = [] };
+        var target = new Group { Name = "Target", Items = [new LauncherItem { Name = "App" }] };
+        var config = new AppConfig { Groups = [empty, target] };
+        config.Settings.LastGroupId = target.Id;
+
+        var viewModel = new MainViewModel(new MemoryConfigStore(config));
+
+        Assert.Same(target, viewModel.SelectedGroup);
+        Assert.Equal("App", Assert.Single(viewModel.VisibleItems).Name);
+    }
+
+    [Fact]
+    public void Startup_FallsBackFromEmptyLastGroupToFirstNonEmptyGroup()
+    {
+        var empty = new Group { Name = "Empty", Items = [] };
+        var target = new Group { Name = "Target", Items = [new LauncherItem { Name = "App" }] };
+        var config = new AppConfig { Groups = [empty, target] };
+        config.Settings.LastGroupId = empty.Id;
+
+        var viewModel = new MainViewModel(new MemoryConfigStore(config));
+
+        Assert.Same(target, viewModel.SelectedGroup);
+        Assert.Single(viewModel.VisibleItems);
+    }
+
+    [Fact]
+    public void SelectedGroup_NullWriteBack_DoesNotClearVisibleItems()
+    {
+        var group = new Group { Items = [new LauncherItem { Name = "App" }] };
+        var viewModel = Create(group);
+
+        viewModel.SelectedGroup = null;
+
+        Assert.Same(group, viewModel.SelectedGroup);
+        Assert.Single(viewModel.VisibleItems);
+    }
+
+    [Fact]
+    public void FrequencySort_OrdersItemsByUseCountDescending()
+    {
+        var group = new Group
+        {
+            SortMode = "frequency",
+            Items = [
+                new LauncherItem { Name = "Low", UseCount = 1 },
+                new LauncherItem { Name = "High", UseCount = 5 },
+            ],
+        };
+
+        var viewModel = Create(group);
+
+        Assert.Equal(["High", "Low"], viewModel.VisibleItems.Select(item => item.Name));
+    }
 
     private static MainViewModel Create(params Group[] groups) =>
         new(new MemoryConfigStore(new AppConfig { Groups = new(groups) }));
