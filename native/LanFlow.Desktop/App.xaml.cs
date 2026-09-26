@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using Forms = System.Windows.Forms;
+using LanFlow.Desktop.Diagnostics;
 using LanFlow.Desktop.Services;
 
 namespace LanFlow.Desktop;
@@ -216,12 +217,8 @@ public partial class App : Application
 
     private static void WriteCrashLog(string source, Exception? ex)
     {
-        try
-        {
-            var line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {source}: {ex}";
-            File.AppendAllText(CrashLogPath, line + Environment.NewLine + Environment.NewLine);
-        }
-        catch { }
+        var line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {source}: {ex}";
+        LogWriter.Append(CrashLogPath, line + Environment.NewLine + Environment.NewLine);
     }
 
     private static string DiagnosticLogPath
@@ -238,12 +235,9 @@ public partial class App : Application
 
     internal static void WriteDiagnosticLog(string message)
     {
-        try
-        {
-            var line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}";
-            File.AppendAllText(DiagnosticLogPath, line + Environment.NewLine);
-        }
-        catch { }
+        // 时间戳带毫秒：R4 性能脚本依赖它计算"窗口显示/首批项目就绪"的启动内耗时。
+        var line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}";
+        LogWriter.Append(DiagnosticLogPath, line + Environment.NewLine);
     }
 
     /// <summary>
