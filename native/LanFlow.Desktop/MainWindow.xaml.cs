@@ -152,6 +152,7 @@ public partial class MainWindow : System.Windows.Window
         {
             if (IsVisible)
             {
+                ShowConfigLoadWarningOnce();
                 _ = LoadVisibleIconsAsync();
             }
             else
@@ -160,7 +161,6 @@ public partial class MainWindow : System.Windows.Window
             }
         };
         RefreshEmptyState();
-        Loaded += ShowConfigLoadWarningOnce;
 
         SourceInitialized += (_, _) =>
         {
@@ -324,10 +324,11 @@ public partial class MainWindow : System.Windows.Window
     }
 
     // 配置损坏时只提示一次：给出备份位置，并说明当前使用的是新配置。
-    // 静默启动（开机驻留）时不弹窗，避免打断系统登录流程。
-    private void ShowConfigLoadWarningOnce(object? sender, RoutedEventArgs e)
+    // 静默启动（开机驻留）时不弹窗打断登录流程，改为推迟到用户首次打开主窗口时提示；
+    // 因此这里不能只在 Loaded 触发——静默启动的窗口 Loaded 时不可见，会被永久跳过。
+    private void ShowConfigLoadWarningOnce()
     {
-        if (_configLoadWarningShown || _configLoadWarning is null || App.IsSilentStart)
+        if (_configLoadWarningShown || _configLoadWarning is null || !IsVisible)
         {
             return;
         }
@@ -451,7 +452,7 @@ public partial class MainWindow : System.Windows.Window
         }
     }
 
-    // 截图热键回调：抓屏 → 弹出全屏框选窗口 → 松开自动复制并关闭。
+    // 截图热键回调：抓屏 → 弹出全屏框选窗口 → 框选后进入标注，Enter/Ctrl+C 复制并关闭。
     private void ShowScreenshotCrop()
     {
         if (_cropWindow is not null) return; // 防重入

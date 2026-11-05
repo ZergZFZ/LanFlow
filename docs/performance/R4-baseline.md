@@ -69,3 +69,19 @@ powershell -ExecutionPolicy Bypass -File tools\perf-baseline.ps1 `
 ```
 
 注意：脚本会停止正在运行的 LanFlow 实例（单实例互斥体冲突）；结束后不会自动重启。
+
+## 7. v1.5.4 起新增的测量项（perf-baseline.ps1 v2）
+
+| 指标 | 方法 | 建议告警阈值 |
+|---|---|---|
+| 热键→窗口可见 | 脚本以 `SW_HIDE` 隐藏主窗口后直投 `WM_HOTKEY`（wParam=1，主热键），5ms 轮询 `IsWindowVisible`；替代本机不可靠的 SendKeys/UIA IsOffscreen 方案 | > 150ms |
+| 启动→窗口可见 | 解析 `config-diagnostics.log` 本次启动段落的毫秒时间戳：`startup:window-shown` − `startup:begin` | > 300ms（建议值，待数据积累） |
+| 启动→首批项目 | 同上：首条 `startup:item-realization` − `startup:begin` | > 800ms（建议值，待数据积累） |
+
+依赖：被测版本 ≥ v1.5.4（诊断日志时间戳自该版本起带毫秒）；旧版本这三项显示"无数据"，不判失败。汇总输出新增各项中位数的阈值判定（PASS/WARN/无数据）。
+
+### 环境备注（2026-09-26 实测）
+
+本开发机自 2026-09-26 起出现进程级写入拦截：任何 LanFlow.exe 实例（含 2026-09-24 当天曾正常写入的同一二进制、计划任务以 Administrator 启动的实例）均无法写入 `%LOCALAPPDATA%\LanFlow\` 下任何文件（新建文件同样被拒，报 UnauthorizedAccessException），而 powershell.exe 写入同一目录正常。同时跨进程投递 `WM_HOTKEY` 与 SendKeys 均无法触发呼出（2026-08-21 基线已记录 SendKeys 不可靠，现状更严重）。
+
+因此在本机复跑脚本时，"启动→窗口可见 / 启动→首批项目 / 热键→窗口可见"可能显示"无数据"——这是测量环境干扰，不代表产品回归，应在干净环境或用户机器上复跑获取真实数据。应用本身不受影响：日志写入失败按设计静默降级（`Diagnostics/LogWriter`），冷启动、内存与分组切换测量不依赖日志，仍可正常取得。
