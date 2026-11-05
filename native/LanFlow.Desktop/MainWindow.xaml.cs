@@ -452,7 +452,7 @@ public partial class MainWindow : System.Windows.Window
         }
     }
 
-    // 截图热键回调：抓屏 → 弹出全屏框选窗口 → 松开自动复制并关闭。
+    // 截图热键回调：抓屏 → 弹出全屏框选窗口 → 框选后进入标注，Enter/Ctrl+C 复制并关闭。
     private void ShowScreenshotCrop()
     {
         if (_cropWindow is not null) return; // 防重入
