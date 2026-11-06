@@ -21,6 +21,9 @@ public partial class ToastWindow : Window
     private readonly DispatcherTimer _hold = new() { Interval = TimeSpan.FromMilliseconds(1400) };
     private readonly Int32Rect _anchor;
     private IntPtr _hwnd;
+    private bool _loaded;
+    private bool _initialized;
+    private bool _placed;
 
     public ToastWindow(string text, Int32Rect physicalAnchor)
     {
@@ -29,13 +32,8 @@ public partial class ToastWindow : Window
         PillText.Text = text;
         Loaded += (_, _) =>
         {
-            Place();
-            _hold.Tick += (_, _) =>
-            {
-                _hold.Stop();
-                FadeOut();
-            };
-            _hold.Start();
+            _loaded = true;
+            TryStart();
         };
     }
 
@@ -44,6 +42,26 @@ public partial class ToastWindow : Window
         base.OnSourceInitialized(e);
         _hwnd = new WindowInteropHelper(this).Handle;
         Opacity = 0;
+        _initialized = true;
+        TryStart();
+    }
+
+    /// <summary>
+    /// SizeToContent 场景下 WPF 可能先触发 Loaded 再触发 SourceInitialized，
+    /// 因此必须等句柄与布局都就绪后再定位，否则窗口会停在默认级联位置且保持透明。
+    /// </summary>
+    private void TryStart()
+    {
+        if (_placed || !_loaded || !_initialized) return;
+        _placed = true;
+
+        Place();
+        _hold.Tick += (_, _) =>
+        {
+            _hold.Stop();
+            FadeOut();
+        };
+        _hold.Start();
     }
 
     private void Place()
