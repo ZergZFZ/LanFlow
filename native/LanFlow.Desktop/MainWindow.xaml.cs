@@ -467,7 +467,7 @@ public partial class MainWindow : System.Windows.Window
         var wasVisible = IsVisible;
         if (wasVisible) Hide(); // 截图前隐藏自身，避免 LanFlow 入镜
 
-        _cropWindow = new ScreenshotCropWindow(shot);
+        _cropWindow = new ScreenshotCropWindow(shot, _viewModel.Settings);
         _cropWindow.Closed += (_, _) =>
         {
             _cropWindow = null;

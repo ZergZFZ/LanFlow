@@ -213,10 +213,26 @@
                                 <TextBlock Text="撤销" Style="{StaticResource ToolCaptionStyle}" />
                             </StackPanel>
                         </Button>
+                        <Border Width="9" Height="30" VerticalAlignment="Center">
+                            <Rectangle Width="1" Fill="#1EFFFFFF" />
+                        </Border>
+                        <Button x:Name="OcrButton" Style="{StaticResource ToolCardButtonStyle}" Tag="9" Click="Tool_Click"
+                                ToolTip="取字（T）：识别选区文字">
+                            <StackPanel>
+                                <Viewbox Width="20" Height="20">
+                                    <Canvas Width="20" Height="20">
+                                        <Path Data="M3.5,3.5 H16.5 M10,3.5 V16.5 M6.6,16.5 H13.4"
+                                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                              StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                                    </Canvas>
+                                </Viewbox>
+                                <TextBlock Text="取字" Style="{StaticResource ToolCaptionStyle}" />
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
 
                     <Border Height="1" Background="#1EFFFFFF" Margin="4,4,4,0" />
-                    <TextBlock x:Name="ToolHint" Text="Enter 复制　P 贴图　Esc 返回　Ctrl+Z 撤销　Ctrl+Y 重做　X 线宽　C 颜色"
+                    <TextBlock x:Name="ToolHint" Text="Enter 复制　P 贴图　T 取字　Esc 返回　Ctrl+Z 撤销　Ctrl+Y 重做　X 线宽　C 颜色"
                                FontSize="10.5" Foreground="#76FFFFFF" Margin="4,3,4,1"
                                TextTrimming="CharacterEllipsis" />
                 </StackPanel>

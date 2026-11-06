@@ -207,6 +207,14 @@ public sealed class Settings
     [JsonPropertyName("lastGroupId")]
     public string? LastGroupId { get; set; }
 
+    // 本地离线取字（OCR）总开关。默认关闭：启动时不加载组件、不检查任何 OCR 资源。
+    [JsonPropertyName("ocrEnabled")]
+    public bool OcrEnabled { get; set; }
+
+    // 取字结果呈现方式：false=直接写剪贴板并提示；true=弹出可编辑结果窗。默认快速模式。
+    [JsonPropertyName("ocrShowResultWindow")]
+    public bool OcrShowResultWindow { get; set; }
+
     public Settings Clone() => new()
     {
         Hotkey = Hotkey,
@@ -242,6 +250,8 @@ public sealed class Settings
         OpenItemsOnSingleClick = OpenItemsOnSingleClick,
         GroupHoverDelayMs = GroupHoverDelayMs,
         LastGroupId = LastGroupId,
+        OcrEnabled = OcrEnabled,
+        OcrShowResultWindow = OcrShowResultWindow,
     };
 }
 

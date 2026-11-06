@@ -17,6 +17,8 @@ public sealed class SettingsCloneTests
             LayeredOpacity = 0.63,
             WholeWindowOpacity = 0.91,
             AnimationMode = SettingsOptionValues.AnimationOff,
+            OcrEnabled = true,
+            OcrShowResultWindow = true,
         };
 
         var clone = source.Clone();
@@ -30,5 +32,16 @@ public sealed class SettingsCloneTests
         Assert.Equal(source.LayeredOpacity, clone.LayeredOpacity);
         Assert.Equal(source.WholeWindowOpacity, clone.WholeWindowOpacity);
         Assert.Equal(source.AnimationMode, clone.AnimationMode);
+        Assert.Equal(source.OcrEnabled, clone.OcrEnabled);
+        Assert.Equal(source.OcrShowResultWindow, clone.OcrShowResultWindow);
+    }
+
+    [Fact]
+    public void DefaultSettings_KeepOcrDisabled()
+    {
+        var settings = new Settings();
+
+        Assert.False(settings.OcrEnabled);
+        Assert.False(settings.OcrShowResultWindow);
     }
 }

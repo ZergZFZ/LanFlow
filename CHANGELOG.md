@@ -4,7 +4,17 @@
 > 版本号与 `native/LanFlow.Desktop/LanFlow.Desktop.csproj` 中的 `Version` / `AssemblyVersion` / `FileVersion` 保持一致。
 > 发布闸门与资产命名规范见 `docs/ARCHITECTURE.md` §6。
 
-## [未发布] - 2026-11-05
+## [1.6.0] - 2026-11-06
+
+### 新增：可选本地离线 OCR（取字）
+
+- 主程序**默认不启用 OCR**：启动阶段不检查组件、不加载 ONNX Runtime、不访问任何 OCR 资源，保持最小启动。
+- 截图标注界面新增「取字」工具（工具栏 T 图标 / 快捷键 `T`）；仅当用户在「设置 → 扩展与 OCR」中手动开启后才可用，未开启时提示开关位置。
+- OCR 组件与主程序解耦为独立 bundle（`LanFlow-{version}-ocr.zip`，约 22 MB）：运行时 + PaddleOCR PP-OCRv5 mobile（det/rec）+ 字典 + VC++ 运行库，安装到 `%APPDATA%\LanFlow\ocr`，full 包也可内置 `ocr/` 目录。
+- 安装前校验 `manifest.json` 与逐文件 SHA-256；解压到临时目录校验通过后原子替换，失败自动回滚；未知或损坏时提示重新下载 / 从文件导入。
+- 支持在设置页一键下载（GitHub Release `*-ocr.zip`）、从本地文件导入、卸载组件。
+- 取字结果两种呈现方式（设置项「取字结果弹窗」）：开启时弹出可编辑结果窗（`Enter` 复制并关闭、`Esc` 关闭），关闭时直接写入剪贴板并在选区旁显示轻量提示条。
+- 识别为纯本地 CPU 推理，不上传图片；中英文混排按行输出，空行折叠。
 
 ### 新增：截图标注与贴图窗
 
@@ -15,7 +25,7 @@
 - 新增贴图窗：无边框置顶、拖动移动、滚轮/右下手柄等比缩放 10%–400%、双击/`Esc` 关闭、右键复制/另存/放大/缩小/原尺寸。
 - 合成改为按标注模型渲染（裁剪图 → 马赛克 → 标注矢量），保证预览与输出一致。
 - `Esc`（标注态）返回框选态并清空本次标注；`Esc`（框选态）取消退出，剪贴板保持原内容。
-- 新增 `THIRD-PARTY-NOTICES.md`，记录交互与视觉参考来源（dsh-screenshot，MIT）。
+- 新增 `THIRD-PARTY-NOTICES.md`，记录交互与视觉参考来源（dsh-screenshot，MIT）与 OCR 组件第三方许可。
 
 ## [1.5.2] - 2026-08-21
 

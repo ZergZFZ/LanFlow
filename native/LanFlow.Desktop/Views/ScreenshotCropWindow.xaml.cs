@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -12,6 +13,7 @@ using System.Windows.Shapes;
 using System.Windows.Threading;
 using LanFlow.Desktop.Models;
 using LanFlow.Desktop.Services;
+using LanFlow.Desktop.Services.Ocr;
 using Microsoft.Win32;
 
 namespace LanFlow.Desktop.Views;
@@ -85,10 +87,14 @@ public partial class ScreenshotCropWindow : Window
     private TextBox? _textEditor;
     private Point _textAnchor;
 
-    public ScreenshotCropWindow(ScreenShotResult shot)
+    private readonly Settings _settings;
+    private bool _ocrBusy;
+
+    public ScreenshotCropWindow(ScreenShotResult shot, Settings settings)
     {
         InitializeComponent();
         _shot = shot;
+        _settings = settings;
         FrozenImage.Source = shot.Image;
         AnnotationHost.Shapes = _shapes;
 
@@ -850,6 +856,10 @@ public partial class ScreenshotCropWindow : Window
         {
             UndoShape();
         }
+        else if (index == 9)
+        {
+            _ = RunOcrAsync();
+        }
         e.Handled = true;
     }
 
@@ -1111,6 +1121,100 @@ public partial class ScreenshotCropWindow : Window
         Close();
     }
 
+    // ---------- 取字 ----------
+
+    private async Task RunOcrAsync()
+    {
+        if (_ocrBusy || _phase != Phase.Annotate || !_hasSelection) return;
+
+        if (!_settings.OcrEnabled)
+        {
+            ShowToast("取字未启用：请在 设置 → 扩展与 OCR 开启");
+            return;
+        }
+
+        var location = OcrBundleLocator.Locate();
+        if (location.Status != OcrBundleStatus.Installed)
+        {
+            var setup = new OcrSetupWindow { Owner = this };
+            if (setup.ShowDialog() != true) return;
+        }
+
+        _ocrBusy = true;
+        OcrButton.IsEnabled = false;
+        var hint = ToolHint.Text;
+        ToolHint.Text = "正在识别选区文字…";
+
+        try
+        {
+            var image = Compose();
+            var result = await OcrEngineHost.Instance.RecognizeAsync(image);
+            var text = OcrTextNormalizer.Normalize(result.FullText);
+
+            if (text.Length == 0)
+            {
+                ShowToast("未识别到文字");
+                return;
+            }
+
+            if (_settings.OcrShowResultWindow)
+            {
+                var window = new OcrResultWindow(text) { Owner = this };
+                window.ShowDialog();
+                if (window.Copied) Close();
+                return;
+            }
+
+            if (!TryCopyText(text))
+            {
+                ShowToast("复制失败，请重试");
+                return;
+            }
+
+            ShowToast($"已复制 {text.Length} 字");
+            Close();
+        }
+        catch (Exception ex)
+        {
+            ShowToast("取字失败：" + ex.Message);
+        }
+        finally
+        {
+            _ocrBusy = false;
+            ToolHint.Text = hint;
+            OcrButton.IsEnabled = true;
+        }
+    }
+
+    private static bool TryCopyText(string text)
+    {
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            try
+            {
+                Clipboard.SetText(text);
+                return true;
+            }
+            catch
+            {
+                System.Threading.Thread.Sleep(40);
+            }
+        }
+
+        return false;
+    }
+
+    private void ShowToast(string message)
+    {
+        var px = ToPixelRect(_editRect);
+        var anchor = new Int32Rect(
+            _shot.VirtualBounds.X + px.X,
+            _shot.VirtualBounds.Y + px.Y,
+            px.Width,
+            px.Height);
+        new ToastWindow(message, anchor).Show();
+    }
+
     // ---------- 键盘 ----------
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -1170,6 +1274,10 @@ public partial class ScreenshotCropWindow : Window
             case Key.P:
                 e.Handled = true;
                 PinAndClose();
+                return;
+            case Key.T:
+                e.Handled = true;
+                _ = RunOcrAsync();
                 return;
             case Key.C:
                 e.Handled = true;

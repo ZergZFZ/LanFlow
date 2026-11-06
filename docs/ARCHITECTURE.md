@@ -105,6 +105,9 @@ GitHub 历史发布从 v1.3.4 起稳定使用以下资产约定；应用内更�
 |---|---|---|---|---|
 | full | `win-x64.pubxml`，`SelfContained=true` | `LanFlow-{version}-full.zip` | 下载后完整解压，在压缩包根目录运行 `LanFlow.exe` | 无需预装 .NET 运行时 |
 | lite | `win-x64-lite.pubxml`，`SelfContained=false` | `LanFlow-{version}-lite.exe` | 单文件直接运行 | .NET 8 Windows Desktop Runtime x64 |
+| ocr | `tools/Build-OcrBundle.ps1` | `LanFlow-{version}-ocr.zip` | 应用内下载或"从文件导入" | 可选本地离线取字组件，默认不安装 |
+
+> OCR 组件（`-ocr.zip`）是按需可选资产，主程序启动阶段不检查、不加载它；用户在「设置 → 扩展与 OCR」手动开启后才下载或导入。full 包会把解压态的 `ocr/` 目录内嵌到 zip 根目录下（`AppContext.BaseDirectory\ocr`），lite 不含 OCR。
 
 历史版本中 lite 曾使用 `-lite.zip`，仅为旧版本更新兼容保留；**新版本禁止继续发布 lite ZIP**。full 曾出现 `-full-win-x64.zip`，**新版本统一使用 `-full.zip`**。
 
@@ -134,6 +137,12 @@ Compress-Archive -Path "$fullDir/*" -DestinationPath "$dist/LanFlow-$version-ful
 # lite：框架依赖的单文件可执行程序
 dotnet publish $project -c Release -p:PublishProfile=win-x64-lite -o "$dist/lite"
 Copy-Item "$dist/lite/LanFlow.exe" "$dist/LanFlow-$version-lite.exe" -Force
+
+# ocr：可选组件包（运行时 + PP-OCRv5 模型 + 字典 + VC++ 运行库 + manifest 哈希）
+# 素材默认取 .build/ocr-assets，产出 artifacts/ocr/LanFlow-$version-ocr.zip 与 .sha256
+powershell -ExecutionPolicy Bypass -File tools/Build-OcrBundle.ps1 -AppVersion $version
+
+# full 内嵌 ocr：publish 后解压 ocr.zip，把得到的 ocr/ 目录复制进 full 根目录，再执行上面的 Compress-Archive
 ```
 
 发布物只上传：
@@ -141,6 +150,7 @@ Copy-Item "$dist/lite/LanFlow.exe" "$dist/LanFlow-$version-lite.exe" -Force
 ```text
 LanFlow-{version}-full.zip
 LanFlow-{version}-lite.exe
+LanFlow-{version}-ocr.zip
 ```
 
 不要上传 `bin/`、`obj/`、未压缩 full 临时目录、PDB 或中间安装脚本。
@@ -156,7 +166,8 @@ LanFlow-{version}-lite.exe
 5. 用全新解压目录启动 full，并验证托盘、热键、添加/启动项目、设置与退出；
 6. 在具备 .NET 8 Windows Desktop Runtime x64 的环境启动 lite，并验证相同核心流程；
 7. 在两条通道中检查更新，确认 full 只匹配 `-full.zip`、lite 优先匹配 `-lite.exe`；
-8. 确认 GitHub Tag、Release 标题、资产文件名和程序集版本完全一致。
+8. 确认 GitHub Tag、Release 标题、资产文件名和程序集版本完全一致；
+9. 确认 `-ocr.zip` 内 `manifest.json` 的路径均为 `runtime/`、`models/`、`vcredist/` 前缀，且 12 个文件的 SHA-256 校验通过（可用 `OcrManifestVerifier` 或解压后逐文件比对）。
 
 ### 6.5 更新兼容规则
 

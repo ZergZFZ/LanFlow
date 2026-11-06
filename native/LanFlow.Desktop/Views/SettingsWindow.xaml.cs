@@ -14,6 +14,7 @@ using Microsoft.Win32;
 using LanFlow.Desktop.Models;
 using LanFlow.Desktop.Presentation;
 using LanFlow.Desktop.Services;
+using LanFlow.Desktop.Services.Ocr;
 
 namespace LanFlow.Desktop.Views;
 
@@ -149,6 +150,9 @@ public partial class SettingsWindow : Window
         HotkeyBox.Text = Working.Hotkey;
         ScreenshotHotkeyBox.Text = Working.ScreenshotHotkey;
         RunAtStartupCheck.IsChecked = Working.StartWithWindows;
+        OcrEnabledCheck.IsChecked = Working.OcrEnabled;
+        OcrResultWindowCheck.IsChecked = Working.OcrShowResultWindow;
+        RefreshOcrStatus();
         LoadColorControls();
         RefreshValueLabels();
         VersionText.Text = "v" + (System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.1.5");
@@ -190,6 +194,7 @@ public partial class SettingsWindow : Window
             TransparencyPanel,
             InteractionPanel,
             StartupPanel,
+            OcrPanel,
             PerformancePanel,
             AboutPanel,
         };
@@ -202,6 +207,7 @@ public partial class SettingsWindow : Window
             "transparency" => TransparencyPanel,
             "interaction" => InteractionPanel,
             "startup" => StartupPanel,
+            "extensions" => OcrPanel,
             "performance" => PerformancePanel,
             "about" => AboutPanel,
             _ => AppearancePanel,
@@ -368,8 +374,85 @@ public partial class SettingsWindow : Window
                 case "showShortcutBadge": settings.ShowShortcutBadge = value; break;
                 case "groupTransitionAnimation": settings.GroupTransitionAnimation = value; break;
                 case "startWithWindows": settings.StartWithWindows = value; break;
+                case "ocrEnabled": settings.OcrEnabled = value; break;
+                case "ocrShowResultWindow": settings.OcrShowResultWindow = value; break;
             }
         });
+    }
+
+    // ---------- 扩展与 OCR ----------
+
+    private void RefreshOcrStatus()
+    {
+        var location = OcrBundleLocator.Locate();
+        OcrStatusText.Text = location.Status switch
+        {
+            OcrBundleStatus.Installed =>
+                $"已安装 v{location.Manifest?.Version}　{location.RootDirectory}",
+            OcrBundleStatus.Corrupted =>
+                "组件已损坏：" + string.Join("；", location.Problems.Take(2)) + "，可点击“下载 / 修复”重新安装。",
+            _ =>
+                "未安装。启用后首次取字会提示下载，也可在此提前安装或从文件导入。",
+        };
+
+        OcrUninstallButton.IsEnabled = location.Status != OcrBundleStatus.NotInstalled;
+    }
+
+    private void OcrInstall_Click(object sender, RoutedEventArgs e)
+    {
+        if (!Working.OcrEnabled)
+        {
+            OcrEnabledCheck.IsChecked = true;
+        }
+
+        var setup = new OcrSetupWindow { Owner = this };
+        setup.ShowDialog();
+        OcrEngineHost.Instance.Reset();
+        RefreshOcrStatus();
+    }
+
+    private async void OcrImport_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "选择 OCR 组件包",
+            Filter = "OCR 组件包 (*.zip)|*.zip",
+        };
+        if (dialog.ShowDialog(this) != true) return;
+
+        try
+        {
+            OcrImportButton.IsEnabled = false;
+            OcrStatusText.Text = "正在校验并安装…";
+            await new OcrBundleService().InstallFromZipAsync(dialog.FileName, CancellationToken.None);
+            OcrEngineHost.Instance.Reset();
+        }
+        catch (Exception ex)
+        {
+            OcrStatusText.Text = "导入失败：" + ex.Message;
+            return;
+        }
+        finally
+        {
+            OcrImportButton.IsEnabled = true;
+        }
+
+        RefreshOcrStatus();
+    }
+
+    private void OcrUninstall_Click(object sender, RoutedEventArgs e)
+    {
+        var result = MessageBox.Show(
+            this,
+            "卸载后将删除用户目录下的 OCR 组件（约 35 MB），下次取字需重新下载或导入。继续？",
+            "LanFlow",
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Question);
+        if (result != MessageBoxResult.OK) return;
+
+        OcrEngineHost.Instance.Reset();
+        new OcrBundleService().Uninstall();
+        RefreshOcrStatus();
     }
 
     private void OpacitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
