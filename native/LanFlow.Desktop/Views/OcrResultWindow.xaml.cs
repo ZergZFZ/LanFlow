@@ -1,7 +1,7 @@
 using System;
-using System.Threading;
 using System.Windows;
 using System.Windows.Input;
+using LanFlow.Desktop.Services;
 
 namespace LanFlow.Desktop.Views;
 
@@ -56,26 +56,13 @@ public partial class OcrResultWindow : Window
 
     private void CopyAndClose()
     {
-        for (var attempt = 0; attempt < 4; attempt++)
-        {
-            try
-            {
-                Clipboard.SetText(ResultBox.Text);
-                Copied = true;
-                break;
-            }
-            catch
-            {
-                Thread.Sleep(40);
-            }
-        }
-
-        if (!Copied)
+        if (!ClipboardText.TrySet(ResultBox.Text))
         {
             MessageBox.Show(this, "写入剪贴板失败，请稍后重试。", "LanFlow", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
+        Copied = true;
         Close();
     }
 }

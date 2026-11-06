@@ -76,6 +76,25 @@ public sealed class MainViewModelImportTests
         Groups = [new Group { Id = id, Name = name }],
     };
 
+    [Fact]
+    public void ApplyAppearance_WithPersist_CopiesOcrSettingsAndSaves()
+    {
+        var config = new AppConfig();
+        var store = new RecordingConfigStore(config);
+        var viewModel = new MainViewModel(store);
+        var source = config.Settings.Clone();
+        source.OcrEnabled = true;
+        source.OcrShowResultWindow = true;
+
+        viewModel.ApplyAppearance(source, persist: true);
+
+        Assert.True(viewModel.Settings.OcrEnabled);
+        Assert.True(viewModel.Settings.OcrShowResultWindow);
+        Assert.Equal(1, store.SaveCallCount);
+        Assert.True(store.LastSavedConfig!.Settings.OcrEnabled);
+        Assert.True(store.LastSavedConfig!.Settings.OcrShowResultWindow);
+    }
+
     private sealed class RecordingConfigStore(AppConfig loadedConfig) : IConfigStore
     {
         public int SaveCallCount { get; private set; }

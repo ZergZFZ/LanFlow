@@ -177,6 +177,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         settings.GroupTransitionAnimation = source.GroupTransitionAnimation;
         settings.Hotkey = source.Hotkey;
         settings.StartWithWindows = source.StartWithWindows;
+        settings.OcrEnabled = source.OcrEnabled;
+        settings.OcrShowResultWindow = source.OcrShowResultWindow;
         settings.OpenItemsOnSingleClick = source.OpenItemsOnSingleClick;
         OnPropertyChanged(nameof(Settings));
         OnPropertyChanged(nameof(VisibleItems));

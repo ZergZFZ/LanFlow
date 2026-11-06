@@ -4,6 +4,14 @@
 > 版本号与 `native/LanFlow.Desktop/LanFlow.Desktop.csproj` 中的 `Version` / `AssemblyVersion` / `FileVersion` 保持一致。
 > 发布闸门与资产命名规范见 `docs/ARCHITECTURE.md` §6。
 
+## [1.6.1] - 2026-11-06
+
+### 修复：取字（OCR）功能
+
+- 修复「设置 → 扩展与 OCR」保存后 OCR 开关与「取字结果弹窗」选项未写入配置的问题（保存链路漏复制 `OcrEnabled` / `OcrShowResultWindow`），导致按 `T` 仍提示未启用。
+- 修复截图取字提示条不可见（`ToastWindow` 在 `Loaded` 早于 `SourceInitialized` 时定位失败并保持透明），现等窗口句柄与布局就绪后再定位、计时。
+- 修复部分环境下剪贴板写入失败（WPF/OLE 通道抛 `CLIPBRD_E_CANT_OPEN`）：文本复制改为优先走 Win32 `CF_UNICODETEXT` 通道，失败重试并回退，结果窗与提示条模式均生效。
+
 ## [1.6.0] - 2026-11-06
 
 ### 新增：可选本地离线 OCR（取字）

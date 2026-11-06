@@ -1186,23 +1186,7 @@ public partial class ScreenshotCropWindow : Window
         }
     }
 
-    private static bool TryCopyText(string text)
-    {
-        for (var attempt = 0; attempt < 4; attempt++)
-        {
-            try
-            {
-                Clipboard.SetText(text);
-                return true;
-            }
-            catch
-            {
-                System.Threading.Thread.Sleep(40);
-            }
-        }
-
-        return false;
-    }
+    private static bool TryCopyText(string text) => ClipboardText.TrySet(text);
 
     private void ShowToast(string message)
     {
