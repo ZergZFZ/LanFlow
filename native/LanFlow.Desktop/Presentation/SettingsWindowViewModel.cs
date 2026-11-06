@@ -170,6 +170,11 @@ public sealed class SettingsWindowViewModel : INotifyPropertyChanged
             "全局热键与登录启动",
             ["hotkey", "startWithWindows"]),
         new(
+            "extensions",
+            "扩展与 OCR",
+            "本地离线取字组件",
+            []),
+        new(
             "performance",
             "性能与缓存",
             "图标缓存与性能说明",

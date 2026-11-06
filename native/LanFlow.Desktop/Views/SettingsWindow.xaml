@@ -335,6 +335,51 @@
                         </Border>
                     </StackPanel>
 
+                    <StackPanel x:Name="OcrPanel" Visibility="Collapsed">
+                        <Border Style="{StaticResource SettingsSectionStyle}">
+                            <StackPanel Margin="0,8">
+                                <TextBlock Text="本地离线取字（OCR）" Style="{StaticResource SettingsSectionHeaderStyle}" />
+                                <Grid Margin="0,12,0,0">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="启用本地离线取字" Style="{StaticResource SettingsFieldTitleStyle}" />
+                                        <TextBlock Text="默认关闭。关闭时主程序不加载 OCR 组件、不检查任何 OCR 资源，启动开销为零。开启后首次取字需下载约 22 MB 组件包，识别全程离线。" Style="{StaticResource SettingsFieldDescriptionStyle}" />
+                                    </StackPanel>
+                                    <CheckBox x:Name="OcrEnabledCheck" Grid.Column="1" Tag="ocrEnabled" Style="{StaticResource SettingsCheckBoxStyle}" Checked="BooleanSettingChanged" Unchecked="BooleanSettingChanged" />
+                                </Grid>
+
+                                <Border Height="1" Background="{DynamicResource SurfaceBorderBrush}" Margin="0,14" />
+
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="组件状态" Style="{StaticResource SettingsFieldTitleStyle}" />
+                                        <TextBlock x:Name="OcrStatusText" Margin="0,6,18,0" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryTextBrush}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Button x:Name="OcrInstallButton" Content="下载 / 修复" Click="OcrInstall_Click" />
+                                        <Button x:Name="OcrImportButton" Content="从文件导入" Click="OcrImport_Click" Margin="10,0,0,0" />
+                                        <Button x:Name="OcrUninstallButton" Content="卸载组件" Click="OcrUninstall_Click" Margin="10,0,0,0" />
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource SettingsSectionStyle}">
+                            <StackPanel Margin="0,8">
+                                <TextBlock Text="取字交互" Style="{StaticResource SettingsSectionHeaderStyle}" />
+                                <Grid Margin="0,12,0,0">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="取字后弹出结果窗" Style="{StaticResource SettingsFieldTitleStyle}" />
+                                        <TextBlock Text="开启：弹出可编辑结果窗，Enter 复制并关闭；关闭：直接写入剪贴板并显示轻量提示条（默认）。" Style="{StaticResource SettingsFieldDescriptionStyle}" />
+                                    </StackPanel>
+                                    <CheckBox x:Name="OcrResultWindowCheck" Grid.Column="1" Tag="ocrShowResultWindow" Style="{StaticResource SettingsCheckBoxStyle}" Checked="BooleanSettingChanged" Unchecked="BooleanSettingChanged" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
                     <StackPanel x:Name="PerformancePanel" Visibility="Collapsed">
                         <Border Style="{StaticResource SettingsSectionStyle}">
                             <StackPanel>

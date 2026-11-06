@@ -1,0 +1,57 @@
+<Window x:Class="LanFlow.Desktop.Views.OcrResultWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="取字结果"
+        Width="600"
+        Height="420"
+        MinWidth="420"
+        MinHeight="260"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="CanResizeWithGrip"
+        PreviewKeyDown="Window_PreviewKeyDown">
+    <Border Background="#F21C1C22" BorderBrush="#28FFFFFF" BorderThickness="1" CornerRadius="12">
+        <Grid Margin="18">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" Margin="0,0,0,12" MouseLeftButtonDown="Header_MouseLeftButtonDown">
+                <TextBlock Text="取字结果"
+                           FontSize="16"
+                           FontWeight="SemiBold"
+                           Foreground="#F5F7FC" />
+                <TextBlock Text="Enter 复制并关闭　Esc 返回标注　Ctrl+Enter 换行"
+                           FontSize="11"
+                           Foreground="#ADB5C7"
+                           HorizontalAlignment="Right"
+                           VerticalAlignment="Center" />
+            </Grid>
+
+            <TextBox x:Name="ResultBox"
+                     Grid.Row="1"
+                     AcceptsReturn="True"
+                     AcceptsTab="False"
+                     TextWrapping="Wrap"
+                     VerticalScrollBarVisibility="Auto"
+                     Background="#14141A"
+                     Foreground="#F5F7FC"
+                     CaretBrush="#F5F7FC"
+                     BorderBrush="#38425B"
+                     BorderThickness="1"
+                     Padding="10"
+                     FontSize="14" />
+
+            <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+                <Button Content="返回标注 (Esc)" Width="120" Height="32" Margin="0,0,10,0" Click="Cancel_Click" />
+                <Button Content="复制并关闭 (Enter)" Width="150" Height="32" Click="Copy_Click" />
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>
