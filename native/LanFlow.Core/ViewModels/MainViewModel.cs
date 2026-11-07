@@ -176,6 +176,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
             : SettingsOptionValues.AnimationSystem;
         settings.GroupTransitionAnimation = source.GroupTransitionAnimation;
         settings.Hotkey = source.Hotkey;
+        settings.ScreenshotHotkey = source.ScreenshotHotkey;
+        settings.GroupHoverDelayMs = Math.Clamp(source.GroupHoverDelayMs, 0, SettingsOptionValues.MaxGroupHoverDelayMs);
         settings.StartWithWindows = source.StartWithWindows;
         settings.OcrEnabled = source.OcrEnabled;
         settings.OcrShowResultWindow = source.OcrShowResultWindow;

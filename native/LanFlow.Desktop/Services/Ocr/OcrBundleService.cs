@@ -24,7 +24,9 @@ public sealed class OcrBundleService
     private static HttpClient CreateClient()
     {
         var client = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
-        client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("LanFlow", "1.6.0"));
+        // UA 随程序集版本走，避免每个版本硬编码（P3-1）。
+        var version = UpdateService.CurrentVersion.ToString(3);
+        client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("LanFlow", version));
         client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
         return client;
     }
@@ -142,10 +144,23 @@ public sealed class OcrBundleService
             var target = OcrBundleLocator.UserDirectory;
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
 
+            // rename-swap：先把旧目录改名腾位，再把新目录移入。引擎加载后
+            // onnxruntime.dll 等原生库已映射进进程，删除会失败，但改名总是成功；
+            // 残留的 .old-* 目录由 SweepStaleBackups 在下次安装/定位时惰性清理。
             var backup = target + $".old-{Guid.NewGuid():N}";
+            var swapped = false;
             if (Directory.Exists(target))
             {
-                Directory.Move(target, backup);
+                try
+                {
+                    Directory.Move(target, backup);
+                    swapped = true;
+                }
+                catch (IOException)
+                {
+                    // 同卷改名都失败（目录被句柄引用等）：退回原位并抛错，不破坏现场。
+                    throw;
+                }
             }
 
             try
@@ -154,18 +169,20 @@ public sealed class OcrBundleService
             }
             catch
             {
-                if (Directory.Exists(backup) && !Directory.Exists(target))
+                if (swapped && Directory.Exists(backup) && !Directory.Exists(target))
                 {
                     Directory.Move(backup, target);
                 }
                 throw;
             }
 
-            if (Directory.Exists(backup))
+            if (swapped)
             {
                 TryDeleteDirectory(backup);
             }
 
+            SweepStaleBackups(target);
+            OcrBundleLocator.Invalidate();
             return target;
         }
         finally
@@ -184,6 +201,31 @@ public sealed class OcrBundleService
             try { File.SetAttributes(file, FileAttributes.Normal); } catch { /* ignore */ }
         }
         TryDeleteDirectory(target);
+        SweepStaleBackups(target);
+        OcrBundleLocator.Invalidate();
+    }
+
+    /// <summary>
+    /// 惰性清理历史重装残留的 <c>ocr.old-*</c> 目录（引擎 DLL 被锁定时删除失败的遗留）。
+    /// 仅在用户主动安装/卸载时调用，不违反「启动不触碰 OCR 资源」原则。
+    /// </summary>
+    internal static void SweepStaleBackups(string target)
+    {
+        var parent = Path.GetDirectoryName(target);
+        if (string.IsNullOrEmpty(parent) || !Directory.Exists(parent)) return;
+
+        var prefix = Path.GetFileName(target) + ".old-";
+        try
+        {
+            foreach (var directory in Directory.EnumerateDirectories(parent, prefix + "*"))
+            {
+                TryDeleteDirectory(directory);
+            }
+        }
+        catch
+        {
+            // 清理失败不影响安装/卸载结果，残留留给下一次机会。
+        }
     }
 
     /// <summary>

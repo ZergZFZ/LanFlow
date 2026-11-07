@@ -23,6 +23,12 @@ public sealed class OcrEngineHost
     private const uint LoadLibrarySearchDefaultDirs = 0x00001000;
     private const uint LoadLibrarySearchUserDirs = 0x00000400;
 
+    /// <summary>单次取字的总超时（含首次引擎加载与推理）。</summary>
+    public static readonly TimeSpan RecognizeTimeout = TimeSpan.FromSeconds(45);
+
+    /// <summary>引擎加载阶段的阶段回调：isInitializing=true 表示正在加载模型（首次 1–3s）。</summary>
+    public event Action<bool>? PhaseChanged;
+
     public static OcrEngineHost Instance { get; } = new();
 
     private readonly object _gate = new();
@@ -39,19 +45,41 @@ public sealed class OcrEngineHost
     }
 
     /// <summary>
-    /// 识别。BitmapSource 的像素拷贝在调用线程（UI）完成，推理在后台线程执行。
+    /// 识别。像素格式转换/拷贝与推理均在线程池执行，调用线程（UI）只负责传参，
+    /// 避免全屏大选区（4K ≈ 33 MB）的拷贝与转换阻塞截图窗口。
+    /// 输入须为冻结的 BitmapSource（跨线程安全），由调用方保证。
+    /// 总超时护栏：引擎加载死锁或模型损坏时不能让"正在识别"永远挂起（P2-1）。
     /// </summary>
-    public Task<OcrResult> RecognizeAsync(BitmapSource image)
+    public async Task<OcrResult> RecognizeAsync(BitmapSource image)
     {
         var width = image.PixelWidth;
         var height = image.PixelHeight;
-        var stride = width * 4;
-        var pixels = new byte[stride * height];
 
-        var converted = new FormatConvertedBitmap(image, PixelFormats.Bgra32, null, 0);
-        converted.CopyPixels(pixels, stride, 0);
+        var work = Task.Run(() =>
+        {
+            var stride = width * 4;
+            var pixels = new byte[stride * height];
 
-        return Task.Run(() => EnsureEngine().Recognize(pixels, width, height, stride));
+            // FormatConvertedBitmap 为 Freezable，可在后台线程创建；不冻结即可在本线程使用。
+            var converted = new FormatConvertedBitmap(image, PixelFormats.Bgra32, null, 0);
+            converted.CopyPixels(pixels, stride, 0);
+
+            var engine = EnsureEngine();
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var result = engine.Recognize(pixels, width, height, stride);
+            stopwatch.Stop();
+            App.WriteDiagnosticLog(
+                $"ocr:infer;ms={stopwatch.ElapsedMilliseconds};width={width};height={height};lines={result.Lines.Count}");
+            return result;
+        });
+
+        var completed = await Task.WhenAny(work, Task.Delay(RecognizeTimeout)).ConfigureAwait(true);
+        if (completed != work)
+        {
+            throw new OcrUnavailableException("取字超时：识别组件长时间无响应，请重试或重新安装 OCR 组件");
+        }
+
+        return await work.ConfigureAwait(true);
     }
 
     private IOcrEngine EnsureEngine()
@@ -71,24 +99,36 @@ public sealed class OcrEngineHost
             var runtimeDirectory = Path.Combine(location.RootDirectory, "runtime");
             var modelsDirectory = Path.Combine(location.RootDirectory, "models");
 
-            PreloadNative(runtimeDirectory, Path.Combine(location.RootDirectory, "vcredist"));
+            PhaseChanged?.Invoke(true);
+            var loadStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                PreloadNative(runtimeDirectory, Path.Combine(location.RootDirectory, "vcredist"));
 
-            var context = new OcrLoadContext(runtimeDirectory);
-            var pluginPath = Path.Combine(runtimeDirectory, "LanFlow.Ocr.dll");
-            if (!File.Exists(pluginPath)) throw new OcrUnavailableException("OCR 组件缺少 LanFlow.Ocr.dll");
+                var context = new OcrLoadContext(runtimeDirectory);
+                var pluginPath = Path.Combine(runtimeDirectory, "LanFlow.Ocr.dll");
+                if (!File.Exists(pluginPath)) throw new OcrUnavailableException("OCR 组件缺少 LanFlow.Ocr.dll");
 
-            var assembly = context.LoadFromAssemblyPath(pluginPath);
-            var type = assembly.GetType("LanFlow.Ocr.PaddleOcrEngine")
-                       ?? throw new OcrUnavailableException("OCR 组件类型缺失");
-            var instance = Activator.CreateInstance(type) as IOcrEngine
-                           ?? throw new OcrUnavailableException("OCR 组件无法实例化");
+                var assembly = context.LoadFromAssemblyPath(pluginPath);
+                var type = assembly.GetType("LanFlow.Ocr.PaddleOcrEngine")
+                           ?? throw new OcrUnavailableException("OCR 组件类型缺失");
+                var instance = Activator.CreateInstance(type) as IOcrEngine
+                               ?? throw new OcrUnavailableException("OCR 组件无法实例化");
 
-            instance.Initialize(modelsDirectory);
+                instance.Initialize(modelsDirectory);
 
-            _context = context;
-            _engine = instance;
-            _loadedRoot = location.RootDirectory;
-            return _engine;
+                _context = context;
+                _engine = instance;
+                _loadedRoot = location.RootDirectory;
+                return _engine;
+            }
+            finally
+            {
+                loadStopwatch.Stop();
+                App.WriteDiagnosticLog(
+                    $"ocr:engine-load;ms={loadStopwatch.ElapsedMilliseconds};root={location.RootDirectory}");
+                PhaseChanged?.Invoke(false);
+            }
         }
     }
 
@@ -123,7 +163,7 @@ public sealed class OcrEngineHost
     }
 
     /// <summary>
-    /// 卸载组件或重新安装后调用，丢弃旧引擎实例。
+    /// 卸载组件或重新安装后调用，丢弃旧引擎实例与 bundle 校验缓存。
     /// </summary>
     public void Reset()
     {
@@ -134,6 +174,8 @@ public sealed class OcrEngineHost
             _context = null;
             _loadedRoot = null;
         }
+
+        OcrBundleLocator.Invalidate();
     }
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]

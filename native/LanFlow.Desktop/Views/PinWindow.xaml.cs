@@ -6,6 +6,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using LanFlow.Desktop.Services;
 using Microsoft.Win32;
 
 namespace LanFlow.Desktop.Views;
@@ -213,20 +214,7 @@ public partial class PinWindow : Window
     private void Copy_Click(object sender, RoutedEventArgs e)
     {
         if (_image is null) return;
-        for (var attempt = 0; attempt < 4; attempt++)
-        {
-            try
-            {
-                Clipboard.SetImage(_image);
-                ShowPill("已复制");
-                return;
-            }
-            catch
-            {
-                System.Threading.Thread.Sleep(40);
-            }
-        }
-        ShowPill("复制失败");
+        ShowPill(ClipboardImage.TrySet(_image) ? "已复制" : "复制失败");
     }
 
     private void SaveAs_Click(object sender, RoutedEventArgs e)

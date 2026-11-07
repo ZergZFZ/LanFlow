@@ -154,6 +154,10 @@ public partial class MainWindow : System.Windows.Window
             {
                 ShowConfigLoadWarningOnce();
                 _ = LoadVisibleIconsAsync();
+                // 开机自启（--silent）时窗口先 EnsureHandle() 再隐藏，首项实现补偿会在
+                // 视口无效的隐藏期提前完成；呼出窗口时若生成器仍卡死，这里重新武装
+                // 补偿做一次自愈（见 ScheduleInitialItemRealizationAttempt）。
+                EnsureContentRealizedAfterShow();
             }
             else
             {
@@ -1239,6 +1243,14 @@ public partial class MainWindow : System.Windows.Window
                 return;
             }
 
+            // 窗口不可见（静默自启的隐藏句柄阶段）时视口尺寸无效，此时测量/生成
+            // 补偿不会生效，反而会白消耗尝试次数并提前标记完成。隐藏期间直接停表，
+            // IsVisibleChanged(true) 会重新武装补偿（自愈入口）。
+            if (!IsVisible)
+            {
+                return;
+            }
+
             _initialItemRealizationAttempt++;
             if (_viewModel.SelectedGroup is { } group && !ReferenceEquals(GroupNavigation.SelectedItem, group))
             {
@@ -1267,6 +1279,31 @@ public partial class MainWindow : System.Windows.Window
 
             ScheduleInitialItemRealizationAttempt();
         });
+    }
+
+    /// <summary>
+    /// 内容空白自愈：窗口可见但首项仍未实现时重新武装补偿。正常启动时已完成，
+    /// 调用是幂等空操作；仅静默自启后呼出且生成器卡死的场景会真正重跑。
+    /// </summary>
+    private void EnsureContentRealizedAfterShow()
+    {
+        if (_isClosed || !ItemList.IsLoaded || !IsVisible)
+        {
+            return;
+        }
+
+        AttachVirtualizingPanel();
+        var itemCount = ItemList.Items.Count;
+        var realizedCount = _wrapPanel?.RealizedIndices.Count ?? 0;
+        if (itemCount == 0 || realizedCount > 0)
+        {
+            return;
+        }
+
+        App.WriteDiagnosticLog("startup:content-recovery;trigger=visible-changed");
+        _initialItemRealizationCompleted = false;
+        _initialItemRealizationAttempt = 0;
+        ScheduleInitialItemRealizationAttempt();
     }
 
     private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject

@@ -18,9 +18,17 @@ public sealed record OcrBundleLocation(
 
 /// <summary>
 /// 定位 OCR bundle：优先用户目录（下载/导入），其次应用目录（full 包内置）。
+/// Locate 内部对整个 bundle 逐文件 SHA-256（约 22MB），按 T 取字路径上曾重复执行
+/// 两次；这里按「目录 + 写入时间戳」缓存结果，安装/导入/卸载/引擎重置时失效。
+/// 只在取字路径调用，不违反 1.6.0「启动阶段不触碰 OCR 资源」原则。
 /// </summary>
 public static class OcrBundleLocator
 {
+    private static readonly object Gate = new();
+    private static string? _cachedDirectory;
+    private static DateTimeOffset _cachedStamp;
+    private static OcrBundleLocation? _cached;
+
     public static string UserDirectory => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "LanFlow", "ocr");
 
@@ -31,20 +39,61 @@ public static class OcrBundleLocator
     /// </summary>
     public static OcrBundleLocation Locate()
     {
-        foreach (var directory in new[] { UserDirectory, BundledDirectory })
+        lock (Gate)
         {
-            var manifestPath = Path.Combine(directory, "manifest.json");
-            if (!File.Exists(manifestPath)) continue;
+            foreach (var directory in new[] { UserDirectory, BundledDirectory })
+            {
+                var manifestPath = Path.Combine(directory, "manifest.json");
+                if (!File.Exists(manifestPath)) continue;
 
-            var manifest = OcrManifest.Load(manifestPath);
-            var problems = OcrManifestVerifier.Verify(directory, manifest);
-            return new OcrBundleLocation(
-                problems.Count == 0 ? OcrBundleStatus.Installed : OcrBundleStatus.Corrupted,
-                directory,
-                manifest,
-                problems);
+                // 缓存键：目录 + manifest 修改时间。安装/卸载都会触碰 manifest，
+                // 时间戳变化即视为失效；同时间戳则直接复用上次校验结论。
+                var stamp = TryGetStamp(manifestPath);
+                if (_cached is not null &&
+                    string.Equals(_cachedDirectory, directory, StringComparison.OrdinalIgnoreCase) &&
+                    _cachedStamp == stamp)
+                {
+                    return _cached;
+                }
+
+                var manifest = OcrManifest.Load(manifestPath);
+                var problems = OcrManifestVerifier.Verify(directory, manifest);
+                var location = new OcrBundleLocation(
+                    problems.Count == 0 ? OcrBundleStatus.Installed : OcrBundleStatus.Corrupted,
+                    directory,
+                    manifest,
+                    problems);
+
+                _cachedDirectory = directory;
+                _cachedStamp = stamp;
+                _cached = location;
+                return location;
+            }
+
+            return new OcrBundleLocation(OcrBundleStatus.NotInstalled, UserDirectory, null, []);
         }
+    }
 
-        return new OcrBundleLocation(OcrBundleStatus.NotInstalled, UserDirectory, null, []);
+    /// <summary>安装/导入/卸载/引擎重置后调用：丢弃缓存结论，下次 Locate 重新校验。</summary>
+    public static void Invalidate()
+    {
+        lock (Gate)
+        {
+            _cached = null;
+            _cachedDirectory = null;
+            _cachedStamp = default;
+        }
+    }
+
+    private static DateTimeOffset TryGetStamp(string path)
+    {
+        try
+        {
+            return File.GetLastWriteTimeUtc(path);
+        }
+        catch
+        {
+            return DateTimeOffset.MinValue;
+        }
     }
 }

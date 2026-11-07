@@ -284,18 +284,35 @@ public sealed class PaddleOcrEngine : IOcrEngine
 
     /// <summary>
     /// 阅读顺序：先按行（垂直中心接近视为同一行），行内从左到右。
+    /// 原地归组（已用标记），避免 Except 每轮重建列表的 O(n²) 分配。
     /// </summary>
     private static List<Box> OrderBoxes(List<Box> boxes)
     {
         var ordered = new List<Box>(boxes.Count);
         var remaining = boxes.OrderBy(b => b.Top).ToList();
+        var used = new bool[remaining.Count];
 
-        while (remaining.Count > 0)
+        for (var seed = 0; seed < remaining.Count; seed++)
         {
-            var first = remaining[0];
-            var row = remaining.Where(b => Math.Abs(b.CenterY - first.CenterY) <= Math.Min(b.Height, first.Height) * 0.6f).ToList();
-            ordered.AddRange(row.OrderBy(b => b.Left));
-            remaining = remaining.Except(row).ToList();
+            if (used[seed]) continue;
+            used[seed] = true;
+            var first = remaining[seed];
+
+            // 收集与种子同一行的所有框（含间接邻近），行内按 Left 排序后输出。
+            var row = new List<Box> { first };
+            for (var i = seed + 1; i < remaining.Count; i++)
+            {
+                if (used[i]) continue;
+                var candidate = remaining[i];
+                if (row.Any(b => Math.Abs(b.CenterY - candidate.CenterY) <= Math.Min(b.Height, candidate.Height) * 0.6f))
+                {
+                    used[i] = true;
+                    row.Add(candidate);
+                }
+            }
+
+            row.Sort((a, b) => a.Left.CompareTo(b.Left));
+            ordered.AddRange(row);
         }
 
         return ordered;
@@ -327,7 +344,9 @@ public sealed class PaddleOcrEngine : IOcrEngine
 
         var steps = dims[1];
         var classes = dims[2];
-        var data = output.ToArray();
+
+        // 直接按索引读取 Tensor（P3-7）：ToArray 会全量拷贝 [1, steps, classes]。
+        float Sample(int step, int cls) => output[0, step, cls];
 
         var builder = new StringBuilder();
         var kept = new List<int>();
@@ -335,12 +354,11 @@ public sealed class PaddleOcrEngine : IOcrEngine
 
         for (var t = 0; t < steps; t++)
         {
-            var offset = t * classes;
             var best = 0;
-            var bestValue = data[offset];
+            var bestValue = Sample(t, 0);
             for (var c = 1; c < classes; c++)
             {
-                var v = data[offset + c];
+                var v = Sample(t, c);
                 if (v > bestValue)
                 {
                     bestValue = v;
@@ -365,11 +383,11 @@ public sealed class PaddleOcrEngine : IOcrEngine
             var total = 0.0;
             foreach (var t in kept)
             {
-                var offset = t * classes;
-                var max = data[offset];
+                var max = Sample(t, 0);
                 for (var c = 1; c < classes; c++)
                 {
-                    if (data[offset + c] > max) max = data[offset + c];
+                    var v = Sample(t, c);
+                    if (v > max) max = v;
                 }
                 total += max;
             }
