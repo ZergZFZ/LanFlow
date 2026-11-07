@@ -125,7 +125,10 @@ public partial class OcrSetupWindow : Window
     {
         Progress.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
         if (!busy) Progress.Value = 0;
-        IsEnabled = !busy;
+        // 忙碌时只禁用动作按钮，保留"取消"可用（_cts 链路已支持取消下载，P3-6）。
+        DownloadButton.IsEnabled = !busy;
+        ImportButton.IsEnabled = !busy;
+        CancelButton.IsEnabled = true;
     }
 
     private void Cancel_Click(object sender, RoutedEventArgs e)

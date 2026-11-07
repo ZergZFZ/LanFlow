@@ -30,11 +30,20 @@ public partial class ToastWindow : Window
         InitializeComponent();
         _anchor = physicalAnchor;
         PillText.Text = text;
+        _hold.Interval = ComputeHoldDuration(text);
         Loaded += (_, _) =>
         {
             _loaded = true;
             TryStart();
         };
+    }
+
+    /// <summary>按文本长度自适应停留时长（P2-5）：长提示（如开关位置指引）需要更长的阅读时间。
+    /// internal 供测试断言策略边界。</summary>
+    internal static TimeSpan ComputeHoldDuration(string text)
+    {
+        var extra = Math.Min(1600, Math.Max(0, text.Length - 12) * 60);
+        return TimeSpan.FromMilliseconds(1400 + extra);
     }
 
     protected override void OnSourceInitialized(EventArgs e)

@@ -385,9 +385,10 @@ public partial class App : Application
         }
 
         // 罕见：根 Visual 已被误挂载，重建窗口重试一次。
+        // 必须沿用启动时解析的配置目录——无参构造会回退默认目录，导致用户配置"丢失"。
         try
         {
-            var fresh = new MainWindow();
+            var fresh = new MainWindow(_startupConfigLocation ?? new ConfigLocationService().Resolve());
             MainWindow = fresh;
             fresh.Show();
             WriteDiagnosticLog("startup:window-shown-retry");
