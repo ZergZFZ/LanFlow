@@ -17,7 +17,9 @@ public partial class OcrResultWindow : Window
         Loaded += (_, _) =>
         {
             ResultBox.Focus();
-            ResultBox.CaretIndex = ResultBox.Text.Length;
+            // 光标定位到开头：用户第一眼应看到正文起始；此前跳到文末，长文本时首屏是空的。
+            ResultBox.CaretIndex = 0;
+            ResultBox.ScrollToHome();
         };
     }
 

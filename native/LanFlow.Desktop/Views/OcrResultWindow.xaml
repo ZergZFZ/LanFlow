@@ -34,19 +34,24 @@
                            VerticalAlignment="Center" />
             </Grid>
 
+            <!-- Style="{x:Null}"：屏蔽 Components.xaml 的隐式单行 TextBox 样式（Height=38 + 单行模板），
+                 否则本多行结果框被压成 38px 单行条，文字裁剪不可见。走默认模板以支持多行与滚动。 -->
             <TextBox x:Name="ResultBox"
                      Grid.Row="1"
+                     Style="{x:Null}"
                      AcceptsReturn="True"
                      AcceptsTab="False"
                      TextWrapping="Wrap"
                      VerticalScrollBarVisibility="Auto"
+                     HorizontalScrollBarVisibility="Disabled"
                      Background="#14141A"
                      Foreground="#F5F7FC"
                      CaretBrush="#F5F7FC"
                      BorderBrush="#38425B"
                      BorderThickness="1"
                      Padding="10"
-                     FontSize="14" />
+                     FontSize="14"
+                     VerticalContentAlignment="Top" />
 
             <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
                 <Button Content="返回标注 (Esc)" Width="120" Height="32" Margin="0,0,10,0" Click="Cancel_Click" />
