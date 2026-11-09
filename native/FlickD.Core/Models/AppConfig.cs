@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Text.Json.Serialization;
+using FlickD.Core.Models;
 
 namespace FlickD.Desktop.Models;
 
@@ -215,44 +216,9 @@ public sealed class Settings
     [JsonPropertyName("ocrShowResultWindow")]
     public bool OcrShowResultWindow { get; set; }
 
-    public Settings Clone() => new()
-    {
-        Hotkey = Hotkey,
-        ScreenshotHotkey = ScreenshotHotkey,
-        Theme = Theme,
-        ThemeProfile = ThemeProfile,
-        ThemeColors = ThemeColors.Clone(),
-        CustomThemes = CustomThemes.Select(c => new ThemeProfile { Name = c.Name, Colors = c.Colors.Clone() }).ToList(),
-        Opacity = Opacity,
-        LayoutMode = LayoutMode,
-        IconSize = IconSize,
-        CardWidth = CardWidth,
-        CardHeight = CardHeight,
-        CardSize = CardSize,
-        TextSize = TextSize,
-        ItemSpacing = ItemSpacing,
-        RowSpacing = RowSpacing,
-        ContentPadding = ContentPadding,
-        ShowShortcutBadge = ShowShortcutBadge,
-        ShowFullItemName = ShowFullItemName,
-        ShowItemTitle = ShowItemTitle,
-        GroupLayout = GroupLayout,
-        GroupSwitchMode = GroupSwitchMode,
-        GroupLabelSize = GroupLabelSize,
-        GroupLabelFontSize = GroupLabelFontSize,
-        GroupNavigationWidth = GroupNavigationWidth,
-        TransparencyMode = TransparencyMode,
-        LayeredOpacity = LayeredOpacity,
-        WholeWindowOpacity = WholeWindowOpacity,
-        AnimationMode = AnimationMode,
-        GroupTransitionAnimation = GroupTransitionAnimation,
-        StartWithWindows = StartWithWindows,
-        OpenItemsOnSingleClick = OpenItemsOnSingleClick,
-        GroupHoverDelayMs = GroupHoverDelayMs,
-        LastGroupId = LastGroupId,
-        OcrEnabled = OcrEnabled,
-        OcrShowResultWindow = OcrShowResultWindow,
-    };
+    // 字段清单不再手工维护：SettingsPipeline 反射复制全部可写属性，
+    // 新增设置字段自动纳入，避免设置预览/保存链路漏复制。
+    public Settings Clone() => SettingsPipeline.Clone(this);
 }
 
 public sealed class ThemeProfile

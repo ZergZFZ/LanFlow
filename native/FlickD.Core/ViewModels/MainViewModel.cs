@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using FlickD.Core.Collections;
+using FlickD.Core.Models;
 using FlickD.Desktop.Models;
 using FlickD.Desktop.Services;
 
@@ -135,53 +136,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public void ApplyAppearance(Settings source, bool persist)
     {
+        // 复制与归一化分离：CopyAll 覆盖所有可写字段（新增字段自动纳入），
+        // Normalize 只负责夹紧、枚举合法性与派生值，二者都不再依赖人工字段清单。
         var settings = Config.Settings;
-        settings.Theme = source.Theme == "light" ? "light" : "dark";
-        settings.ThemeProfile = source.ThemeProfile;
-        settings.ThemeColors = source.ThemeColors;
-        settings.CustomThemes = source.CustomThemes;
-        settings.LayoutMode = source.LayoutMode == SettingsOptionValues.CardLayout
-            ? SettingsOptionValues.CardLayout
-            : SettingsOptionValues.GridLayout;
-        settings.IconSize = Math.Clamp(source.IconSize, 24, 72);
-        settings.CardWidth = Math.Clamp(source.CardWidth, 48, 320);
-        settings.CardHeight = Math.Clamp(source.CardHeight, 48, 240);
-        settings.CardSize = Math.Clamp(source.CardSize, 76, 160);
-        settings.TextSize = Math.Clamp(source.TextSize, 10, 18);
-        settings.ItemSpacing = Math.Clamp(source.ItemSpacing, 0, 64);
-        settings.RowSpacing = Math.Clamp(source.RowSpacing, 0, 80);
-        settings.ContentPadding = Math.Clamp(source.ContentPadding, 6, 40);
-        settings.ShowShortcutBadge = source.ShowShortcutBadge;
-        settings.ShowFullItemName = source.ShowFullItemName;
-        settings.ShowItemTitle = source.ShowItemTitle;
-        settings.GroupLayout = source.GroupLayout == SettingsOptionValues.GroupTop
-            ? SettingsOptionValues.GroupTop
-            : SettingsOptionValues.GroupLeft;
-        settings.GroupSwitchMode = source.GroupSwitchMode == SettingsOptionValues.GroupSwitchHover
-            ? SettingsOptionValues.GroupSwitchHover
-            : SettingsOptionValues.GroupSwitchClick;
-        settings.GroupLabelSize = Math.Clamp(source.GroupLabelSize, 28, 52);
-        settings.GroupLabelFontSize = Math.Clamp(source.GroupLabelFontSize, 11, 18);
-        settings.GroupNavigationWidth = Math.Clamp(source.GroupNavigationWidth, 96, 280);
-        settings.TransparencyMode = source.TransparencyMode == SettingsOptionValues.TransparencyWholeWindow
-            ? SettingsOptionValues.TransparencyWholeWindow
-            : SettingsOptionValues.TransparencyLayered;
-        settings.LayeredOpacity = Math.Clamp(source.LayeredOpacity, 0.40, 1.00);
-        settings.WholeWindowOpacity = Math.Clamp(source.WholeWindowOpacity, 0.40, 1.00);
-        settings.Opacity = settings.TransparencyMode == SettingsOptionValues.TransparencyWholeWindow
-            ? settings.WholeWindowOpacity
-            : settings.LayeredOpacity;
-        settings.AnimationMode = source.AnimationMode is SettingsOptionValues.AnimationOn or SettingsOptionValues.AnimationOff
-            ? source.AnimationMode
-            : SettingsOptionValues.AnimationSystem;
-        settings.GroupTransitionAnimation = source.GroupTransitionAnimation;
-        settings.Hotkey = source.Hotkey;
-        settings.ScreenshotHotkey = source.ScreenshotHotkey;
-        settings.GroupHoverDelayMs = Math.Clamp(source.GroupHoverDelayMs, 0, SettingsOptionValues.MaxGroupHoverDelayMs);
-        settings.StartWithWindows = source.StartWithWindows;
-        settings.OcrEnabled = source.OcrEnabled;
-        settings.OcrShowResultWindow = source.OcrShowResultWindow;
-        settings.OpenItemsOnSingleClick = source.OpenItemsOnSingleClick;
+        SettingsPipeline.CopyAll(source, settings, skipRuntimeOnly: true);
+        SettingsPipeline.Normalize(settings);
         OnPropertyChanged(nameof(Settings));
         OnPropertyChanged(nameof(VisibleItems));
         OnPropertyChanged(nameof(InfoText));
