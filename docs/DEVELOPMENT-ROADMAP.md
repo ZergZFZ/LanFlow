@@ -1,10 +1,11 @@
 # FlickD 后续开发路线图
 
-- 基线版本：v1.3.7
+- 基线版本：v2.0.0（更名后的当前 Windows 客户端）
 - 原则：先保护用户数据和已有桌面流程，再扩大功能范围
-- 状态：活跃 ｜ 最近更新：2026-08-13
+- 状态：活跃 ｜ 最近更新：2026-11-09
 
-> 注：v1.4.9 发布后的工程清理中移除了自动化测试工程（`FlickD.Core.Tests` / `FlickD.Desktop.Tests`），后续验证以手工回归与配置样本回归为准（见 [ARCHITECTURE.md](ARCHITECTURE.md) §7）。R1–R4 中提及测试的条目按当时历史保留。
+> 注：v1.4.9 发布后的工程清理中曾移除自动化测试工程，但后续已恢复并扩充；当前 `native/FlickD.Core.Tests` 与 `native/FlickD.Desktop.Tests` 两个 xunit 工程由 CI 的 `build-test` job 强制执行，是推 `main` 前的硬闸门（用例数以 CI 实际输出为准，不在文档写死）。R1–R4 中提及测试的条目按当时历史保留。
+> 当前实测性能基线见 [docs/performance/R4-baseline.md](performance/R4-baseline.md)；UI 性能终验仍为 BLOCKED，不得宣告 R4 / Phase 4 完成。
 
 ## 1. 排期原则
 
@@ -92,7 +93,7 @@ FlickD 不以“复刻竞品功能数量”为目标。每个阶段只解决一�
 
 ## 4. R3 / P2：工作区体验与配置演进
 
-详细实施方案见 `docs/P2-Workspace-Experience-Development-Plan.md`。
+详细实施方案见 `docs/archive/plans/P2-Workspace-Experience-Development-Plan.md`。
 
 ### 用户问题
 

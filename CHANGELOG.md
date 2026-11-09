@@ -4,6 +4,25 @@
 > 版本号与 `native/FlickD.Desktop/FlickD.Desktop.csproj` 中的 `Version` / `AssemblyVersion` / `FileVersion` 保持一致。
 > 发布闸门与资产命名规范见 `docs/ARCHITECTURE.md` §6。
 
+## [Unreleased]
+
+### 工程：发布闸门与规范一致性
+
+- 修复 `scripts/guard-main-release.sh`：PR 越界检查改为按**新增文件**判定（main 上已跟踪的历史归档与 PRD 允许随发布整理修改），正则补上 `docs/archive/**`、`Launcher-PRD.md`、`.workbuddy-ai/` 及子目录下的 `bin/` `obj/` `TestResults/`；待校验 csproj 缺失时不再静默跳过；流程文案由已归档的 `dev/*` 改为 `origin/windows` / `origin/linux`。
+- `.github/workflows/main-branch-guard.yml` 新增 `build-test` job（`windows-latest`）：Release 构建 + 两个 xunit 测试工程，触发范围扩到 `windows` 分支；`guard` job 仅在 main 事件运行。`.githooks/pre-push` 提示同步更正。
+- 规范与文档基线统一：`AGENTS.md` 去掉写死的版本自检与失效工程路径，补齐测试命令与 CI 闸门；`CONTRIBUTING.md` 按 AGENTS.md 重写分支流程；`ARCHITECTURE.md`、`DEVELOPMENT-ROADMAP.md`、`docs/README.md`、`Launcher-PRD.md` 头部同步到 2.0.0 并修正失效链接。
+- `tools/Build-OcrBundle.ps1` 的 `AppVersion` 默认从 `FlickD.Desktop.csproj` 读取（不再硬编码 1.6.0），`bundleId` 改为可参数化且保持历史值以兼容已发布组件；`MinAppVersion=1.6.0` 为 `IOcrEngine` 契约下限，保持不变。
+- 静态复核 2.0.0 三条发布资产：full / lite / ocr 的 SHA-256 与 sidecar 一致，full 根目录含兼容壳与内嵌 `ocr/`，OCR manifest 12 个文件的哈希、大小与 `contentHash` 全部通过；结论记入 `docs/performance/R4-baseline.md` §8。
+
+### 重构：设置保存链路不再依赖人工字段清单
+
+- 新增 `native/FlickD.Core/Models/SettingsPipeline.cs`，以反射统一负责 `Settings` 的复制、深拷贝与归一化；`Settings.Clone()` 与 `MainViewModel.ApplyAppearance()` 改为调用它，新增设置字段自动纳入保存链路，不再出现 1.6.1 / 1.6.2 那类「漏复制字段导致设置不落盘」。
+- 完备性测试改为反射遍历 + 按类型生成探针值，新增字段无需再登记异值字典；补充 Clone 全字段、引用深拷贝与运行态 `LastGroupId` 保护用例。
+
+### 改进：更名后的旧快捷方式提示
+
+- 启动时只读扫描任务栏与开始菜单中仍指向 `LanFlow.exe` 的快捷方式，命中后提示一次（`%APPDATA%\FlickD\legacy-shortcut-notice.flag` 去重），引导用户重新固定 `FlickD.exe`；扫描失败不影响启动。
+
 ## [2.0.0] - 2026-11-09
 
 ### 更名：LanFlow → FlickD

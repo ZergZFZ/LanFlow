@@ -1,16 +1,16 @@
-# LanFlow 产品基线与发展需求
+# FlickD 产品基线与发展需求（历史基线）
 
-- 文档状态：当前产品基线
-- 基线版本：v1.3.7（Git tag `v1.3.7`）
-- 目标客户端：`native/LanFlow.Desktop`（WPF + .NET 8）
+- 文档状态：**历史产品基线，仅供需求准入参考**；当前功能与版本以 `README.md`、`CHANGELOG.md`、`docs/ARCHITECTURE.md` 为准
+- 基线版本：v1.3.7（Git tag `v1.3.7`）｜当前客户端版本见 `CHANGELOG.md` 最新条目
+- 目标客户端：`native/FlickD.Desktop`（WPF + .NET 8；原名 `native/LanFlow.Desktop`）
 - 目标平台：Windows 10/11 x64
-- 更新日期：2026-07-29
+- 更新日期：2026-11-09（同步更名与归档说明；正文仍保留 v1.3.7 时的能力边界）
 
-> 本文取代早期“类 Rolan + 类 Flow Launcher”的竞品拼接式需求。LanFlow 的后续工作以已发布的原生客户端、现有配置兼容性和可验证的用户价值为准；不再以 Tauri、Hain 或 Flow Launcher 的技术路线作为前置假设。
+> 本文取代早期“类 Rolan + 类 Flow Launcher”的竞品拼接式需求。FlickD 的后续工作以已发布的原生客户端、现有配置兼容性和可验证的用户价值为准；不再以 Tauri、Hain 或 Flow Launcher 的技术路线作为前置假设。
 
 ## 1. 产品定位
 
-LanFlow 是一款本地优先的 Windows 轻量启动与整理工具。它帮助用户把常用程序、文件夹和快捷方式组织为可管理的分组，并以全局热键快速打开面板和启动目标。LanFlow 专注于用户已收纳的常用内容，不承担全电脑文件搜索、应用索引或通用命令面板职责。
+FlickD 是一款本地优先的 Windows 轻量启动与整理工具。它帮助用户把常用程序、文件夹和快捷方式组织为可管理的分组，并以全局热键快速打开面板和启动目标。FlickD 专注于用户已收纳的常用内容，不承担全电脑文件搜索、应用索引或通用命令面板职责。
 
 核心承诺：
 
@@ -47,13 +47,15 @@ LanFlow 是一款本地优先的 Windows 轻量启动与整理工具。它帮助
 - Flow Launcher/Hain 插件兼容、插件商店或开放 HTTP/WebSocket API；
 - 跨平台客户端、Electron/Tauri 迁移或重写。
 
+> 注：以上边界针对 Windows 正式客户端。`linux` 分支的 Avalonia 实验线独立维护（仍用 LanFlow 命名与独立版本号），不视为本文所述的「跨平台重写」，也不纳入 full / lite 发布通道。
+
 ## 4. 产品对象与关键场景
 
-| 用户场景 | 用户动作 | LanFlow 应提供的结果 |
+| 用户场景 | 用户动作 | FlickD 应提供的结果 |
 | --- | --- | --- |
 | 日常启动 | 按全局热键，选择或筛选已整理项目 | 快速显示面板并启动目标 |
 | 工作区整理 | 新建分组，拖入或移动项目，调整顺序 | 常用目标按工作场景保持可见、可维护 |
-| 外部查找后收纳 | 在 Everything、资源管理器或开始菜单中找到目标并拖入 LanFlow | 外部工具负责查找，LanFlow 只接收用户明确选择的目标 |
+| 外部查找后收纳 | 在 Everything、资源管理器或开始菜单中找到目标并拖入 FlickD | 外部工具负责查找，FlickD 只接收用户明确选择的目标 |
 | 外部清单导入 | 选择 `import-manifest.json`，审查后确认 | 只合并选中的有效项目，不覆盖现有设置 |
 | 升级 | 在设置页检查更新 | 下载与当前安装通道匹配的资产并完成重启更新 |
 | 轻量部署 | 下载 lite 单文件 | 在具备 .NET 8 Windows Desktop Runtime 的机器上直接运行 |
@@ -86,7 +88,7 @@ LanFlow 是一款本地优先的 Windows 轻量启动与整理工具。它帮助
 
 ### P2：工作区体验完善
 
-详细实施方案见 `docs/P2-Workspace-Experience-Development-Plan.md`。本期按“先保护配置与已有流程，再改善可达性和反馈”的顺序交付：
+详细实施方案见 `docs/archive/plans/P2-Workspace-Experience-Development-Plan.md`（已归档）。本期按“先保护配置与已有流程，再改善可达性和反馈”的顺序交付：
 
 - 补齐分组拖动排序、导航收起和网格 / 卡片视图的一致性交互；
 - 让分组导航与项目区域在内容溢出时可滚动访问；
@@ -103,11 +105,11 @@ LanFlow 是一款本地优先的 Windows 轻量启动与整理工具。它帮助
 - 优化图标延迟加载、缓存和失效路径，避免后台工作阻塞主窗口；
 - 继续控制 full/lite 两条发布通道的体积、依赖和升级可靠性。
 
-**验收目标：** 性能结论来自目标机器实测；未使用搜索或导入时不启动额外索引任务，外部工具不可用不会影响 LanFlow 的启动、整理和已管理项目检索。
+**验收目标：** 性能结论来自目标机器实测；未使用搜索或导入时不启动额外索引任务，外部工具不可用不会影响 FlickD 的启动、整理和已管理项目检索。
 
 ## 6. 数据与兼容性约束
 
-- 当前配置位置：`%AppData%\LanFlow\config.json`；
+- 当前配置位置：`%AppData%\FlickD\config.json`；
 - 配置中的 `groups`、`items` 与 `settings` 是用户数据，新增功能必须向后兼容；
 - 外部输入必须使用独立的 `import-manifest`，不得要求外部工具构造内部 ID、图标对象、使用次数或设置字段；
 - 配置写入继续使用临时文件后原子替换；
@@ -115,7 +117,7 @@ LanFlow 是一款本地优先的 Windows 轻量启动与整理工具。它帮助
 
 ## 7. 发布形态
 
-LanFlow 每个正式版本必须同时维护 **full** 与 **lite** 两个 Windows x64 发布通道。详细打包、命名、验证和 GitHub Release 规范见 `docs/ARCHITECTURE.md` 的“发布与更新规范”。
+FlickD 每个正式版本必须同时维护 **full** 与 **lite** 两个 Windows x64 发布通道。详细打包、命名、验证和 GitHub Release 规范见 `docs/ARCHITECTURE.md` 的“发布与更新规范”。
 
 | 通道 | 交付形态 | 适用用户 |
 | --- | --- | --- |
