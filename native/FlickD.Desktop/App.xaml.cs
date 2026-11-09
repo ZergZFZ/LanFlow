@@ -1,0 +1,411 @@
+using System;
+using System.Drawing;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Interop;
+using System.Windows.Threading;
+using Forms = System.Windows.Forms;
+using FlickD.Desktop.Diagnostics;
+using FlickD.Desktop.Services;
+
+namespace FlickD.Desktop;
+
+public partial class App : Application
+{
+    private Forms.NotifyIcon? _trayIcon;
+    private Forms.ToolStripMenuItem? _toggleHotkeyMenuItem;
+    private readonly SingleInstanceGuard _singleInstanceGuard = new();
+    private ConfigLocationResolution? _startupConfigLocation;
+
+    internal bool IsExiting { get; private set; }
+
+    // 被系统开机拉起（带 --silent 参数）时为 true：仅驻留托盘，不显示主窗口。
+    public static bool IsSilentStart { get; private set; }
+
+    public App()
+    {
+        // 托盘类应用：仅在显式退出时关闭进程，避免静默启动时因无可见窗口而直接退出。
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+        // 兜底：任何线程上的未处理异常都先写日志再提示，避免“快速异常检测失败 / 进程立即终止”的静默崩溃。
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            var ex = args.ExceptionObject as Exception;
+            WriteCrashLog("AppDomain.UnhandledException", ex);
+            SafeShowCrash(ex);
+        };
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            WriteCrashLog("TaskScheduler.UnobservedTaskException", args.Exception);
+            args.SetObserved();
+        };
+    }
+
+    protected override void OnStartup(StartupEventArgs e)
+    {
+        // 单实例检查：已有实例时唤醒或退出，避免重复托盘/热键。
+        IsSilentStart = e.Args.Any(a =>
+            string.Equals(a, "--silent", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(a, "/silent", StringComparison.OrdinalIgnoreCase));
+        WriteDiagnosticLog($"startup:begin;silent={IsSilentStart};args={e.Args.Length}");
+        if (!_singleInstanceGuard.TryAcquire(ShowMainWindow))
+        {
+            WriteDiagnosticLog($"startup:existing-instance;silent={IsSilentStart}");
+            if (!IsSilentStart)
+            {
+                _singleInstanceGuard.NotifyExistingShow();
+            }
+
+            Shutdown();
+            return;
+        }
+
+        // 捕获 UI 线程未处理异常，避免右键菜单等渲染异常直接静默退出（闪退）。
+        DispatcherUnhandledException += (_, args) =>
+        {
+            args.Handled = true;
+            WriteCrashLog("DispatcherUnhandledException", args.Exception);
+            MessageBox.Show(
+                args.Exception.ToString(),
+                "FlickD 发生未处理异常",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        };
+
+        try
+        {
+            base.OnStartup(e);
+            _startupConfigLocation = ResolveConfigLocationAtStartup();
+            WriteDiagnosticLog($"startup:config-ready;directory={_startupConfigLocation.DirectoryPath};configExists={File.Exists(_startupConfigLocation.ConfigPath)};warning={_startupConfigLocation.Warning ?? "none"}");
+            CreateTrayIcon();
+            WriteDiagnosticLog("startup:tray-ready");
+
+            var mainWindow = new MainWindow(_startupConfigLocation);
+            MainWindow = mainWindow;
+            if (IsSilentStart)
+            {
+                // 静默启动：仅创建窗口句柄（用于注册全局热键、DWM 阴影挂钩与托盘交互），
+                // 不调用 Show()，避免开机后主窗口弹出占据屏幕。
+                new WindowInteropHelper(mainWindow).EnsureHandle();
+                WriteDiagnosticLog("startup:window-handle-ready");
+            }
+            else
+            {
+                // 延迟到 Dispatcher 消息循环启动后再 Show。
+                // 规避极少数情况下（尤其由更新脚本 start 拉起时）在 OnStartup 内直接 Show()
+                // 触发的 “VisualTarget 的根 Visual 不能具有父级” 异常（WPF 视觉树时序竞争）。
+                Dispatcher.BeginInvoke(DispatcherPriority.Loaded, (Action)(() =>
+                {
+                    WriteDiagnosticLog("startup:show-dispatch");
+                    ShowMainWindowSafe(mainWindow);
+                }));
+            }
+        }
+        catch (Exception ex)
+        {
+            // 启动期异常（Dispatcher 循环启动前抛出）不会被 DispatcherUnhandledException 捕获，
+            // 这里兜底，避免未处理异常触发 FailFast。
+            WriteCrashLog("OnStartup", ex);
+            MessageBox.Show(
+                "FlickD 启动失败：" + ex.Message + "\n\n详细信息已写入：" + CrashLogPath,
+                "FlickD 启动失败",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            // 启动已失败，主动退出，避免残留为无主窗口的托盘僵尸进程。
+            Shutdown();
+        }
+    }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        _trayIcon?.Dispose();
+        _singleInstanceGuard.Dispose();
+        base.OnExit(e);
+    }
+
+    private void CreateTrayIcon()
+    {
+        var menu = new Forms.ContextMenuStrip();
+        menu.Items.Add("显示启动器", null, (_, _) => ShowMainWindow());
+        menu.Items.Add(new Forms.ToolStripSeparator());
+        _toggleHotkeyMenuItem = new Forms.ToolStripMenuItem("暂停全局快捷键", null, (_, _) => ToggleHotkeyFromTray());
+        menu.Items.Add(_toggleHotkeyMenuItem);
+        menu.Items.Add("重新注册快捷键", null, (_, _) => ReRegisterHotkeyFromTray());
+        menu.Items.Add("重启软件", null, (_, _) => RestartFromTray());
+        menu.Items.Add(new Forms.ToolStripSeparator());
+        menu.Items.Add("退出 FlickD", null, (_, _) => RequestShutdown());
+
+        Icon icon;
+        using (var iconStream = typeof(App).Assembly.GetManifestResourceStream(
+                   "FlickD.Desktop.Assets.FlickD.ico"))
+        {
+            if (iconStream is null)
+            {
+                // 资源缺失不应导致启动失败：回退到系统图标。
+                icon = (Icon)SystemIcons.Application.Clone();
+            }
+            else
+            {
+                icon = new Icon(iconStream);
+            }
+        }
+
+        _trayIcon = new Forms.NotifyIcon
+        {
+            Text = "FlickD",
+            Icon = icon,
+            ContextMenuStrip = menu,
+            Visible = true,
+        };
+        _trayIcon.DoubleClick += (_, _) => ShowMainWindow();
+    }
+
+    private void ToggleHotkeyFromTray()
+    {
+        if (MainWindow is MainWindow mw)
+        {
+            var message = mw.ToggleHotkeyEnabled();
+            _toggleHotkeyMenuItem!.Text = mw.IsHotkeyEnabled ? "暂停全局快捷键" : "恢复全局快捷键";
+            mw.SetStatusText(message);
+        }
+    }
+
+    // 热键注册失败后的托盘提示：静默自启时用户看不到主窗口状态栏；
+    // 占用型失败会在后台持续重试，因此文案告知“会自动恢复”，不再要求用户改键。
+    public void NotifyHotkeyRegistrationFailed()
+    {
+        if (_trayIcon is null)
+        {
+            return;
+        }
+
+        _trayIcon.ShowBalloonTip(
+            4000,
+            "FlickD",
+            "全局快捷键注册失败，正在后台自动重试；冲突解除后将自动恢复。",
+            Forms.ToolTipIcon.Warning);
+    }
+
+    // 后台重试成功后告知用户已恢复，避免“以为还坏着”而手动重启。
+    public void NotifyHotkeyRecovered()
+    {
+        if (_trayIcon is null)
+        {
+            return;
+        }
+
+        _trayIcon.ShowBalloonTip(
+            4000,
+            "FlickD",
+            "全局快捷键已恢复。",
+            Forms.ToolTipIcon.Info);
+    }
+
+    private static string CrashLogPath
+    {
+        get
+        {
+            var dir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "FlickD");
+            try { Directory.CreateDirectory(dir); } catch { }
+            return Path.Combine(dir, "crash.log");
+        }
+    }
+
+    private static void WriteCrashLog(string source, Exception? ex)
+    {
+        var line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {source}: {ex}";
+        LogWriter.Append(CrashLogPath, line + Environment.NewLine + Environment.NewLine);
+    }
+
+    private static string DiagnosticLogPath
+    {
+        get
+        {
+            var dir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "FlickD");
+            try { Directory.CreateDirectory(dir); } catch { }
+            return Path.Combine(dir, "config-diagnostics.log");
+        }
+    }
+
+    internal static void WriteDiagnosticLog(string message)
+    {
+        // 时间戳带毫秒：R4 性能脚本依赖它计算"窗口显示/首批项目就绪"的启动内耗时。
+        var line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}";
+        LogWriter.Append(DiagnosticLogPath, line + Environment.NewLine);
+    }
+
+    /// <summary>
+    /// 启动时解析配置目录（默认或 locator 指定），确保目录存在并写入诊断日志。
+    /// </summary>
+    private static ConfigLocationResolution ResolveConfigLocationAtStartup()
+    {
+        try
+        {
+            var location = new ConfigLocationService();
+            var resolution = location.Resolve();
+            Directory.CreateDirectory(resolution.DirectoryPath);
+            WriteDiagnosticLog(
+                "config-location:directory=" + resolution.DirectoryPath +
+                ";isDefault=" + resolution.IsDefault +
+                ";exists=" + File.Exists(resolution.ConfigPath) +
+                ";warning=" + (resolution.Warning ?? "none"));
+            return resolution;
+        }
+        catch (Exception ex)
+        {
+            WriteDiagnosticLog("config-location:failed=" + ex.Message);
+            var fallback = new ConfigLocationService().Resolve();
+            return fallback;
+        }
+    }
+
+    private static void SafeShowCrash(Exception? ex)
+    {
+        try
+        {
+            MessageBox.Show(
+                "FlickD 发生了严重错误，进程即将退出：\n\n" + (ex?.ToString() ?? "未知错误") +
+                "\n\n日志已写入：" + CrashLogPath,
+                "FlickD 严重错误",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+        catch { }
+    }
+
+    private void RequestShutdown()
+    {
+        IsExiting = true;
+        Shutdown();
+    }
+
+    private void ShowMainWindow()
+    {
+        if (MainWindow is null)
+        {
+            return;
+        }
+
+        MainWindow.Show();
+        MainWindow.WindowState = WindowState.Normal;
+        MainWindow.Activate();
+        MainWindow.Focus();
+
+        if (MainWindow is MainWindow mw)
+        {
+            mw.FocusSearch();
+        }
+    }
+
+    private void ReRegisterHotkeyFromTray()
+    {
+        if (MainWindow is not MainWindow mainWindow)
+        {
+            _trayIcon?.ShowBalloonTip(3000, "FlickD", "启动器尚未就绪，请稍后再试。", Forms.ToolTipIcon.Info);
+            return;
+        }
+
+        if (mainWindow.ReRegisterHotkey())
+        {
+            _trayIcon?.ShowBalloonTip(3000, "FlickD", $"快捷键 {mainWindow.CurrentHotkey} 注册成功", Forms.ToolTipIcon.Info);
+        }
+        else
+        {
+            _trayIcon?.ShowBalloonTip(3000, "FlickD", $"快捷键 {mainWindow.CurrentHotkey} 注册失败，可能被其他程序占用", Forms.ToolTipIcon.Warning);
+        }
+    }
+
+    private void RestartFromTray()
+    {
+        if (MainWindow is MainWindow mainWindow)
+        {
+            mainWindow.PrepareForRestart();
+        }
+
+        _trayIcon?.Dispose();
+        _trayIcon = null;
+        _singleInstanceGuard.Dispose();
+
+        try
+        {
+            var exe = Environment.ProcessPath;
+            if (!string.IsNullOrEmpty(exe) && File.Exists(exe))
+            {
+                var startInfo = new System.Diagnostics.ProcessStartInfo(exe)
+                {
+                    WorkingDirectory = Path.GetDirectoryName(exe) ?? AppContext.BaseDirectory,
+                    UseShellExecute = false,
+                };
+                System.Diagnostics.Process.Start(startInfo);
+                WriteDiagnosticLog("restart:process-started");
+            }
+            else
+            {
+                WriteDiagnosticLog("restart:process-path-unavailable");
+            }
+        }
+        catch (Exception ex)
+        {
+            WriteCrashLog("RestartFromTray", ex);
+        }
+
+        RequestShutdown();
+    }
+
+    // 首次显示主窗口：规避 “根 Visual 不能具有父级” 的偶发时序竞争。
+    // 若 Show 失败，重建窗口重试一次；仍失败则记录日志并退出，避免僵尸进程。
+    private void ShowMainWindowSafe(MainWindow mainWindow)
+    {
+        try
+        {
+            mainWindow.Show();
+            WriteDiagnosticLog("startup:window-shown");
+            return;
+        }
+        catch (Exception ex) when (IsRootVisualParentError(ex))
+        {
+            WriteCrashLog("OnStartup.Show", ex);
+        }
+        catch (Exception ex)
+        {
+            WriteCrashLog("OnStartup.Show", ex);
+            MessageBox.Show(
+                "FlickD 启动失败：" + ex.Message + "\n\n详细信息已写入：" + CrashLogPath,
+                "FlickD 启动失败",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            Shutdown();
+            return;
+        }
+
+        // 罕见：根 Visual 已被误挂载，重建窗口重试一次。
+        // 必须沿用启动时解析的配置目录——无参构造会回退默认目录，导致用户配置"丢失"。
+        try
+        {
+            var fresh = new MainWindow(_startupConfigLocation ?? new ConfigLocationService().Resolve());
+            MainWindow = fresh;
+            fresh.Show();
+            WriteDiagnosticLog("startup:window-shown-retry");
+        }
+        catch (Exception ex)
+        {
+            WriteCrashLog("OnStartup.ShowRetry", ex);
+            MessageBox.Show(
+                "FlickD 启动失败：" + ex.Message + "\n\n详细信息已写入：" + CrashLogPath,
+                "FlickD 启动失败",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            Shutdown();
+        }
+    }
+
+    private static bool IsRootVisualParentError(Exception ex) =>
+        ex is ArgumentException &&
+        (ex.Message.Contains("父级") || ex.Message.Contains("parent", StringComparison.OrdinalIgnoreCase));
+}

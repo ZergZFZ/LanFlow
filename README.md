@@ -1,8 +1,10 @@
-# LanFlow
+# FlickD
 
 **轻一点，快一点。**
 
-LanFlow 是一款面向 Windows 的轻量启动器。把常用应用、文件夹和快捷方式放进清晰的分组里，需要时用全局快捷键呼出面板，少找一点，多做一点。
+FlickD（中文名「轻启」）是一款面向 Windows 的轻量启动器。把常用应用、文件夹和快捷方式放进清晰的分组里，需要时用全局快捷键呼出面板，少找一点，多做一点。
+
+> 本项目的工程代号曾是 LanFlow，2.0.0 起正式更名为 FlickD；旧版配置、自启项与 OCR 组件会在首次启动时自动迁移。
 
 ## 它能做什么
 
@@ -16,34 +18,38 @@ LanFlow 是一款面向 Windows 的轻量启动器。把常用应用、文件夹
 
 ## 开始使用
 
-1. 下载并运行 LanFlow；
+1. 下载并运行 FlickD；
 2. 新建一个分组；
 3. 将常用目标从资源管理器、开始菜单或 Everything 等外部工具拖进面板，也可以通过“添加项目”加入；
 4. 在设置中按自己的习惯调整快捷键和外观；
-5. 以后用快捷键打开 LanFlow，快速启动所需内容。
+5. 以后用快捷键打开 FlickD，快速启动所需内容。
 
 ## 选择下载版本
 
 | 版本 | 适合谁 | 使用方式 |
 |---|---|---|
-| **full** | 希望免配置、直接使用 | 解压 `LanFlow-{version}-full.zip` 后运行 `LanFlow.exe`，无需预装 .NET |
-| **lite** | 已安装 .NET 8 Windows Desktop Runtime，想要更小下载 | 直接运行 `LanFlow-{version}-lite.exe` |
+| **full** | 希望免配置、直接使用 | 解压 `FlickD-{version}-full.zip` 后运行 `FlickD.exe`，无需预装 .NET |
+| **lite** | 已安装 .NET 8 Windows Desktop Runtime，想要更小下载 | 直接运行 `FlickD-{version}-lite.exe` |
 
 每个正式版本都会同时提供 full 和 lite 两种发布文件；应用内更新会自动匹配当前使用的版本类型。
 
+> 2.0.0 的发布包内同时保留 `LanFlow.exe` 兼容壳，仅用于让 1.6.x 旧版本完成一次在线更新，2.1.0 起移除。
+
 ## 本地优先
 
-LanFlow 的分组、项目和外观设置保存在本机：
+FlickD 的分组、项目和外观设置保存在本机：
 
 ```text
-%AppData%\LanFlow\config.json
+%AppData%\FlickD\config.json
 ```
+
+从 1.6.x 升级的用户，首次启动会自动从 `%AppData%\LanFlow` 复制配置，旧目录保留以便回退。
 
 不需要登录账号，也不要求把个人使用数据上传到云端。
 
 ## AI 批量导入
 
-LanFlow 支持通过一份 JSON 清单批量导入分组和项目。这份清单可以由
+FlickD 支持通过一份 JSON 清单批量导入分组和项目。这份清单可以由
 AI 助手或外部工具生成，然后在应用内预览、勾选并一次性合并。
 
 ### 告诉 AI 怎么生成
@@ -52,13 +58,13 @@ AI 助手或外部工具生成，然后在应用内预览、勾选并一次性�
 
 ```text
 请读取仓库中的 docs/import-manifest.schema.json，按 schemaVersion 1.0
-生成一份 LanFlow 导入清单（import-manifest.json）。要求：
+生成一份 FlickD 导入清单（import-manifest.json）。要求：
 1. 只输出 JSON 文件本身，不要解释或额外说明；
 2. 每个分组至少包含一个项目；
 3. 每个项目必须包含 name 和 path 两个字段，path 必须是 Windows
    完整路径（例如 C:\Program Files\App\App.exe）；
 4. 不要包含 id、settings、useCount 等内部字段，也不要修改
-   LanFlow 的 config.json。
+   FlickD 的 config.json。
 ```
 
 ### 最小可用示例
@@ -87,7 +93,7 @@ AI 助手或外部工具生成，然后在应用内预览、勾选并一次性�
 ### 怎么导入
 
 1. 把生成的 JSON 保存为 `import-manifest.json`；
-2. 打开 LanFlow，点击底部工具栏的「导入清单」按钮；
+2. 打开 FlickD，点击底部工具栏的「导入清单」按钮；
 3. 选择文件后在预览窗口中核对分组和项目，可逐项勾选；
 4. 点击「确认导入」，选中的项目会一次性合并进现有配置。
 
@@ -95,4 +101,4 @@ AI 助手或外部工具生成，然后在应用内预览、勾选并一次性�
 
 ## 许可
 
-LanFlow 使用 [MIT License](LICENSE) 开源发布。
+FlickD 使用 [MIT License](LICENSE) 开源发布。

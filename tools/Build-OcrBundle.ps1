@@ -4,11 +4,17 @@
 param(
     [string]$AppVersion = '1.6.0',
     [string]$BundleVersion = '1.0.0',
+    # Lowest main-program version this bundle is compatible with. This is the version in
+    # which the IOcrEngine contract last changed - NOT the version being packaged. The app
+    # rejects bundles whose MinAppVersion is newer than itself.
+    [string]$MinAppVersion = '1.6.0',
     [string]$AssetsDir = '',
     [string]$VcRuntimeDir = 'C:\Windows\System32',
     [string]$OutDir = '',
     [string]$StagingDir = '',
-    [switch]$SkipPublish
+    # Reuse an existing zip when the bundle content (runtime files, models, CRT) is unchanged.
+    [switch]$SkipPublish,
+    [switch]$ForceRebuild
 )
 
 $ErrorActionPreference = 'Stop'
@@ -17,7 +23,7 @@ if ([string]::IsNullOrWhiteSpace($AssetsDir)) { $AssetsDir = Join-Path $root '.b
 if ([string]::IsNullOrWhiteSpace($OutDir)) { $OutDir = Join-Path $root 'artifacts\ocr' }
 if ([string]::IsNullOrWhiteSpace($StagingDir)) { $StagingDir = Join-Path $env:TEMP 'lanflow-ocr-staging' }
 
-$pluginProject = Join-Path $root 'native\LanFlow.Ocr\LanFlow.Ocr.csproj'
+$pluginProject = Join-Path $root 'native\FlickD.Ocr\FlickD.Ocr.csproj'
 $publishDir = Join-Path $env:TEMP 'lanflow-ocr-publish'
 
 Write-Host "[1/6] publish plugin"
@@ -36,8 +42,8 @@ $vcDir = Join-Path $StagingDir 'vcredist'
 New-Item -ItemType Directory -Force -Path $runtimeDir, $modelsDir, $vcDir | Out-Null
 
 $runtimeFiles = @(
-    @{ From = (Join-Path $publishDir 'LanFlow.Ocr.dll'); To = 'LanFlow.Ocr.dll' },
-    @{ From = (Join-Path $publishDir 'LanFlow.Ocr.deps.json'); To = 'LanFlow.Ocr.deps.json' },
+    @{ From = (Join-Path $publishDir 'FlickD.Ocr.dll'); To = 'FlickD.Ocr.dll' },
+    @{ From = (Join-Path $publishDir 'FlickD.Ocr.deps.json'); To = 'FlickD.Ocr.deps.json' },
     @{ From = (Join-Path $publishDir 'Microsoft.ML.OnnxRuntime.dll'); To = 'Microsoft.ML.OnnxRuntime.dll' },
     @{ From = (Join-Path $publishDir 'runtimes\win-x64\native\onnxruntime.dll'); To = 'onnxruntime.dll' },
     @{ From = (Join-Path $publishDir 'runtimes\win-x64\native\onnxruntime_providers_shared.dll'); To = 'onnxruntime_providers_shared.dll' }
@@ -81,22 +87,56 @@ foreach ($folder in @('runtime', 'models', 'vcredist')) {
 $manifest = [ordered]@{
     bundleId     = 'lanflow-ocr-win-x64'
     version      = $BundleVersion
-    minAppVersion = $AppVersion
+    minAppVersion = $MinAppVersion
     files        = $entries
 }
+
+# Content fingerprint: SHA-256 over the path|sha256 pairs of the *runtime* payload only.
+# manifest.json itself is excluded so that re-stamping minAppVersion/app version does not
+# change the fingerprint - the fingerprint answers "did the OCR payload really change?".
+$fingerprintSource = ($entries | ForEach-Object { "$($_.path)|$($_.sha256)" }) -join "`n"
+$contentHash = (Get-FileHash -InputStream ([System.IO.MemoryStream]::new(
+        [System.Text.Encoding]::UTF8.GetBytes($fingerprintSource))) -Algorithm SHA256).Hash.ToLowerInvariant()
+$manifest['contentHash'] = $contentHash
+
 $json = $manifest | ConvertTo-Json -Depth 5
 [System.IO.File]::WriteAllText((Join-Path $StagingDir 'manifest.json'), $json, (New-Object System.Text.UTF8Encoding($false)))
 
+Write-Host ("[3/6] content fingerprint: {0}" -f $contentHash)
+
+Write-Host "[4/6] reuse check"
+$indexPath = Join-Path $OutDir 'index.json'
+$index = @{}
+if (Test-Path $indexPath) {
+    $loaded = Get-Content $indexPath -Raw | ConvertFrom-Json
+    foreach ($p in $loaded.PSObject.Properties) { $index[$p.Name] = $p.Value }
+}
+
+if (-not $ForceRebuild -and $index.ContainsKey($contentHash)) {
+    $existing = Join-Path $OutDir $index[$contentHash]
+    if (Test-Path $existing) {
+        $reusedHash = (Get-FileHash $existing -Algorithm SHA256).Hash.ToLowerInvariant()
+        Write-Host "[4/6] bundle content unchanged - reusing $($index[$contentHash])"
+        Write-Host ("[5/6] sha256: {0}" -f $reusedHash)
+        Write-Host ("[6/6] reused: {0}" -f $existing)
+        Write-Host ("bundle: {0}" -f $existing)
+        Write-Host ("contentHash: {0}" -f $contentHash)
+        Write-Host ("reused: true")
+        return
+    }
+    Write-Host "[4/6] index entry missing on disk - rebuilding"
+}
+
 Write-Host "[4/6] create zip"
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
-$zipPath = Join-Path $OutDir ("LanFlow-{0}-ocr.zip" -f $AppVersion)
+$zipPath = Join-Path $OutDir ("FlickD-{0}-ocr.zip" -f $AppVersion)
 if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 [System.IO.Compression.ZipFile]::CreateFromDirectory($StagingDir, $zipPath, [System.IO.Compression.CompressionLevel]::Optimal, $false)
 
 Write-Host "[5/6] hash zip"
 $zipHash = (Get-FileHash $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
-$lines = @("$zipHash  LanFlow-$AppVersion-ocr.zip")
+$lines = @("$zipHash  FlickD-$AppVersion-ocr.zip")
 [System.IO.File]::WriteAllText("$zipPath.sha256", ($lines -join "`n"), (New-Object System.Text.UTF8Encoding($false)))
 
 Write-Host "[6/6] done"
