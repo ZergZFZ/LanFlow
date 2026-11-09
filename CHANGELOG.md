@@ -4,6 +4,12 @@
 > 版本号与 `native/FlickD.Desktop/FlickD.Desktop.csproj` 中的 `Version` / `AssemblyVersion` / `FileVersion` 保持一致。
 > 发布闸门与资产命名规范见 `docs/ARCHITECTURE.md` §6。
 
+## [Unreleased]
+
+### 改进：更名后的旧快捷方式提示
+
+- 启动时只读扫描任务栏与开始菜单中仍指向 `LanFlow.exe` 的快捷方式，命中后提示一次（`%APPDATA%\FlickD\legacy-shortcut-notice.flag` 去重），引导用户重新固定 `FlickD.exe`；扫描失败不影响启动。
+
 ## [2.0.0] - 2026-11-09
 
 ### 更名：LanFlow → FlickD

@@ -62,6 +62,7 @@ public partial class MainWindow : System.Windows.Window
     private string? _lastSelectedItemId;
     private string? _configLoadWarning;
     private bool _configLoadWarningShown;
+    private bool _legacyShortcutNoticeShown;
     private int _initialItemRealizationAttempt;
     private bool _initialItemRealizationCompleted;
     private sealed record ViewStateSnapshot(
@@ -156,6 +157,7 @@ public partial class MainWindow : System.Windows.Window
             if (IsVisible)
             {
                 ShowConfigLoadWarningOnce();
+                ShowLegacyShortcutNoticeOnce();
                 _ = LoadVisibleIconsAsync();
                 // 开机自启（--silent）时窗口先 EnsureHandle() 再隐藏，首项实现补偿会在
                 // 视口无效的隐藏期提前完成；呼出窗口时若生成器仍卡死，这里重新武装
@@ -351,6 +353,28 @@ public partial class MainWindow : System.Windows.Window
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
         });
+    }
+
+    // 更名后旧快捷方式（仍指向 LanFlow.exe）只提示一次：2.1.0 移除兼容壳后这些固定项会失效。
+    // 与配置损坏提示一致，推迟到窗口首次可见时再做，避免打断静默自启。
+    private void ShowLegacyShortcutNoticeOnce()
+    {
+        if (_legacyShortcutNoticeShown)
+        {
+            return;
+        }
+
+        _legacyShortcutNoticeShown = true;
+        string? notice = LegacyShortcutAdvisor.TryCreateNotice(_shortcutService);
+        if (notice is null)
+        {
+            return;
+        }
+
+        // 延迟到窗口显示完成后再弹，避免阻塞首次呈现
+        Dispatcher.BeginInvoke(
+            new Action(() => MessageBox.Show(this, notice, "FlickD", MessageBoxButton.OK, MessageBoxImage.Information)),
+            DispatcherPriority.ApplicationIdle);
     }
 
     private async void MainWindow_Closed(object? sender, EventArgs e)
