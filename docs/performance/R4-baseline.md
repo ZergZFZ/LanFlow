@@ -85,3 +85,17 @@ powershell -ExecutionPolicy Bypass -File tools\perf-baseline.ps1 `
 本开发机自 2026-09-26 起出现进程级写入拦截：任何 LanFlow.exe 实例（含 2026-09-24 当天曾正常写入的同一二进制、计划任务以 Administrator 启动的实例）均无法写入 `%LOCALAPPDATA%\LanFlow\` 下任何文件（新建文件同样被拒，报 UnauthorizedAccessException），而 powershell.exe 写入同一目录正常。同时跨进程投递 `WM_HOTKEY` 与 SendKeys 均无法触发呼出（2026-08-21 基线已记录 SendKeys 不可靠，现状更严重）。
 
 因此在本机复跑脚本时，"启动→窗口可见 / 启动→首批项目 / 热键→窗口可见"可能显示"无数据"——这是测量环境干扰，不代表产品回归，应在干净环境或用户机器上复跑获取真实数据。应用本身不受影响：日志写入失败按设计静默降级（`Diagnostics/LogWriter`），冷启动、内存与分组切换测量不依赖日志，仍可正常取得。
+
+## 8. 2.0.0 发布资产复核（2026-11-09）
+
+按 `docs/ARCHITECTURE.md` §6.4 对本地 `artifacts/2.0.0` 与 `artifacts/ocr` 的三条资产做静态复核（不重新打包、不修改已发布产物）：
+
+| 项 | 结果 |
+| --- | --- |
+| `FlickD-2.0.0-full.zip` | 91.95 MB，`.sha256` 一致；根目录含 `FlickD.exe`、`LanFlow.exe` 兼容壳与原生依赖，内嵌 `ocr/` |
+| `FlickD-2.0.0-lite.exe` | 2.34 MB，`.sha256` 一致 |
+| `FlickD-2.0.0-ocr.zip` | 22.33 MB，`.sha256` 一致；manifest 12 个文件均为 `runtime/` / `models/` / `vcredist/` 前缀，逐文件 SHA-256 与 size 全部匹配，`contentHash` 复算一致 |
+
+> full.zip 由 v1.5.2 的 64.4 MB 增至 91.95 MB，主要来自 2.0.0 过渡期兼容壳（约 10 MB）与内嵌 `ocr/`（约 22 MB），属 `ARCHITECTURE.md` §6.3 规定的发布形态，不是意外膨胀。因此 §5 的 `> 75MB` 告警阈值在 2.0.x 不适用：建议 2.0.x 临时阈值 `> 110MB`，2.1.0 移除兼容壳后重新测量并恢复严格阈值。
+> full.zip 根目录仍带 `FlickD.Core.pdb`；§6.3 要求不上传 PDB，下一版打包时应排除。
+> 本节只做静态复核；全量启动、托盘、热键、添加/启动项目、设置与更新通道等手工回归仍需按 §6.4 在干净环境执行。

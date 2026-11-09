@@ -1,14 +1,14 @@
 # FlickD 架构与发布基线
 
-- 基线版本：v1.3.7
+- 基线版本：v2.0.0（2026-11-09 起由 LanFlow 更名为 FlickD）
 - 正式客户端：`native/FlickD.Desktop`
 - 技术栈：WPF + .NET 8（`net8.0-windows`）
 - 支持平台：Windows 10/11 x64
-- 状态：活跃 ｜ 最近更新：2026-07-29
+- 状态：活跃 ｜ 最近更新：2026-11-09
 
 ## 1. 架构事实与决策
 
-FlickD 当前只有一个正式客户端：Windows 原生 WPF 客户端。项目不以 WebView、Electron、Tauri、React、Node.js 或跨平台运行时作为发布依赖。
+FlickD 当前只有一个正式客户端：Windows 原生 WPF 客户端。项目不以 WebView、Electron、Tauri、React、Node.js 或跨平台运行时作为发布依赖。`linux` 分支的 Avalonia 客户端是独立实验线，仍使用 LanFlow 命名与独立版本号，不纳入本文的 full / lite / ocr 发布通道。
 
 当前设计选择的目的不是追求技术栈数量，而是保证以下能力稳定可用：Windows Shell 启动、资源管理器文件拖放、全局热键、系统托盘、开机自启、原生窗口效果、单文件轻量发布和自包含离线发布。
 
@@ -165,7 +165,7 @@ FlickD-{version}-ocr.zip
 每次 Release 至少执行：
 
 1. `dotnet build native/FlickD.Desktop/FlickD.Desktop.csproj -c Release`；
-2. 运行 Core 自动化测试；
+2. 运行 `native/FlickD.Core.Tests` 与 `native/FlickD.Desktop.Tests` 两个 xunit 测试工程（CI 的 `build-test` job 使用同一口径，必须全绿）；
 3. 检查 full ZIP 根目录包含 `FlickD.exe`、`LanFlow.exe` 兼容壳，并保留完整发布依赖；
 4. 检查 lite 资产是一个可执行的 `FlickD-{version}-lite.exe`，且不含兼容壳；
 5. 用全新解压目录启动 full，并验证托盘、热键、添加/启动项目、设置与退出；

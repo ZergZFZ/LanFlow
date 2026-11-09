@@ -39,6 +39,7 @@
 ## 提交前自检（强制）
 
 - 冲突标记：`git grep -nE '^(<<<<<<<|=======|>>>>>>>)' -- .` 必须无输出。
-- 版本一致性：csproj 的 `Version`=1.5.0 ↔ `AssemblyVersion`=1.5.0.0 ↔ `FileVersion`=1.5.0.0（尾随 `.0` 视为等价）。
-- 本地构建：Windows `dotnet build native/LanFlow.Desktop/LanFlow.Desktop.csproj -c Release --no-restore`；Linux 同理。
-- 推 `main` 前：本地钩子已生效（`git config core.hooksPath .githooks`），且 CI 守卫（`.github/workflows/main-branch-guard.yml`）通过。
+- 版本一致性：`Version` ↔ `AssemblyVersion` ↔ `FileVersion` 三者一致（尾随 `.0` 视为等价）；**具体版本号以 csproj 当前值为准，不在本文件写死**（由 `scripts/guard-main-release.sh` 动态校验）。
+- 本地构建（Windows）：`dotnet build native/FlickD.Desktop/FlickD.Desktop.csproj -c Release --no-restore`；Linux 同理。
+- 本地测试：`dotnet test native/FlickD.Core.Tests/FlickD.Core.Tests.csproj -c Release` 与 `native/FlickD.Desktop.Tests/FlickD.Desktop.Tests.csproj` 同理，须全绿。
+- 推 `main` 前：本地钩子已生效（`git config core.hooksPath .githooks`），且 CI（`.github/workflows/main-branch-guard.yml`）的发布守卫与 Windows build/test 两个 job 全部通过。

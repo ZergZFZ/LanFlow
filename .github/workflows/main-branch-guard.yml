@@ -2,9 +2,9 @@ name: main-branch-guard
 
 on:
   pull_request:
-    branches: [main]
+    branches: [windows, main]
   push:
-    branches: [main]
+    branches: [windows, main]
 
 permissions:
   contents: read
@@ -12,6 +12,7 @@ permissions:
 jobs:
   guard:
     name: Guard main (release-only)
+    if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -21,3 +22,29 @@ jobs:
 
       - name: Run main branch guard
         run: bash scripts/guard-main-release.sh
+
+  build-test:
+    name: Build and test (Windows)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore test projects (includes project references)
+        run: |
+          dotnet restore native/FlickD.Core.Tests/FlickD.Core.Tests.csproj
+          dotnet restore native/FlickD.Desktop.Tests/FlickD.Desktop.Tests.csproj
+
+      - name: Build Desktop (Release)
+        run: dotnet build native/FlickD.Desktop/FlickD.Desktop.csproj -c Release --no-restore
+
+      - name: Test Core
+        run: dotnet test native/FlickD.Core.Tests/FlickD.Core.Tests.csproj -c Release --no-restore
+
+      - name: Test Desktop
+        run: dotnet test native/FlickD.Desktop.Tests/FlickD.Desktop.Tests.csproj -c Release --no-restore

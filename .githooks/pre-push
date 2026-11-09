@@ -30,7 +30,7 @@ while read local_ref local_sha remote_ref remote_sha; do
   if [ -n "$bad" ]; then
     echo "❌ 禁止把开发性提交直接推到 main（main 只做打包发布）：" >&2
     echo "$bad" >&2
-    echo "   功能/修复请提交到 dev/windows 或 dev/linux；main 仅接收 merge、" >&2
+    echo "   功能/修复请提交到 origin/windows 或 origin/linux；main 仅接收 merge、" >&2
     echo "   版本号 bump（build:/chore(release):）与发布整理。" >&2
     exit 1
   fi

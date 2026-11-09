@@ -2,12 +2,18 @@
 # ASCII-only source: Windows PowerShell 5.1 reads non-BOM UTF-8 as ANSI and breaks on CJK.
 [CmdletBinding()]
 param(
-    [string]$AppVersion = '1.6.0',
+    # Empty means: read <Version> from native/FlickD.Desktop/FlickD.Desktop.csproj.
+    # Never hard-code a release version here - it silently produces a wrong asset name.
+    [string]$AppVersion = '',
     [string]$BundleVersion = '1.0.0',
     # Lowest main-program version this bundle is compatible with. This is the version in
     # which the IOcrEngine contract last changed - NOT the version being packaged. The app
-    # rejects bundles whose MinAppVersion is newer than itself.
+    # rejects bundles whose MinAppVersion is newer than itself. Keep 1.6.0 until the
+    # IOcrEngine contract changes.
     [string]$MinAppVersion = '1.6.0',
+    # Stable component id. Keep the historical id: already published 2.0.0 bundles use it,
+    # and the runtime validates paths/hashes/minAppVersion, not this string.
+    [string]$BundleId = 'lanflow-ocr-win-x64',
     [string]$AssetsDir = '',
     [string]$VcRuntimeDir = 'C:\Windows\System32',
     [string]$OutDir = '',
@@ -19,12 +25,24 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
+
+if ([string]::IsNullOrWhiteSpace($AppVersion)) {
+    $desktopProject = Join-Path $root 'native\FlickD.Desktop\FlickD.Desktop.csproj'
+    if (-not (Test-Path $desktopProject)) { throw "missing desktop project: $desktopProject" }
+    [xml]$projectXml = Get-Content $desktopProject -Raw
+    $versionNodes = $projectXml.SelectNodes('//Version')
+    if ($versionNodes.Count -eq 0) { throw "cannot read <Version> from $desktopProject" }
+    $AppVersion = $versionNodes[0].InnerText.Trim()
+    if ([string]::IsNullOrWhiteSpace($AppVersion)) { throw "empty <Version> in $desktopProject" }
+    Write-Host "[0/6] AppVersion from csproj: $AppVersion"
+}
+
 if ([string]::IsNullOrWhiteSpace($AssetsDir)) { $AssetsDir = Join-Path $root '.build\ocr-assets' }
 if ([string]::IsNullOrWhiteSpace($OutDir)) { $OutDir = Join-Path $root 'artifacts\ocr' }
-if ([string]::IsNullOrWhiteSpace($StagingDir)) { $StagingDir = Join-Path $env:TEMP 'lanflow-ocr-staging' }
+if ([string]::IsNullOrWhiteSpace($StagingDir)) { $StagingDir = Join-Path $env:TEMP 'flickd-ocr-staging' }
 
 $pluginProject = Join-Path $root 'native\FlickD.Ocr\FlickD.Ocr.csproj'
-$publishDir = Join-Path $env:TEMP 'lanflow-ocr-publish'
+$publishDir = Join-Path $env:TEMP 'flickd-ocr-publish'
 
 Write-Host "[1/6] publish plugin"
 if (-not $SkipPublish) {
@@ -85,7 +103,7 @@ foreach ($folder in @('runtime', 'models', 'vcredist')) {
 }
 
 $manifest = [ordered]@{
-    bundleId     = 'lanflow-ocr-win-x64'
+    bundleId     = $BundleId
     version      = $BundleVersion
     minAppVersion = $MinAppVersion
     files        = $entries
