@@ -1,8 +1,30 @@
-# LanFlow 变更日志
+# FlickD 变更日志
 
-> 本文件记录 LanFlow Windows 客户端（`native/LanFlow.Desktop`）每个正式版本的变更。
-> 版本号与 `native/LanFlow.Desktop/LanFlow.Desktop.csproj` 中的 `Version` / `AssemblyVersion` / `FileVersion` 保持一致。
+> 本文件记录 FlickD Windows 客户端（`native/FlickD.Desktop`）每个正式版本的变更。
+> 版本号与 `native/FlickD.Desktop/FlickD.Desktop.csproj` 中的 `Version` / `AssemblyVersion` / `FileVersion` 保持一致。
 > 发布闸门与资产命名规范见 `docs/ARCHITECTURE.md` §6。
+
+## [2.0.0] - 2026-11-09
+
+### 更名：LanFlow → FlickD
+
+- 产品名、程序集名、命名空间、托盘与窗口文案统一改为 FlickD；可执行文件由 `LanFlow.exe` 改为 `FlickD.exe`。
+- 发布资产改为 `FlickD-{version}-full.zip` / `-lite.exe` / `-ocr.zip`；应用内更新仍按后缀匹配，通道不受影响。
+- GitHub 仓库地址保持不变（`ZergZFZ/LanFlow`），避免旧客户端检查更新链路中断。
+
+### 迁移：旧版本数据与系统状态
+
+- 配置目录默认位置改为 `%APPDATA%\FlickD`；首次启动自动复制旧目录 `%APPDATA%\LanFlow` 的 `config.json` 与 `config-location.json`，旧目录保留以便回退。自定义配置目录用户不会丢失分组。
+- 开机自启改写入新 Run 值名 `FlickD`，并在启动时删除旧值 `LanFlow`，避免升级后开机不自启。
+- 单实例互斥量与命名管道改为 `FlickD.*`，过渡期同时识别旧 `LanFlow.*` 实例，避免新旧版本双开。
+- OCR 组件目录改为 `%APPDATA%\FlickD\ocr`。旧组件（`LanFlow.Ocr.dll`）引用的 `LanFlow.Core` 已随更名消失，二进制不兼容，**无法直接复用**，首次使用取字时需重新下载一次（约 22 MB）；旧目录原样保留，可手动删除。
+- 崩溃与诊断日志目录改为 `%LOCALAPPDATA%\FlickD`。
+
+### 兼容：1.6.x 在线升级
+
+- 2.0.0 发布包内附 `LanFlow.exe` 兼容壳：仅定位并启动同目录的 `FlickD.exe`，并在子进程运行期间保持存活，使旧版更新器的启动校验与回滚逻辑正常通过。
+- 应用内更新器改为双名识别：优先 `FlickD.exe`，缺失时回退 `LanFlow.exe`；覆盖脚本同步支持两种主程序名。
+- 兼容壳计划在 2.1.0 移除。
 
 ## [1.6.4] - 2026-11-09
 

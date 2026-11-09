@@ -1,10 +1,10 @@
-﻿# LanFlow R4 性能基准测量脚本（PRD P3 / ROADMAP R4）
-# 用法：powershell -File tools\perf-baseline.ps1 -ExePath <LanFlow.exe 路径> [-Runs 3]
+﻿# FlickD R4 性能基准测量脚本（PRD P3 / ROADMAP R4）
+# 用法：powershell -File tools\perf-baseline.ps1 -ExePath <FlickD.exe 路径> [-Runs 3]
 # 测量项：冷启动耗时（进程创建→主窗口句柄就绪）、启动内存、空闲驻留内存、
 #         分组切换峰值/回收后工作集（验证 v1.5.2 防抖回收）、
 #         热键呼出延迟（直投 WM_HOTKEY，v1.5.4 起替代不可靠的 SendKeys 方案）、
 #         启动→窗口可见 / 启动→首批项目就绪（解析毫秒级启动诊断日志）。
-# 注意：会先停止正在运行的 LanFlow 实例（单实例互斥体冲突）；结束后不自动重启。
+# 注意：会先停止正在运行的 FlickD 实例（单实例互斥体冲突）；结束后不自动重启。
 #       启动分段指标需要被测版本 ≥ v1.5.4（毫秒时间戳日志），旧版本显示"无数据"。
 
 param(
@@ -17,7 +17,7 @@ $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName System.Windows.Forms
-Add-Type -Namespace LanFlow.Perf -Name Win32 -MemberDefinition @'
+Add-Type -Namespace FlickD.Perf -Name Win32 -MemberDefinition @'
 [DllImport("user32.dll")] public static extern bool PostMessage(System.IntPtr hWnd, uint Msg, System.IntPtr wParam, System.IntPtr lParam);
 [DllImport("user32.dll")] public static extern bool ShowWindow(System.IntPtr hWnd, int nCmdShow);
 [DllImport("user32.dll")] public static extern bool IsWindowVisible(System.IntPtr hWnd);
@@ -26,9 +26,9 @@ Add-Type -Namespace LanFlow.Perf -Name Win32 -MemberDefinition @'
 if (-not (Test-Path $ExePath)) { throw "未找到 $ExePath" }
 $resolved = (Resolve-Path $ExePath).Path
 
-function Stop-LanFlowInstances {
+function Stop-FlickDInstances {
     foreach ($attempt in 1..5) {
-        $procs = @(Get-Process LanFlow -ErrorAction SilentlyContinue)
+        $procs = @(Get-Process FlickD -ErrorAction SilentlyContinue)
         if ($procs.Count -eq 0) { return }
         foreach ($p in $procs) {
             try {
@@ -40,7 +40,7 @@ function Stop-LanFlowInstances {
         }
         Start-Sleep -Milliseconds 800
     }
-    Get-Process LanFlow -ErrorAction SilentlyContinue | Wait-Process -Timeout 10 -ErrorAction SilentlyContinue
+    Get-Process FlickD -ErrorAction SilentlyContinue | Wait-Process -Timeout 10 -ErrorAction SilentlyContinue
 }
 
 function Wait-MainWindowHandle([System.Diagnostics.Process] $proc, [int] $timeoutMs = 30000) {
@@ -70,7 +70,7 @@ function Get-GroupItems($window) {
 
 function Get-StartupLogMetrics([long] $offset) {
     # 从本次启动新增的 config-diagnostics.log 内容解析阶段时间戳（依赖 v1.5.4 起的毫秒时间戳）。
-    $logPath = Join-Path $env:LOCALAPPDATA 'LanFlow\config-diagnostics.log'
+    $logPath = Join-Path $env:LOCALAPPDATA 'FlickD\config-diagnostics.log'
     if (-not (Test-Path $logPath)) { return $null }
     $begin = $null; $shown = $null; $firstRealized = $null
     try {
@@ -101,11 +101,11 @@ $results = [System.Collections.Generic.List[object]]::new()
 try {
 for ($run = 1; $run -le $Runs; $run++) {
     Write-Host "`n=== 第 $run/$Runs 次冷启动 ==="
-    Stop-LanFlowInstances
+    Stop-FlickDInstances
     Start-Sleep -Milliseconds 500
 
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
-    $diagLog = Join-Path $env:LOCALAPPDATA 'LanFlow\config-diagnostics.log'
+    $diagLog = Join-Path $env:LOCALAPPDATA 'FlickD\config-diagnostics.log'
     $logOffset = if (Test-Path $diagLog) { (Get-Item $diagLog).Length } else { 0 }
     $proc = Start-Process -FilePath $resolved -PassThru
     $startupMs = Wait-MainWindowHandle $proc
@@ -155,16 +155,16 @@ for ($run = 1; $run -le $Runs; $run++) {
     $hotkeyMs = -1
     try {
         if ($mainHwnd -ne [IntPtr]::Zero) {
-            [LanFlow.Perf.Win32]::ShowWindow($mainHwnd, 0) | Out-Null   # SW_HIDE，模拟托盘驻留状态
+            [FlickD.Perf.Win32]::ShowWindow($mainHwnd, 0) | Out-Null   # SW_HIDE，模拟托盘驻留状态
             Start-Sleep -Milliseconds 600
-            if (-not [LanFlow.Perf.Win32]::IsWindowVisible($mainHwnd)) {
+            if (-not [FlickD.Perf.Win32]::IsWindowVisible($mainHwnd)) {
                 $sw2 = [System.Diagnostics.Stopwatch]::StartNew()
-                [LanFlow.Perf.Win32]::PostMessage($mainHwnd, 0x0312, [IntPtr]1, [IntPtr]0) | Out-Null
+                [FlickD.Perf.Win32]::PostMessage($mainHwnd, 0x0312, [IntPtr]1, [IntPtr]0) | Out-Null
                 while ($sw2.ElapsedMilliseconds -lt 3000) {
-                    if ([LanFlow.Perf.Win32]::IsWindowVisible($mainHwnd)) { break }
+                    if ([FlickD.Perf.Win32]::IsWindowVisible($mainHwnd)) { break }
                     Start-Sleep -Milliseconds 5
                 }
-                if ([LanFlow.Perf.Win32]::IsWindowVisible($mainHwnd)) { $hotkeyMs = $sw2.ElapsedMilliseconds }
+                if ([FlickD.Perf.Win32]::IsWindowVisible($mainHwnd)) { $hotkeyMs = $sw2.ElapsedMilliseconds }
             } else {
                 Write-Host "隐藏主窗口失败，跳过热键测量"
             }
@@ -190,11 +190,11 @@ for ($run = 1; $run -le $Runs; $run++) {
         FirstRealizedMs     = $logMetrics.FirstRealizedMs
     })
 
-    Stop-LanFlowInstances
+    Stop-FlickDInstances
 }
 
 } finally {
-    Stop-LanFlowInstances
+    Stop-FlickDInstances
     Write-Host "`n=== 汇总 ==="
 
     function Get-MedianOf($values) {

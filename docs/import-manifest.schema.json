@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/ZergZFZ/LanFlow/main/docs/import-manifest.schema.json",
-  "title": "LanFlow Import Manifest v1.0",
-  "description": "LanFlow 批量导入清单 v1.0。清单仅描述待导入的分组和启动项目，不包含 LanFlow 内部配置字段。",
+  "title": "FlickD Import Manifest v1.0",
+  "description": "FlickD 批量导入清单 v1.0。清单仅描述待导入的分组和启动项目，不包含 FlickD 内部配置字段。",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -43,7 +43,7 @@
           "minLength": 1,
           "maxLength": 80,
           "pattern": "\\S",
-          "description": "分组名称；LanFlow 会去除首尾空白，处理后不得为空，且不得超过 80 个字符。"
+          "description": "分组名称；FlickD 会去除首尾空白，处理后不得为空，且不得超过 80 个字符。"
         },
         "items": {
           "type": "array",
@@ -68,12 +68,12 @@
           "minLength": 1,
           "maxLength": 160,
           "pattern": "\\S",
-          "description": "启动项目显示名称；LanFlow 会去除首尾空白，处理后不得为空，且不得超过 160 个字符。"
+          "description": "启动项目显示名称；FlickD 会去除首尾空白，处理后不得为空，且不得超过 160 个字符。"
         },
         "path": {
           "type": "string",
           "minLength": 1,
-          "description": "待启动的文件、目录或 .lnk 路径。Schema 仅要求非空；Windows 完整路径、规范化、存在性和可访问性由 LanFlow Core 校验。"
+          "description": "待启动的文件、目录或 .lnk 路径。Schema 仅要求非空；Windows 完整路径、规范化、存在性和可访问性由 FlickD Core 校验。"
         }
       }
     }

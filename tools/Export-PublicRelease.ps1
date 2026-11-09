@@ -37,21 +37,21 @@ $allowList = @(
     '.gitignore',
     'LICENSE',
     'README.md',
-    'native/LanFlow.Core/LanFlow.Core.csproj',
-    'native/LanFlow.Core/Models',
-    'native/LanFlow.Core/Services',
-    'native/LanFlow.Core/ViewModels',
-    'native/LanFlow.Desktop/App.xaml',
-    'native/LanFlow.Desktop/App.xaml.cs',
-    'native/LanFlow.Desktop/AssemblyInfo.cs',
-    'native/LanFlow.Desktop/GlobalUsings.cs',
-    'native/LanFlow.Desktop/LanFlow.Desktop.csproj',
-    'native/LanFlow.Desktop/MainWindow.xaml',
-    'native/LanFlow.Desktop/MainWindow.xaml.cs',
-    'native/LanFlow.Desktop/Assets',
-    'native/LanFlow.Desktop/Properties/PublishProfiles',
-    'native/LanFlow.Desktop/Services',
-    'native/LanFlow.Desktop/Views'
+    'native/FlickD.Core/FlickD.Core.csproj',
+    'native/FlickD.Core/Models',
+    'native/FlickD.Core/Services',
+    'native/FlickD.Core/ViewModels',
+    'native/FlickD.Desktop/App.xaml',
+    'native/FlickD.Desktop/App.xaml.cs',
+    'native/FlickD.Desktop/AssemblyInfo.cs',
+    'native/FlickD.Desktop/GlobalUsings.cs',
+    'native/FlickD.Desktop/FlickD.Desktop.csproj',
+    'native/FlickD.Desktop/MainWindow.xaml',
+    'native/FlickD.Desktop/MainWindow.xaml.cs',
+    'native/FlickD.Desktop/Assets',
+    'native/FlickD.Desktop/Properties/PublishProfiles',
+    'native/FlickD.Desktop/Services',
+    'native/FlickD.Desktop/Views'
 )
 
 foreach ($relativePath in $allowList) {
@@ -70,10 +70,10 @@ $approvedPathPatterns = @(
     '^\.gitignore$',
     '^LICENSE$',
     '^README\.md$',
-    '^native/LanFlow\.Core/LanFlow\.Core\.csproj$',
-    '^native/LanFlow\.Core/(Models|Services|ViewModels)/.+$',
-    '^native/LanFlow\.Desktop/(App\.xaml|App\.xaml\.cs|AssemblyInfo\.cs|GlobalUsings\.cs|LanFlow\.Desktop\.csproj|MainWindow\.xaml|MainWindow\.xaml\.cs)$',
-    '^native/LanFlow\.Desktop/(Assets|Properties/PublishProfiles|Services|Views)/.+$'
+    '^native/FlickD\.Core/FlickD\.Core\.csproj$',
+    '^native/FlickD\.Core/(Models|Services|ViewModels)/.+$',
+    '^native/FlickD\.Desktop/(App\.xaml|App\.xaml\.cs|AssemblyInfo\.cs|GlobalUsings\.cs|FlickD\.Desktop\.csproj|MainWindow\.xaml|MainWindow\.xaml\.cs)$',
+    '^native/FlickD\.Desktop/(Assets|Properties/PublishProfiles|Services|Views)/.+$'
 )
 
 $exportedFiles = Get-ChildItem -LiteralPath $outputRoot -File -Recurse -Force

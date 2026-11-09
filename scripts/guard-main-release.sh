@@ -21,7 +21,7 @@ git grep -nE '^(<<<<<<<|=======|>>>>>>>)' -- . >/dev/null 2>&1 \
 echo "== [2/4] 检查版本号一致性 =="
 norm() { printf '%s' "$1" | sed -E 's/(\.0)+$//'; }
 ok=1
-for proj in native/LanFlow.Desktop/LanFlow.Desktop.csproj \
+for proj in native/FlickD.Desktop/FlickD.Desktop.csproj \
             linux/native/LanFlow.Linux/LanFlow.Linux.csproj; do
   [ -f "$proj" ] || continue
   v="$(sed -n 's:.*<Version>\([0-9.]*\)</Version>.*:\1:p' "$proj" | head -1)"

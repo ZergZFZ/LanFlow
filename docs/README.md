@@ -1,4 +1,4 @@
-# LanFlow 文档索引（windows 分支 / 主工作区）
+# FlickD 文档索引（windows 分支 / 主工作区）
 
 > 查看项目情况：先读本索引 + [ARCHITECTURE.md](ARCHITECTURE.md) + [DEVELOPMENT-ROADMAP.md](DEVELOPMENT-ROADMAP.md)。
 > 归档文档不参与日常阅读。Linux 主线请查看 linux 分支文档（.build/linux-wt/docs/README.md）。
