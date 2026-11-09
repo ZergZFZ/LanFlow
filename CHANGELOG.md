@@ -4,7 +4,7 @@
 > 版本号与 `native/FlickD.Desktop/FlickD.Desktop.csproj` 中的 `Version` / `AssemblyVersion` / `FileVersion` 保持一致。
 > 发布闸门与资产命名规范见 `docs/ARCHITECTURE.md` §6。
 
-## [Unreleased]
+## [2.0.1] - 2026-11-09
 
 ### 工程：发布闸门与规范一致性
 
@@ -13,6 +13,7 @@
 - 规范与文档基线统一：`AGENTS.md` 去掉写死的版本自检与失效工程路径，补齐测试命令与 CI 闸门；`CONTRIBUTING.md` 按 AGENTS.md 重写分支流程；`ARCHITECTURE.md`、`DEVELOPMENT-ROADMAP.md`、`docs/README.md`、`Launcher-PRD.md` 头部同步到 2.0.0 并修正失效链接。
 - `tools/Build-OcrBundle.ps1` 的 `AppVersion` 默认从 `FlickD.Desktop.csproj` 读取（不再硬编码 1.6.0），`bundleId` 改为可参数化且保持历史值以兼容已发布组件；`MinAppVersion=1.6.0` 为 `IOcrEngine` 契约下限，保持不变。
 - 静态复核 2.0.0 三条发布资产：full / lite / ocr 的 SHA-256 与 sidecar 一致，full 根目录含兼容壳与内嵌 `ocr/`，OCR manifest 12 个文件的哈希、大小与 `contentHash` 全部通过；结论记入 `docs/performance/R4-baseline.md` §8。
+- 发布整理：文档基线改为以 `CHANGELOG.md` 最新条目与 csproj `Version` 为准的动态引用，`docs/ARCHITECTURE.md` §6.3 打包示例改为从 csproj 读取版本号，避免每次发布都要手工改文档。
 
 ### 重构：设置保存链路不再依赖人工字段清单
 

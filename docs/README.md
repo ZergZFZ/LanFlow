@@ -1,7 +1,7 @@
 # FlickD 文档索引（windows 分支 / 主工作区）
 
 > 查看项目情况：先读本索引 + [ARCHITECTURE.md](ARCHITECTURE.md) + [DEVELOPMENT-ROADMAP.md](DEVELOPMENT-ROADMAP.md) + [CHANGELOG.md](../CHANGELOG.md)。
-> 当前产品基线为 **v2.0.0（FlickD）**；根目录 `Launcher-PRD.md` 是 v1.3.7 的历史产品基线，仅供需求准入参考，不作为当前功能验收依据。
+> 当前产品版本以 `CHANGELOG.md` 最新条目与 `native/FlickD.Desktop/FlickD.Desktop.csproj` 的 `Version` 为准；根目录 `Launcher-PRD.md` 是 v1.3.7 的历史产品基线，仅供需求准入参考，不作为当前功能验收依据。
 > 归档文档不参与日常阅读。Linux 主线请切到 `linux` 分支查看其 `docs/README.md`（或用 `git show linux:docs/README.md`），不要依赖本地 `.build/linux-wt` 等临时工作树。
 
 | 文档 | 状态 | 说明 |

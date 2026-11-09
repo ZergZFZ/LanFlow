@@ -1,6 +1,6 @@
 # FlickD 架构与发布基线
 
-- 基线版本：v2.0.0（2026-11-09 起由 LanFlow 更名为 FlickD）
+- 基线版本：以 `CHANGELOG.md` 最新条目为准（2026-11-09 的 2.0.0 起由 LanFlow 更名为 FlickD）
 - 正式客户端：`native/FlickD.Desktop`
 - 技术栈：WPF + .NET 8（`net8.0-windows`）
 - 支持平台：Windows 10/11 x64
@@ -127,7 +127,9 @@ full 虽启用了 `PublishSingleFile`，但自包含 WPF 发布仍会带有原�
 在仓库根目录执行；发布版本号必须先与 `FlickD.Desktop.csproj` 中的 `Version`、`AssemblyVersion` 和 `FileVersion` 一致。
 
 ```powershell
-$version = '2.0.0'
+# 从 csproj 读取，避免打包命令里的版本号过期
+[xml]$projXml = Get-Content 'native/FlickD.Desktop/FlickD.Desktop.csproj' -Raw
+$version = $projXml.SelectNodes('//Version')[0].InnerText.Trim()
 $project = 'native/FlickD.Desktop/FlickD.Desktop.csproj'
 $dist = "artifacts/$version"
 
