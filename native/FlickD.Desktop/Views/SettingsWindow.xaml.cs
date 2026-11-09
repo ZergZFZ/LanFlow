@@ -948,7 +948,7 @@ public partial class SettingsWindow : Window
 
             UpdateStatusText.Text = $"发现新版本 v{info.LatestVersion}，正在下载并更新…";
             var progress = new Progress<double>(value => UpdateStatusText.Text = $"正在下载更新… {value:P0}");
-            await _updateService.DownloadAndApplyAsync(info.DownloadUrl, info.AssetName, info.AssetSize, progress, CancellationToken.None);
+            await _updateService.DownloadAndApplyAsync(info.DownloadUrl, info.AssetName, info.AssetSize, info.AssetSha256, progress, CancellationToken.None);
         }
         catch (Exception ex)
         {

@@ -107,9 +107,9 @@ GitHub 历史发布从 v1.3.4 起稳定使用以下资产约定；应用内更�
 | lite | `win-x64-lite.pubxml`，`SelfContained=false` | `FlickD-{version}-lite.exe` | 单文件直接运行 | .NET 8 Windows Desktop Runtime x64 |
 | ocr | `tools/Build-OcrBundle.ps1` | `FlickD-{version}-ocr.zip` | 应用内下载或"从文件导入" | 可选本地离线取字组件，默认不安装 |
 
-> OCR 组件（`-ocr.zip`）是按需可选资产，主程序启动阶段不检查、不加载它；用户在「设置 → 扩展与 OCR」手动开启后才下载或导入。full 包会把解压态的 `ocr/` 目录内嵌到 zip 根目录下（`AppContext.BaseDirectory\ocr`），lite 不含 OCR。
+> OCR 组件（`-ocr.zip`）是按需可选资产，主程序启动阶段不检查、不加载它；用户在「设置 → 扩展与 OCR」手动开启后才下载或导入。**2.1.0 起 full 包不再内嵌 `ocr/` 目录**，两条通道都通过应用内下载或本地文件导入获得组件；`OcrBundleLocator` 保留对应用目录 `ocr/` 的查找，仅为让 2.0.x 老安装升级后不丢失其目录中已内置的组件。
 
-**2.0.0 过渡期兼容壳**：1.6.x 更新器在覆盖后只识别 `LanFlow.exe` 并据此判断启动成功，因此 2.0.0 的 **full 包根目录必须额外包含 `LanFlow.exe` 兼容壳**（`native/FlickD.CompatShell`，自包含裁剪单文件，约 10 MB）。壳只负责启动同目录 `FlickD.exe`、透传参数，并在子进程存活期间保持自身存活。lite 包无需壳：旧更新器会把下载的单文件自行改名为 `LanFlow.exe` 覆盖，落地后即为新版本。兼容壳计划在 2.1.0 移除。
+**兼容壳已移除**：2.0.0 / 2.0.1 的 full 包为让 1.6.x 更新器完成一次在线升级，曾附带 `LanFlow.exe` 兼容壳（`native/FlickD.CompatShell`，约 10 MB）。该过渡期已于 2.1.0 结束：工程删除，发布包不再包含 `LanFlow.exe`，更新器只识别 `FlickD.exe`。旧安装目录里残留的 `LanFlow.exe` 不会被更新器删除，可手动清理。
 
 历史版本中 lite 曾使用 `-lite.zip`，仅为旧版本更新兼容保留；**新版本禁止继续发布 lite ZIP**。full 曾出现 `-full-win-x64.zip`，**新版本统一使用 `-full.zip`**。
 
@@ -127,30 +127,29 @@ full 虽启用了 `PublishSingleFile`，但自包含 WPF 发布仍会带有原�
 在仓库根目录执行；发布版本号必须先与 `FlickD.Desktop.csproj` 中的 `Version`、`AssemblyVersion` 和 `FileVersion` 一致。
 
 ```powershell
-# 从 csproj 读取，避免打包命令里的版本号过期
-[xml]$projXml = Get-Content 'native/FlickD.Desktop/FlickD.Desktop.csproj' -Raw
-$version = $projXml.SelectNodes('//Version')[0].InnerText.Trim()
-$project = 'native/FlickD.Desktop/FlickD.Desktop.csproj'
-$dist = "artifacts/$version"
+# 一键打包：脚本自读 csproj 版本，不需要传版本号
+powershell -ExecutionPolicy Bypass -File tools/Build-ReleaseAssets.ps1
 
-# full：自包含发布目录，再压缩目录内部文件
-$fullDir = "$dist/full"
-dotnet publish $project -c Release -p:PublishProfile=win-x64 -o $fullDir
-# 2.0.0 过渡期：在 full 根目录放入 LanFlow.exe 兼容壳，供 1.6.x 更新器校验与启动
-dotnet publish native/FlickD.CompatShell/FlickD.CompatShell.csproj -c Release -o .build/compat-shell
-Copy-Item .build/compat-shell/LanFlow.exe "$fullDir/LanFlow.exe" -Force
-Compress-Archive -Path "$fullDir/*" -DestinationPath "$dist/FlickD-$version-full.zip" -Force
+# 复核当前待发布版本的三条资产（版本必须与 csproj / CHANGELOG 一致）
+powershell -ExecutionPolicy Bypass -File tools/Verify-ReleaseAssets.ps1 -Version <version>
 
-# lite：框架依赖的单文件可执行程序（不含兼容壳）
-dotnet publish $project -c Release -p:PublishProfile=win-x64-lite -o "$dist/lite"
-Copy-Item "$dist/lite/FlickD.exe" "$dist/FlickD-$version-lite.exe" -Force
-
-# ocr：可选组件包（运行时 + PP-OCRv5 模型 + 字典 + VC++ 运行库 + manifest 哈希）
-# 素材默认取 .build/ocr-assets，产出 artifacts/ocr/FlickD-$version-ocr.zip 与 .sha256
-powershell -ExecutionPolicy Bypass -File tools/Build-OcrBundle.ps1 -AppVersion $version
-
-# full 内嵌 ocr：publish 后解压 ocr.zip，把得到的 ocr/ 目录复制进 full 根目录，再执行上面的 Compress-Archive
+# CI / 提交前：只校验 publish 目录形状，无需 OCR 素材与网络
+powershell -ExecutionPolicy Bypass -File tools/Verify-ReleaseAssets.ps1 -PublishShape `
+    -FullDir <full 发布目录> -LiteDir <lite 发布目录>
 ```
+
+> `-Version` 会同时校验 csproj `Version` 与 `CHANGELOG.md` 最新正式条目，因此**只适用于当前待发布版本**；历史版本资产形状不同（2.0.x 含兼容壳、内嵌 `ocr/` 与 PDB），不要用本脚本复核，其静态复核结论见 `docs/performance/R4-baseline.md` §8。若目标版本的三条资产已存在（通常意味着已发布），打包脚本会拒绝覆盖，确需重打包须显式加 `-Force`。
+
+`Build-ReleaseAssets.ps1` 依次执行：
+
+1. 从 `FlickD.Desktop.csproj` 读 `<Version>`，前置核对 `CHANGELOG.md` 最新正式条目并拒绝覆盖已存在资产；
+2. `dotnet publish -p:PublishProfile=win-x64`（full）与 `win-x64-lite`（lite）；
+3. 删除发布目录中的 `*.pdb`，确认无 `LanFlow.exe` 与 `ocr/`（调用 `-PublishShape` 自检）；
+4. `Compress-Archive` 整目录为 `-full.zip`，复制单文件为 `-lite.exe`；
+5. 调用 `Build-OcrBundle.ps1` 生成 `-ocr.zip`（不传 `-AppVersion`，脚本自读 csproj）；
+6. 为三条资产生成 `<name>.sha256` sidecar，最后执行 `Verify-ReleaseAssets.ps1 -Version` 全量自检。
+
+两个脚本的 PowerShell 语法与 `-PublishShape` 正反例由 CI 的 `release-scripts` job 强制执行，脚本改动必须通过该 job。
 
 发布物只上传：
 
@@ -168,19 +167,24 @@ FlickD-{version}-ocr.zip
 
 1. `dotnet build native/FlickD.Desktop/FlickD.Desktop.csproj -c Release`；
 2. 运行 `native/FlickD.Core.Tests` 与 `native/FlickD.Desktop.Tests` 两个 xunit 测试工程（CI 的 `build-test` job 使用同一口径，必须全绿）；
-3. 检查 full ZIP 根目录包含 `FlickD.exe`、`LanFlow.exe` 兼容壳，并保留完整发布依赖；
-4. 检查 lite 资产是一个可执行的 `FlickD-{version}-lite.exe`，且不含兼容壳；
+3. 用 `Verify-ReleaseAssets.ps1 -Version <version>` 复核三条资产：full ZIP 根目录直接含 `FlickD.exe` 与完整发布依赖，且**不含** `LanFlow.exe`、`*.pdb` 与 `ocr/`；三条 SHA-256 与 sidecar 一致；lite 是合法 PE 且 `FileVersion` 与版本一致；
+4. 确认 GitHub Release 三条资产均带 `digest`：更新器 2.1.0 起采用 fail-closed 校验，缺 digest 会拒绝覆盖安装目录。可用 `gh api repos/ZergZFZ/LanFlow/releases/latest --jq '.assets[] | .name + " | " + (.digest // "NONE")'` 检查；
 5. 用全新解压目录启动 full，并验证托盘、热键、添加/启动项目、设置与退出；
 6. 在具备 .NET 8 Windows Desktop Runtime x64 的环境启动 lite，并验证相同核心流程；
-7. 在两条通道中检查更新，确认 full 只匹配 `-full.zip`、lite 优先匹配 `-lite.exe`；
+7. 在两条通道中检查更新，确认 full 只匹配 `-full.zip`、lite 优先匹配 `-lite.exe`，且下载校验失败时不会覆盖安装目录；
 8. 确认 GitHub Tag、Release 标题、资产文件名和程序集版本完全一致；
-9. 确认 `-ocr.zip` 内 `manifest.json` 的路径均为 `runtime/`、`models/`、`vcredist/` 前缀，且 12 个文件的 SHA-256 校验通过（可用 `OcrManifestVerifier` 或解压后逐文件比对）。
+9. 确认 `-ocr.zip` 内 `manifest.json` 的路径均为 `runtime/`、`models/`、`vcredist/` 前缀，且 12 个文件的 SHA-256 与 `contentHash` 校验通过（可用 `OcrManifestVerifier` 或解压后逐文件比对）。
+
+> 第 5–7 项为实机 GUI 验证，无人值守环境无法执行；2.0.1 发布时即未完成，需在本机补验。
 
 ### 6.5 更新兼容规则
 
 `UpdateService` 以运行目录中的 WPF 原生依赖识别 full 通道；若无法识别，则读取 `channel.txt`，最终默认 lite。更新服务下载的 full ZIP 会整体覆盖安装目录，lite EXE 会被统一命名为 `FlickD.exe` 后覆盖。
 
-主程序名采用双名识别：优先 `FlickD.exe`，缺失时回退 `LanFlow.exe`（2.0.0 兼容壳，2.1.0 移除）。覆盖脚本同样在覆盖后按实际存在的 exe 选择启动目标，避免旧更新器回滚。
+**2.1.0 起只认单一主程序名 `FlickD.exe`**，不再回退 `LanFlow.exe`；旧安装目录中残留的兼容壳不参与更新，可手动清理。
+
+- **下载完整性**：使用 GitHub Release API 的 `digest`（`sha256:<64 hex>`）边下载边计算 SHA-256，并比对 `size`。摘要缺失、格式非法、大小不符或哈希不符一律取消更新、不覆盖安装目录，提示用户手动下载；因此发布前必须确认资产带 `digest`（§6.4 第 4 项）。
+- **覆盖与回滚**：覆盖脚本先把整个安装目录 `xcopy` 到临时备份；`xcopy` 部分失败或新进程 5 秒内未启动时整体回滚；回滚本身失败则保留备份目录并在 `%TEMP%\FlickDUpdateFailure.txt` 写出提示，不会删除备份。成功后清理临时下载目录，避免 full 包（约 90 MB）残留在 `%TEMP%`。
 
 因此不得更改上述资产后缀、不得把 full 发布为单个 EXE、也不得将 full ZIP 包装成额外顶层目录，否则应用内更新可能无法正确选择或覆盖文件。
 

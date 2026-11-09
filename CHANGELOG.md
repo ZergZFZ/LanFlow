@@ -4,6 +4,32 @@
 > 版本号与 `native/FlickD.Desktop/FlickD.Desktop.csproj` 中的 `Version` / `AssemblyVersion` / `FileVersion` 保持一致。
 > 发布闸门与资产命名规范见 `docs/ARCHITECTURE.md` §6。
 
+## [Unreleased]
+
+> 本段为 2.1.0 收敛与可靠性改进，尚未发布；转正时同步 bump `FlickD.Desktop.csproj` 三个版本字段。
+
+### 可靠性：应用内更新器加固
+
+- `UpdateService` 使用 GitHub Release API 返回的 `digest`（`sha256:<64 hex>`）做下载完整性校验：边下载边计算 SHA-256，并比对 `size`；摘要缺失、格式非法、大小不符或哈希不符一律取消更新、不覆盖安装目录，提示手动下载。资产选择、摘要解析、完整性校验、大小校验与覆盖脚本生成均抽为纯函数。
+- 覆盖脚本改为**覆盖前完整备份安装目录**：`xcopy` 部分失败或新进程 5 秒内未启动时整体回滚；回滚本身失败则保留备份并写提示，不删除备份。成功后清理临时下载目录，避免 full 包（约 90 MB）残留在 `%TEMP%`。
+- 新增 `native/FlickD.Desktop.Tests/UpdateServiceTests.cs`（18 个用例），覆盖 full/lite/旧 `-lite.zip` 资产选择、digest 归一化、哈希与大小校验、payload 主程序校验、备份与回滚脚本契约；Desktop.Tests 由 61 增至 79。
+
+### 收敛：移除兼容壳与旧名回退
+
+- 删除 `native/FlickD.CompatShell` 工程（`LanFlow.exe` 兼容壳，约 10 MB）。2.0.0 / 2.0.1 为让 1.6.x 更新器完成一次在线升级而保留的过渡期结束；仓库中无 sln / csproj 引用。
+- `UpdateService` 不再回退 `LanFlow.exe`：`IsValidPayload` 与覆盖脚本只认 `FlickD.exe`。旧安装目录残留的兼容壳不参与更新，可手动删除；`LegacyShortcutAdvisor` 的旧快捷方式提示保留，2.1.0 后这些固定项确实会失效。
+
+### 收敛：OCR 从 full 包移出，正式纳入能力清单
+
+- `README.md`「它能做什么」补入截图标注与贴图、离线取字（OCR）、JSON 导入清单三项已有能力，并说明 2.1.0 起 OCR 需在「设置 → 扩展与 OCR」一键下载或导入 `-ocr.zip`。
+- full 包不再内嵌 `ocr/`；`OcrBundleLocator` 保留对老安装目录 `ocr/` 的查找，仅为让 2.0.x 升级后不丢失已内置组件，新安装一律使用用户目录。主程序启动阶段仍不触碰 OCR 资源。
+
+### 工程：发布清单自动化与 PDB 排除
+
+- 新增 `tools/Build-ReleaseAssets.ps1`：从 csproj 读版本 → publish full/lite → 排除 `*.pdb` / `LanFlow.exe` / `ocr/` → 压缩与复制 → 生成 OCR bundle → 生成三条 `<name>.sha256` → 全量自检；已存在资产默认拒绝覆盖，需 `-Force`。
+- 新增 `tools/Verify-ReleaseAssets.ps1`：`-PublishShape` 供 CI 与打包前置校验 publish 目录形状（无 PDB / 无兼容壳 / 无内嵌 OCR、含 WPF 原生依赖）；`-Version` 校验版本一致性、三条资产与 sidecar、full ZIP 根目录、OCR manifest 逐文件哈希与 `contentHash`、lite PE 与 `FileVersion`。
+- CI 新增 `release-scripts` job：两个脚本的 PowerShell Parser 语法检查 + `-PublishShape` 正例与反例（含 PDB 应失败）。`docs/ARCHITECTURE.md` §6.3–§6.5 同步为脚本化打包、单一主程序名与 digest 强校验口径。
+
 ## [2.0.1] - 2026-11-09
 
 ### 工程：发布闸门与规范一致性
