@@ -232,7 +232,7 @@
                     </StackPanel>
 
                     <Border Height="1" Background="#1EFFFFFF" Margin="4,4,4,0" />
-                    <TextBlock x:Name="ToolHint" Text="Enter 复制　P 贴图　T 取字　Esc 返回　Ctrl+Z 撤销　Ctrl+Y 重做　X 线宽　C 颜色"
+                    <TextBlock x:Name="ToolHint" Text="Enter 复制　P 贴图　T 取字　右键/Esc 返回　Ctrl+Z 撤销　Ctrl+Y 重做　X 线宽　C 颜色"
                                FontSize="10.5" Foreground="#76FFFFFF" Margin="4,3,4,1"
                                TextTrimming="CharacterEllipsis" />
                 </StackPanel>
@@ -261,7 +261,7 @@
         <!-- 框选阶段提示条 -->
         <Border x:Name="HintBar" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,16,0,0"
                 Background="#B4000000" CornerRadius="6" Padding="16,6" IsHitTestVisible="False">
-            <TextBlock x:Name="HintText" Text="拖动框选截图区域　Esc 取消" Foreground="White" FontSize="13" />
+            <TextBlock x:Name="HintText" Text="拖动框选截图区域　右键/Esc 取消" Foreground="White" FontSize="13" />
         </Border>
     </Grid>
 </Window>

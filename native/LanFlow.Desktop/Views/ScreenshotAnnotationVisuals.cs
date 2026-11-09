@@ -7,12 +7,34 @@ using LanFlow.Desktop.Models;
 
 namespace LanFlow.Desktop.Views;
 
-/// <summary>标注矢量显示层：直接读取模型并在 OnRender 中绘制，无中间 UI 元素。</summary>
+/// <summary>
+/// 标注矢量显示层：直接读取模型并在 OnRender 中绘制，无中间 UI 元素。
+/// Shapes/Draft 为依赖属性：setter 变更即触发 InvalidateVisual，撤销/重做等
+/// 纯数据变化不再依赖调用方记得手动请求重绘（1.5.4 起撤销偶发失效的根因）。
+/// </summary>
 public sealed class AnnotationVisualHost : FrameworkElement
 {
-    public IReadOnlyList<AnnotationShape> Shapes { get; set; } = Array.Empty<AnnotationShape>();
+    public static readonly DependencyProperty ShapesProperty = DependencyProperty.Register(
+        nameof(Shapes), typeof(IReadOnlyList<AnnotationShape>), typeof(AnnotationVisualHost),
+        new FrameworkPropertyMetadata(Array.Empty<AnnotationShape>(),
+            FrameworkPropertyMetadataOptions.AffectsRender));
 
-    public AnnotationShape? Draft { get; set; }
+    public static readonly DependencyProperty DraftProperty = DependencyProperty.Register(
+        nameof(Draft), typeof(AnnotationShape), typeof(AnnotationVisualHost),
+        new FrameworkPropertyMetadata(null,
+            FrameworkPropertyMetadataOptions.AffectsRender));
+
+    public IReadOnlyList<AnnotationShape> Shapes
+    {
+        get => (IReadOnlyList<AnnotationShape>)GetValue(ShapesProperty);
+        set => SetValue(ShapesProperty, value);
+    }
+
+    public AnnotationShape? Draft
+    {
+        get => (AnnotationShape?)GetValue(DraftProperty);
+        set => SetValue(DraftProperty, value);
+    }
 
     protected override void OnRender(DrawingContext drawingContext)
     {

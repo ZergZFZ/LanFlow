@@ -101,6 +101,7 @@ public partial class ScreenshotCropWindow : Window
         MouseLeftButtonDown += OnRootMouseDown;
         MouseMove += OnRootMouseMove;
         MouseLeftButtonUp += OnRootMouseUp;
+        PreviewMouseRightButtonDown += OnPreviewRightButtonDown;
 
         UpdateColorSwatch();
         SelectTool(AnnotationTool.Rect);
@@ -1205,6 +1206,57 @@ public partial class ScreenshotCropWindow : Window
         new ToastWindow(message, anchor).Show();
     }
 
+    // ---------- 取消语义（Esc / 右键共用） ----------
+
+    /// <summary>
+    /// 统一取消手势，与 Esc 在各阶段的行为完全一致：
+    /// 文字输入中=取消文字；标注态=返回框选态；选择态=关闭截图。
+    /// </summary>
+    private void HandleCancelGesture(bool cancelTextInput)
+    {
+        // 绘制/拖拽进行中：先终止当前手势，再按阶段决策。
+        if (_isDrawing || _resizeHandle is not null)
+        {
+            _isDrawing = false;
+            _resizeHandle = null;
+            _draft = null;
+            AnnotationHost.Draft = null;
+            ReleaseMouseCapture();
+            AnnotationHost.InvalidateVisual();
+        }
+
+        var action = ScreenshotCancelPolicy.Decide(
+            hasTextEditor: _textEditor is not null,
+            isAnnotating: _phase == Phase.Annotate);
+
+        switch (action)
+        {
+            case CancelAction.CancelText:
+                if (cancelTextInput)
+                {
+                    CancelText();
+                    Focus();
+                }
+                return;
+            case CancelAction.ExitAnnotate:
+                ExitAnnotateToSelect();
+                return;
+            default:
+                Close();
+                return;
+        }
+    }
+
+    /// <summary>
+    /// 右键=取消（等同 Esc）：选择态关窗、标注态返回框选、文字输入中取消文字。
+    /// 全窗接管，避免叠加系统文本菜单而分散交互。
+    /// </summary>
+    private void OnPreviewRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        HandleCancelGesture(cancelTextInput: true);
+    }
+
     // ---------- 键盘 ----------
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -1217,14 +1269,7 @@ public partial class ScreenshotCropWindow : Window
         if (e.Key == Key.Escape)
         {
             e.Handled = true;
-            if (_phase == Phase.Annotate)
-            {
-                ExitAnnotateToSelect();
-            }
-            else
-            {
-                Close();
-            }
+            HandleCancelGesture(cancelTextInput: false);
             return;
         }
 
