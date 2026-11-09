@@ -9,12 +9,12 @@ namespace LanFlow.Desktop.ViewModels;
 
 public sealed class MainViewModel : INotifyPropertyChanged
 {
-    private readonly ConfigStore _configStore;
+    private readonly IConfigStore _configStore;
     private Group? _selectedGroup;
     private string _searchText = string.Empty;
     private string _statusText = "就绪";
 
-    public MainViewModel(ConfigStore configStore)
+    public MainViewModel(IConfigStore configStore)
     {
         _configStore = configStore;
         Config = _configStore.Load();
@@ -94,35 +94,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public void ApplyAppearance(Settings source, bool persist)
     {
+        // 复制与归一化分离（对齐 Windows 主线 v2.0.1）：CopyAll 反射覆盖所有可写字段，
+        // 新增设置字段自动纳入；Normalize 只负责夹紧、枚举合法性、旧热键迁移与派生值。
+        // 二者都不再依赖人工字段清单，从结构上消除「设置保存后不落盘」。
         var settings = Config.Settings;
-        settings.Theme = source.Theme == "light" ? "light" : "dark";
-        settings.ThemeProfile = source.ThemeProfile;
-        settings.ThemeColors = source.ThemeColors;
-        settings.CustomThemes = source.CustomThemes;
-        settings.Opacity = Math.Clamp(source.Opacity, 0.55, 1.0);
-        settings.LayoutMode = source.LayoutMode == "card" ? "card" : "tile";
-        settings.IconSize = Math.Clamp(source.IconSize, 24, 72);
-        settings.CardWidth = Math.Clamp(source.CardWidth, 48, 320);
-        settings.CardHeight = Math.Clamp(source.CardHeight, 48, 240);
-        settings.CardSize = Math.Clamp(source.CardSize, 76, 160);
-        settings.TextSize = Math.Clamp(source.TextSize, 10, 18);
-        settings.ItemSpacing = Math.Clamp(source.ItemSpacing, 0, 64);
-        settings.RowSpacing = Math.Clamp(source.RowSpacing, 0, 80);
-        settings.ContentPadding = Math.Clamp(source.ContentPadding, 6, 40);
-        settings.ShowShortcutBadge = source.ShowShortcutBadge;
-        settings.ShowFullItemName = source.ShowFullItemName;
-        settings.ShowItemTitle = source.ShowItemTitle;
-        settings.GroupLayout = source.GroupLayout == "top" ? "top" : "left";
-        settings.Hotkey = source.Hotkey;
-        settings.StartWithWindows = source.StartWithWindows;
-        settings.OpenItemsOnSingleClick = source.OpenItemsOnSingleClick;
-        settings.HideOnDeactivate = source.HideOnDeactivate;
-        settings.GroupSwitchMode = source.GroupSwitchMode == "hover" ? "hover" : "click";
-        settings.GroupHoverDelayMs = Math.Clamp(source.GroupHoverDelayMs, 0, 1000);
-        settings.AnimationMode = source.AnimationMode == "off" ? "off" : "on";
-        settings.TransparencyMode = source.TransparencyMode == "wholeWindow" ? "wholeWindow" : "layered";
-        settings.LayeredOpacity = Math.Clamp(source.LayeredOpacity, 0.55, 1.0);
-        settings.WholeWindowOpacity = Math.Clamp(source.WholeWindowOpacity, 0.55, 1.0);
+        SettingsPipeline.CopyAll(source, settings, skipRuntimeOnly: true);
+        SettingsPipeline.Normalize(settings, _configStore.DefaultHotkey);
         OnPropertyChanged(nameof(Settings));
         OnPropertyChanged(nameof(VisibleItems));
         OnPropertyChanged(nameof(InfoText));

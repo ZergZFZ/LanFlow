@@ -82,3 +82,42 @@ dotnet run --project tools/packtool/pack.csproj -- .build/linux-wt/publish/final
 | `native/LanFlow.Linux/MainWindow.axaml.cs` | `EnableHotkey`/自愈、`Restart`、`Quit`、`ApplyMetrics` |
 | `native/LanFlow.Linux/Services/HotkeyService.cs` | X11 全局热键（错误码偏移、抓取变体、单线程模型） |
 | `native/LanFlow.Linux/Views/SettingsWindow.axaml(.cs)` | 设置面板（滑块单行 + 置顶预览 + 2×2 预览） |
+
+---
+
+## 9. v2.0.1 工程契约对齐（2026-11-09，分支 `linux`）
+
+> 目标：以 Windows 主线 v2.0.1 的**工程契约/治理基线**为准做重构，**不**跨分支 merge Windows 代码（AGENTS.md 红线），
+> 也**不**做 UOS 实机无法验证的更名/跳版本。目标平台仍为 `linux-x64` / amd64 / 海光 x86_64 / UOS 20 Pro / Deepin / X11 / glibc ≥ 2.28。
+
+### 9.1 病根
+
+Linux 端 `Settings.Clone()`、`MainViewModel.ApplyAppearance()`、`ConfigStore.Normalize()` 是**三份人工字段清单**，
+恰好复刻了 Windows 1.6.1（漏 `OcrEnabled`）与 1.6.2（漏 `ScreenshotHotkey`）两次「设置保存后不落盘」的病根；
+且 `ConfigStore` 只夹紧了一部分字段，与设置页规则分叉。
+
+### 9.2 改动
+
+- 新增 `native/LanFlow.Core/Models/SettingsPipeline.cs`：`Writable`（反射全可写属性）、`Clone`（深拷贝）、
+  `CopyAll`（浅搬运 + `skipRuntimeOnly`）、`Normalize`（夹紧/枚举/空值兜底/旧热键迁移/派生值）为唯一实现。
+- `Settings.Clone()`、`MainViewModel.ApplyAppearance()`、`ConfigStore.Normalize()` 三处全部收口到该 Pipeline。
+- 新增 `IConfigStore`（含 `DefaultHotkey`），ViewModel 依赖接口，便于用记录型替身做单元测试。
+- 新增 `native/LanFlow.Core.Tests/`（xunit，反射 Theory 随字段自动增长，不写死字段总数）。
+
+### 9.3 与 Windows v2.0.1 的刻意差异
+
+- **保留 Alt+Space → 平台默认热键迁移**：Linux 模型默认热键仍是 `Alt+Space`，X11 窗口管理器普遍占用该组合；
+  因此 `Normalize` 多一个 `defaultHotkey` 入参，且**保存与加载共用同一口径**（避免「保存生效、重启后被悄悄改写」）。
+- **透明度下限保持 0.55**（Windows 为 0.40）：Linux 设置页滑块与渲染路径都以 0.55 为下限。
+- `Opacity` 改为派生字段，跟随 `TransparencyMode` 取 `LayeredOpacity` / `WholeWindowOpacity`（渲染本就只读后两者）。
+- `RuntimeOnlyProperties` 为空数组，仅保留扩展点；Linux 目前没有类似 `LastGroupId` 的运行态字段。
+- 版本仍为 1.4.9，未更名 FlickD，未改包形态。
+
+### 9.4 本地验证
+
+- `dotnet build native/LanFlow.Linux/LanFlow.Linux.csproj -c Release`：0 错误（31 个既有警告，CS0618 / CA1416 / AVLN3001）。
+- `dotnet test native/LanFlow.Core.Tests/LanFlow.Core.Tests.csproj -c Release`：**40/40 通过**。
+- `dotnet publish ... -r linux-x64 --self-contained -o .build/linux-wt/publish/final-r16`：成功；
+  宿主为 ELF，托管 `SkiaSharp` 仍为 **2.88.9**（D7/D8 约束未被破坏），`LanFlow.Core.dll` 随包。
+- `tools/packtool` 产出 `release/LanFlow-linux-x64-r16.tar.gz`（USTAR + 目录条目，219 文件已校验）。
+- **未做**：UOS 实机 GUI 验证（无人值守环境无法执行），仍需按第 7 节遗留项在真机补验。

@@ -164,37 +164,11 @@ public sealed class Settings
     [JsonPropertyName("wholeWindowOpacity")]
     public double WholeWindowOpacity { get; set; } = 0.85;
 
-    public Settings Clone() => new()
-    {
-        Hotkey = Hotkey,
-        Theme = Theme,
-        ThemeProfile = ThemeProfile,
-        ThemeColors = ThemeColors.Clone(),
-        CustomThemes = CustomThemes.Select(c => new ThemeProfile { Name = c.Name, Colors = c.Colors.Clone() }).ToList(),
-        Opacity = Opacity,
-        LayoutMode = LayoutMode,
-        IconSize = IconSize,
-        CardWidth = CardWidth,
-        CardHeight = CardHeight,
-        CardSize = CardSize,
-        TextSize = TextSize,
-        ItemSpacing = ItemSpacing,
-        RowSpacing = RowSpacing,
-        ContentPadding = ContentPadding,
-        ShowShortcutBadge = ShowShortcutBadge,
-        ShowFullItemName = ShowFullItemName,
-        ShowItemTitle = ShowItemTitle,
-        GroupLayout = GroupLayout,
-        StartWithWindows = StartWithWindows,
-        OpenItemsOnSingleClick = OpenItemsOnSingleClick,
-        HideOnDeactivate = HideOnDeactivate,
-        GroupSwitchMode = GroupSwitchMode,
-        GroupHoverDelayMs = GroupHoverDelayMs,
-        AnimationMode = AnimationMode,
-        TransparencyMode = TransparencyMode,
-        LayeredOpacity = LayeredOpacity,
-        WholeWindowOpacity = WholeWindowOpacity,
-    };
+    /// <summary>
+    /// 全字段复制与深拷贝统一交给 SettingsPipeline（对齐 Windows 主线 v2.0.1 契约）。
+    /// 新增设置字段自动纳入，不再维护人工清单。
+    /// </summary>
+    public Settings Clone() => SettingsPipeline.Clone(this);
 }
 
 public sealed class ThemeProfile
