@@ -67,7 +67,10 @@ if ($LASTEXITCODE -ne 0) { throw "lite publish 失败 (exit $LASTEXITCODE)" }
 
 Write-Host '[4/7] 清理 PDB / 兼容壳 / 内嵌 OCR'
 foreach ($dir in @($fullDir, $liteDir)) {
-    Get-ChildItem -LiteralPath $dir -Filter '*.pdb' -File -Recurse | Remove-Item -Force
+    # Windows PowerShell 5.1 下 Remove-Item 无法绑定 Get-ChildItem 管道输出的 FileInfo，
+    # 必须显式取 FullName 再删（CI 只做语法/shape 校验，完整打包才暴露此问题）。
+    Get-ChildItem -LiteralPath $dir -Filter '*.pdb' -File -Recurse |
+        ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force }
     $legacy = Join-Path $dir 'LanFlow.exe'
     if (Test-Path -LiteralPath $legacy) { Remove-Item -LiteralPath $legacy -Force }
     $embedded = Join-Path $dir 'ocr'

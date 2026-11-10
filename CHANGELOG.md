@@ -29,6 +29,7 @@
 - 新增 `tools/Build-ReleaseAssets.ps1`：从 csproj 读版本 → publish full/lite → 排除 `*.pdb` / `LanFlow.exe` / `ocr/` → 压缩与复制 → 生成 OCR bundle → 生成三条 `<name>.sha256` → 全量自检；已存在资产默认拒绝覆盖，需 `-Force`。
 - 新增 `tools/Verify-ReleaseAssets.ps1`：`-PublishShape` 供 CI 与打包前置校验 publish 目录形状（无 PDB / 无兼容壳 / 无内嵌 OCR、含 WPF 原生依赖）；`-Version` 校验版本一致性、三条资产与 sidecar、full ZIP 根目录、OCR manifest 逐文件哈希与 `contentHash`、lite PE 与 `FileVersion`。
 - CI 新增 `release-scripts` job：两个脚本的 PowerShell Parser 语法检查 + `-PublishShape` 正例与反例（含 PDB 应失败）。`docs/ARCHITECTURE.md` §6.3–§6.5 同步为脚本化打包、单一主程序名与 digest 强校验口径。
+- 发布实战修复：Windows PowerShell 5.1 下 `Remove-Item` 无法绑定 `Get-ChildItem` 的 FileInfo 管道输出，PDB 清理改为逐项 `Remove-Item -LiteralPath $_.FullName`。CI 目前只校验语法与 publish 目录形状，尚未覆盖完整打包流程。
 
 ## [2.0.1] - 2026-11-09
 
