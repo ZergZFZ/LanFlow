@@ -4,15 +4,15 @@
 > 版本号与 `native/FlickD.Desktop/FlickD.Desktop.csproj` 中的 `Version` / `AssemblyVersion` / `FileVersion` 保持一致。
 > 发布闸门与资产命名规范见 `docs/ARCHITECTURE.md` §6。
 
-## [Unreleased]
+## [2.1.0] - 2026-11-10
 
-> 本段为 2.1.0 收敛与可靠性改进，尚未发布；转正时同步 bump `FlickD.Desktop.csproj` 三个版本字段。
+> 本版只做收敛与可靠性：加固应用内更新器、移除兼容壳/PDB、把 OCR 移出 full 包并正式纳入能力清单、把发布清单自动化并补齐测试。不新增用户功能。
 
 ### 可靠性：应用内更新器加固
 
 - `UpdateService` 使用 GitHub Release API 返回的 `digest`（`sha256:<64 hex>`）做下载完整性校验：边下载边计算 SHA-256，并比对 `size`；摘要缺失、格式非法、大小不符或哈希不符一律取消更新、不覆盖安装目录，提示手动下载。资产选择、摘要解析、完整性校验、大小校验与覆盖脚本生成均抽为纯函数。
 - 覆盖脚本改为**覆盖前完整备份安装目录**：`xcopy` 部分失败或新进程 5 秒内未启动时整体回滚；回滚本身失败则保留备份并写提示，不删除备份。成功后清理临时下载目录，避免 full 包（约 90 MB）残留在 `%TEMP%`。
-- 新增 `native/FlickD.Desktop.Tests/UpdateServiceTests.cs`（18 个用例），覆盖 full/lite/旧 `-lite.zip` 资产选择、digest 归一化、哈希与大小校验、payload 主程序校验、备份与回滚脚本契约；Desktop.Tests 由 61 增至 79。
+- 新增 `native/FlickD.Desktop.Tests/UpdateServiceTests.cs`（20 个用例），覆盖 full/lite/旧 `-lite.zip` 资产选择、digest 归一化、哈希与大小校验、payload 主程序校验、备份与回滚脚本契约，以及临时目录清理与回滚失败保留备份；Desktop.Tests 由 61 增至 81。
 
 ### 收敛：移除兼容壳与旧名回退
 
