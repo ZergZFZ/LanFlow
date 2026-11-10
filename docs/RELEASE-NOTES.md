@@ -1,6 +1,6 @@
 # LanFlow Linux 发布说明
 
-> 状态：活跃 ｜ 最近更新：2026-08-14
+> 状态：活跃 ｜ 最近更新：2026-11-10
 
 > 更新机制决策（基线 §5）：Linux 版**不做应用内更新**，采用「发布说明 + 手动解压替换」。本文件即发布说明，随每个测试包分发（`RELEASE-NOTES.md`）。
 
@@ -8,8 +8,8 @@
 
 | 项 | 值 |
 |---|---|
-| 当前版本 | 1.4.9（round14，2026-08-14；与 Windows 主线同步） |
-| 包名 | `LanFlow-linux-x64-roundN.tar.gz`（N = 轮次，见 §3）+ `lanflow_{version}_amd64.deb` |
+| 当前版本 | 1.4.10（r16，2026-11-10；Linux 1.x 独立版本线，不与 Windows 2.x 对齐） |
+| 包名 | `LanFlow-linux-x64-r16.tar.gz` + `lanflow_1.4.10_amd64.deb`（均附 `.sha256`） |
 | 目标系统 | UOS 20 Pro / Deepin（x86_64，glibc ≥ 2.28，X11） |
 | 运行时 | .NET 8 自包含（无需预装 .NET） |
 | 源码分支 | github.com/ZergZFZ/LanFlow（linux 分支） |
@@ -169,3 +169,18 @@
 | 托盘重启 | 托盘菜单新增「重启软件」；`MainWindow.Restart()` 拉起新进程后退出当前进程 |
 | 快捷键 | `HotkeyService.OnXError` 错误码偏移 24→32（x86_64 正确读 error_code）；注册失败后每 15s 自愈重试 |
 | 版本 | 升 1.4.9（`Version`/`AssemblyVersion`/`FileVersion`） |
+
+## 16. 本轮变更（r16，2026-11-10，版本 1.4.10）
+
+> 以 Windows 主线 v2.0.1 的**工程契约**重构 Linux 设置保存链路，不跨分支合并代码、不更名、不跳版本、不新增用户功能。
+> 目标平台不变：海光 x86_64 / amd64、UOS 20 Pro / Deepin、X11、glibc ≥ 2.28。
+
+| 类别 | 内容 |
+|---|---|
+| 修复（根治） | `Settings.Clone()`、`MainViewModel.ApplyAppearance()`、`ConfigStore.Normalize()` 三份人工字段清单统一收口到新增的 `SettingsPipeline`（反射遍历全部可写属性）；消除与 Windows 1.6.1 / 1.6.2 同类的「设置保存后不落盘」病根。新增设置字段自动纳入，不再需要登记白名单 |
+| 一致性 | 保存与加载共用同一归一化口径；`Opacity` 按 `TransparencyMode` 派生；保留 `Alt+Space → 平台默认热键` 迁移，透明度下限仍为 0.55 |
+| 测试 | 新增 `native/LanFlow.Core.Tests/`（xunit 40 用例，反射 Theory 随字段自动增长）；新增 `IConfigStore` 接口便于测试替身 |
+| 工程 | 新增 `tools/Build-LinuxRelease.py` 一键生成 tar.gz + .deb + SHA-256 sidecar 并回读校验；`AGENTS.md` / `ARCHITECTURE.md` 去掉写死版本号与失效构建命令 |
+| 版本 | 升 1.4.10（三字段一致）；`.deb` 版本号递增重装即升级，配置保留 |
+| 已知限制 | 无应用内更新（§6）；UOS 实机 GUI 终验仍未完成（设置保存/取消、托盘、全局热键、分层透明、.deb 装卸） |
+| 源码 | linux 分支 `refactor(linux): 以 v2.0.1 契约统一设置保存链路` 及本轮发布提交 |

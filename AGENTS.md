@@ -39,6 +39,8 @@
 ## 提交前自检（强制）
 
 - 冲突标记：`git grep -nE '^(<<<<<<<|=======|>>>>>>>)' -- .` 必须无输出。
-- 版本一致性：csproj 的 `Version`=1.5.0 ↔ `AssemblyVersion`=1.5.0.0 ↔ `FileVersion`=1.5.0.0（尾随 `.0` 视为等价）。
-- 本地构建：Windows `dotnet build native/LanFlow.Desktop/LanFlow.Desktop.csproj -c Release --no-restore`；Linux 同理。
-- 推 `main` 前：本地钩子已生效（`git config core.hooksPath .githooks`），且 CI 守卫（`.github/workflows/main-branch-guard.yml`）通过。
+- 版本一致性：以各客户端 csproj 当前值为准（`Version` ↔ `AssemblyVersion` ↔ `FileVersion`，尾随 `.0` 视为等价），**不在本文件写死版本号**。
+- 本地构建：Linux `dotnet build native/LanFlow.Linux/LanFlow.Linux.csproj -c Release`；Linux 单元测试 `dotnet test native/LanFlow.Core.Tests/LanFlow.Core.Tests.csproj -c Release`（改过测试源码时不要加 `--no-build`，否则跑的是旧 DLL）。
+- 本分支不构建 `native/LanFlow.Desktop`（v1.3.2 WPF 遗留副本）；Windows 线的构建与 CI 口径见 `windows` 分支的 `AGENTS.md`。
+- 发布资产：`release/` 与 `artifacts/` 均被忽略，产物只上传 GitHub Release，不进提交。Linux Release 必须用 `--latest=false`，否则会抢占 Windows 更新器读取的 `/releases/latest`。
+- 推 `main` 前：本地钩子已生效（`git config core.hooksPath .githooks`），且 CI 守卫通过（`linux` 分支暂无 `.github/`，本地自检为准）。

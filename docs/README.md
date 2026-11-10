@@ -10,7 +10,9 @@
 | [LanFlow-Linux测试基线.md](LanFlow-Linux测试基线.md) | **活跃** | 当前测试基线：round4 包、覆盖 commit 与验收点（实机结果回填） |
 | [LanFlow-缺陷板与修复冲刺计划.md](LanFlow-缺陷板与修复冲刺计划.md) | **活跃** | D1–D13 缺陷板与修复冲刺记录（持续维护） |
 | [RELEASE-NOTES.md](RELEASE-NOTES.md) | **活跃** | Linux 发布说明：版本/安装更新/已知限制（随测试包分发） |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | **活跃** | 架构与发布规范 |
+| [PROGRESS.md](PROGRESS.md) | **活跃** | 进度与交接：§9 v2.0.1 契约对齐、§10 1.4.10 发布记录与待验项 |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | **活跃** | 架构与发布规范（§5 发布清单与校验） |
+| [../tools/Build-LinuxRelease.py](../tools/Build-LinuxRelease.py) | **活跃** | 一键生成 tar.gz + .deb + SHA-256 并回读校验 |
 | [linux-port-devlog.md](linux-port-devlog.md) | 参考 | Linux 移植全过程记录（WPF → Avalonia），历史参考 |
 | archive/Settings-UI-Beautify.md | 归档 | Windows 旧迭代：设置美化 |
 | archive/Win11-Shadow-Fix.md | 归档 | Windows 旧迭代：Win11 阴影修复 |

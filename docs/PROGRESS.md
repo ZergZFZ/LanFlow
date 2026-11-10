@@ -1,7 +1,7 @@
-# LanFlow Linux 进度与交接（round14，已提交 · 版本 1.4.9）
+# LanFlow Linux 进度与交接（r16，已提交 · 版本 1.4.10）
 
 > 本文档供其他 agent / 开发者接手时快速对齐：任务来源、已完成改动、关键判断、踩坑记录、当前状态与待办。
-> 最近更新：2026-08-14（分支 `linux`，已提交并推送）
+> 最近更新：2026-11-10（分支 `linux`，已提交并推送；§9 为 v2.0.1 契约对齐，§10 为 1.4.10 发布记录）
 
 ## 1. 任务来源
 
@@ -18,7 +18,7 @@ round13 实机通过后，用户提出 4 项 UI/健壮性优化：
 - **托盘黑框**：`App.axaml.cs` 的 `CreateTrayIcon()` 返回的是纯色方块位图（`#35405E`），不是随包发布的 `lanflow.png`（512×512 ARGB）。
 - **快捷键偶发失败**：`HotkeyService.OnXError` 读 `XErrorEvent.error_code` 的偏移错误——x86_64 下应为 **32**（type 4 + pad 4 + display 8 + resourceid 8 + serial 8），代码却读偏移 **24**（serial 低字节），导致 BadAccess(10) 被当成随机的 serial 字节，偶发「误报失败/误报成功」。
 
-## 3. 已完成改动（均未提交）
+## 3. 已完成改动（round14，均已提交并推送）
 
 ### 3.1 按钮美化（问题 1）
 - `App.axaml`：Button 模板 `Border` 补 `Padding="{TemplateBinding Padding}"`；配色改为主题感知（`Background=SurfaceBrush` / `Foreground=TextPrimaryBrush` / `BorderBrush=SurfaceBorderBrush`），hover=`HoverBrush`、pressed=`AccentBrush`；`Padding=16,0`、`Height=34`。
@@ -121,3 +121,33 @@ Linux 端 `Settings.Clone()`、`MainViewModel.ApplyAppearance()`、`ConfigStore.
   宿主为 ELF，托管 `SkiaSharp` 仍为 **2.88.9**（D7/D8 约束未被破坏），`LanFlow.Core.dll` 随包。
 - `tools/packtool` 产出 `release/LanFlow-linux-x64-r16.tar.gz`（USTAR + 目录条目，219 文件已校验）。
 - **未做**：UOS 实机 GUI 验证（无人值守环境无法执行），仍需按第 7 节遗留项在真机补验。
+
+---
+
+## 10. 1.4.10 发布记录（2026-11-10，分支 `linux`）
+
+### 10.1 版本决策
+
+- 保持 `LanFlow 1.x` 独立版本线，**不**跳到 Windows 2.x、不更名 FlickD：Linux 功能集（无应用内更新、无截图/OCR、无导入清单）与 Windows 2.1.0 差异大，强行对齐版本号会误导用户。
+- 本轮无新增用户功能，属工程契约重构，按 patch 递增 **1.4.9 → 1.4.10**；`.deb` 靠版本号递增重装升级，配置目录保留。
+- tag 沿用历史 `v1.4.8-linux` 命名法 → `v1.4.10-linux`；GitHub Release 标题 `LanFlow Linux v1.4.10`。
+
+### 10.2 关键红线
+
+- **Linux Release 必须 `--latest=false`**：Windows `UpdateService` 读取 `/releases/latest` 并匹配 `-full.zip` / `-lite.exe`；若 Linux Release 抢占 Latest，所有 Windows 旧客户端会找不到可用资产。发布后须复查 `/releases/latest` 仍指向 Windows 版本。
+- `release/` 与 `artifacts/` 被 `.gitignore` 忽略：发布资产只上传 GitHub Release，不进提交。
+- 不跨分支 merge（AGENTS.md 红线）；`native/LanFlow.Desktop/` v1.3.2 遗留副本不动。
+
+### 10.3 发布资产
+
+| 资产 | 说明 |
+|---|---|
+| `LanFlow-linux-x64-r16.tar.gz` | 自包含目录发布（USTAR + 0755 + root/0），含运行库、`LanFlow` ELF、启动/安装脚本、`RELEASE-NOTES.md`、`TEST-CARD-r16.md` |
+| `lanflow_1.4.10_amd64.deb` | ar 三成员；`/opt/lanflow` 与 tar.gz 同二进制 + 菜单项/图标/copyright/postinst |
+| 两个 `.sha256` | `<asset>.sha256`，格式 `<hash>  <filename>` |
+
+打包与回读校验统一由 `tools/Build-LinuxRelease.py` 完成，规范见 `ARCHITECTURE.md` §5.3–§5.4。
+
+### 10.4 仍需本机补验
+
+UOS 实机：设置保存/取消预览、托盘与重启、全局热键、分层透明、外部拖放、`.deb` 安装→菜单→启动→卸载。无人值守环境无法执行，不在本轮宣告完成。

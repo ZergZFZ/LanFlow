@@ -8,10 +8,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <InvariantGlobalization>false</InvariantGlobalization>
-    <!-- 版本号与 Windows 版（GitHub Latest v1.4.8）同步，见 docs/LanFlow-Linux任务清单.md -->
-    <Version>1.4.9</Version>
-    <AssemblyVersion>1.4.9.0</AssemblyVersion>
-    <FileVersion>1.4.9.0</FileVersion>
+    <!-- Linux 版独立维护 1.x 版本号：功能集与 Windows 2.x 不同，不做跨线跳版本；
+         .deb 靠版本号递增升级，发布前须同步 docs/RELEASE-NOTES.md 与本文件三字段。 -->
+    <Version>1.4.10</Version>
+    <AssemblyVersion>1.4.10.0</AssemblyVersion>
+    <FileVersion>1.4.10.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>

@@ -1,7 +1,7 @@
 # LanFlow Linux 架构与发布规范
 
-> 状态：活跃 ｜ 最近更新：2026-08-13
-> 版本：1.4.8（round11）｜ 目标系统：UOS 20 Pro / Deepin（x86_64，glibc ≥ 2.28，X11）
+> 状态：活跃 ｜ 最近更新：2026-11-10
+> 版本：以 `native/LanFlow.Linux/LanFlow.Linux.csproj` 的 `Version` 与 `RELEASE-NOTES.md` 最新条目为准（当前 1.4.10），不在此写死版本 ｜ 目标系统：UOS 20 Pro / Deepin（海光 x86_64 / amd64，glibc ≥ 2.28，X11）
 > 关联文档：[LanFlow-Linux基线.md](LanFlow-Linux基线.md)（功能/UI 基线）、[LanFlow-Linux任务清单.md](LanFlow-Linux任务清单.md)（B1–B5）、[LanFlow-缺陷板与修复冲刺计划.md](LanFlow-缺陷板与修复冲刺计划.md)（D1–D17）、[RELEASE-NOTES.md](RELEASE-NOTES.md)（随包发布说明）
 
 ## 1. 技术栈与定位
@@ -9,7 +9,7 @@
 LanFlow Linux 版是 Windows WPF 客户端（`native/LanFlow.Desktop`，在 windows 分支演进）的 **Avalonia 移植**：
 
 - UI：Avalonia 11.3.18（FluentTheme + 自定义样式/token），AXAML 声明式界面；
-- 运行时：.NET 8 自包含 `linux-x64` 单文件发布，目标机无需预装 .NET；
+- 运行时：.NET 8 自包含 `linux-x64` 发布（当前为目录形态：`LanFlow` apphost + 同目录运行库，目标机无需预装 .NET）；
 - 平台：X11（UOS/Deepin 桌面），glibc ≥ 2.28（UOS 20 基线硬约束）；
 - 共享逻辑：`native/LanFlow.Core`（与 Windows 版共享配置模型与业务服务，物理副本随分支同步维护）。
 
@@ -19,9 +19,8 @@ LanFlow Linux 版是 Windows WPF 客户端（`native/LanFlow.Desktop`，在 wind
 native/
 ├── LanFlow.Core/           与 Windows 共享的配置模型/服务（net8.0 纯 C#）
 ├── LanFlow.Linux/          Avalonia 客户端（Linux 正式交付物）
-├── LanFlow.Desktop/        Windows WPF 客户端（本分支保留；Windows 线在 windows 分支演进）
-├── LanFlow.Core.Tests/     自动化测试（随分支保留）
-└── LanFlow.Desktop.Tests/  自动化测试（随分支保留）
+├── LanFlow.Core.Tests/     xunit 单元测试（设置保存链路反射完备性等；本分支唯一测试工程）
+└── LanFlow.Desktop/        v1.3.2 WPF 遗留副本（本分支保留但不构建、不被引用）
 ```
 
 ## 3. 运行时职责
@@ -50,28 +49,37 @@ native/
 
 ### 5.2 包内容
 
-- **tar.gz（单文件发布）**：`PublishSingleFile=true` + `IncludeNativeLibrariesForSelfExtract=true`；解压后仅 `LanFlow`（ELF，内嵌运行时）+ `lanflow.sh` + `lanflow.png` + `install-lanflow.sh`。
+- **tar.gz（自包含目录发布）**：publish 目录全部运行库 + `LanFlow`（ELF apphost）+ `lanflow.sh` + `lanflow.png` + `install-lanflow.sh` + `RELEASE-NOTES.md` + `TEST-CARD-rN.md`。USTAR 格式、目录条目、`root/0`、可执行位 0755；解压后双击 `LanFlow` 或 `./lanflow.sh`。历史 round8–11 曾用单文件发布，当前 csproj 未启用 `PublishSingleFile`，以实际 publish 产物为准。
 - **.deb**：`/opt/lanflow`（与同 round tar.gz **相同二进制**及辅助文件）+ `/usr/share/applications/lanflow.desktop` + `/usr/share/icons/hicolor/256x256/apps/lanflow.png` + `/usr/share/doc/lanflow/copyright` + `postinst`（补可执行位 + 刷新桌面/图标缓存，全部 `|| true` 容错）。
 
 ### 5.3 构建与打包（Windows 开发机）
 
+发布清单已脚本化为 `tools/Build-LinuxRelease.py`（Python 标准库，无 bsdtar / dpkg-deb 依赖）：
+
+```bash
+dotnet publish native/LanFlow.Linux/LanFlow.Linux.csproj -c Release -r linux-x64 --self-contained \
+    -o .build/linux-wt/publish/final-rN
+python tools/Build-LinuxRelease.py --publish-dir .build/linux-wt/publish/final-rN
+```
+
+脚本自读 csproj `Version`，生成 `release/LanFlow-linux-x64-rN.tar.gz`、`release/lanflow_{version}_amd64.deb` 与两个 `.sha256` sidecar，并在生成后回读校验：USTAR 条目与可执行位、ar 三成员（debian-binary 2.0 / control.tar.gz / data.tar.gz）、`md5sums` 与实际文件、ELF 魔数、SkiaSharp 2.88.9 钉住、两种形态内 `LanFlow` 的 SHA-256 一致。`control` 的 `Version` 必须与 csproj 一致；`release/` 被忽略，资产只上传 GitHub Release、不进提交。
+
 - 构建：`dotnet build native/LanFlow.Linux/LanFlow.Linux.csproj -c Release`（0 错误；现存警告均为过时 API 类，属已知）；
-- tar.gz 必须用 GNU tar 加 `--mode=755` 打包（Windows bsdtar 不保留 Unix 可执行位，round4 踩坑记录）；
-- .deb：无 dpkg-deb 时用 GNU tar（`--owner=0 --group=0 --mode=755`）生成 control/data 归档 + bsdtar `--format=ar` 组合；`control` 的 `Version` 必须与 csproj `Version` 一致；
-- 同一 round 的 tar.gz 与 .deb 必须包含**相同二进制**（发布前校验 SHA256 一致）。
+- 单元测试：`dotnet test native/LanFlow.Core.Tests/LanFlow.Core.Tests.csproj -c Release`（改过测试源码不要加 `--no-build`）；
+- 同一 round 的 tar.gz 与 .deb 必须包含**相同二进制**（脚本回读校验）。
 
 ### 5.4 发布前校验清单
 
-1. 构建 0 错误；
-2. 版本一致性：csproj `Version` = .deb `control` `Version` = 资产文件名；
-3. 包结构核验：ar 三成员（debian-binary 2.0 / control.tar.gz / data.tar.gz）、data 载荷与权限（root/0、755）、ELF 魔数、tar 内可执行位；
-4. 二进制一致性：tar.gz 与 .deb 内 `LanFlow` SHA256 相同；
-5. glibc 基线：SkiaSharp + `SkiaSharp.NativeAssets.Linux` 钉住 **2.88.9**，不得引入要求 glibc ≥ 2.29 的 3.x 系原生库（D7/D8 教训）；
+1. 构建 0 错误、单元测试全绿；
+2. 版本一致性：csproj `Version` = .deb `control` `Version` = 资产文件名 = tag 版本；
+3. `tools/Build-LinuxRelease.py` 的回读校验全通过（ar 三成员、root/0 755、ELF 魔数、USTAR 可执行位、md5sums、双形态二进制一致）；
+4. glibc 基线：SkiaSharp + `SkiaSharp.NativeAssets.Linux` 钉住 **2.88.9**，不得引入要求 glibc ≥ 2.29 的 3.x 系原生库（D7/D8 教训）；
+5. GitHub Release 必须 `--latest=false`：Windows 更新器读取 `/releases/latest`，Linux Release 抢占会导致旧版客户端找不到 `-full.zip` / `-lite.exe`；
 6. UOS 实机终验（本机不可代验）：.deb 安装/卸载（TEST-CARD-deb）、外部拖放、渲染细节、热键触发复核。
 
 ## 6. 更新机制（取舍）
 
-Linux 版**不做应用内更新**：发布说明（RELEASE-NOTES.md）+ 手动解压替换；`.deb` 版本号递增重装即升级，`~/.config/LanFlow` 数据保留。
+Linux 版**不做应用内更新**：发布说明（RELEASE-NOTES.md）+ 手动解压替换；`.deb` 版本号递增重装即升级，`~/.config/LanFlow` 数据保留。GitHub Release 使用 `vX.Y.Z-linux` tag 且必须 `--latest=false`，`/releases/latest` 永远留给 Windows 更新器；历史先例见 `v1.4.8-linux`。
 
 ## 7. 已知约束（决策记录）
 
