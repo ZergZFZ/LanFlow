@@ -48,3 +48,49 @@ jobs:
 
       - name: Test Desktop
         run: dotnet test native/FlickD.Desktop.Tests/FlickD.Desktop.Tests.csproj -c Release --no-restore
+
+  release-scripts:
+    name: Release scripts (syntax + shape gate)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Parse PowerShell release scripts
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $parseErrors = $null
+          foreach ($f in @('tools/Build-ReleaseAssets.ps1', 'tools/Verify-ReleaseAssets.ps1')) {
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $f).Path, [ref]$tokens, [ref]$parseErrors) | Out-Null
+            if ($parseErrors -and $parseErrors.Count -gt 0) {
+              $parseErrors | ForEach-Object { Write-Error "line $($_.Extent.StartLineNumber): $($_.Message)" }
+              throw "PowerShell 语法检查失败: $f"
+            }
+            Write-Host "OK $f"
+          }
+
+      - name: Verify publish shape (positive and negative cases)
+        shell: pwsh
+        run: |
+          Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+          $tmp = Join-Path $env:RUNNER_TEMP 'flickd-shape'
+          $full = Join-Path $tmp 'full'
+          $lite = Join-Path $tmp 'lite'
+          New-Item -ItemType Directory -Force -Path $full, $lite | Out-Null
+          Set-Content -LiteralPath (Join-Path $full 'FlickD.exe') -Value 'full-placeholder' -NoNewline
+          Set-Content -LiteralPath (Join-Path $lite 'FlickD.exe') -Value 'lite-placeholder' -NoNewline
+          Set-Content -LiteralPath (Join-Path $full 'PresentationNative_cor3.dll') -Value 'marker' -NoNewline
+          & ./tools/Verify-ReleaseAssets.ps1 -PublishShape -FullDir $full -LiteDir $lite
+
+          # 反例：出现 PDB 必须失败，防止闸门被误改成恒真
+          Set-Content -LiteralPath (Join-Path $full 'FlickD.Core.pdb') -Value 'pdb' -NoNewline
+          $blocked = $false
+          try {
+            & ./tools/Verify-ReleaseAssets.ps1 -PublishShape -FullDir $full -LiteDir $lite
+          } catch {
+            $blocked = $true
+            Write-Host "OK 反例被拦截: $($_.Exception.Message)"
+          }
+          if (-not $blocked) { throw '反例未被拦截：含 PDB 的发布目录竟然通过了校验' }

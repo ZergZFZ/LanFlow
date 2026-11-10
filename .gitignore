@@ -62,3 +62,11 @@ secrets.json
 
 # Local Superpowers brainstorming artifacts
 /.superpowers/
+
+# Local build scratch, test results and assistant workspaces.
+# These must never enter main (scripts/guard-main-release.sh enforces the same list).
+/.build/
+/.trae/
+/.zcode/
+/.workbuddy-ai/
+**/TestResults/

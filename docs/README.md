@@ -6,7 +6,9 @@
 
 | 文档 | 状态 | 说明 |
 |---|---|---|
-| [../CHANGELOG.md](../CHANGELOG.md) | **活跃** | 版本变更日志（完整版本历史，当前最新 2.0.0；`[Unreleased]` 为待发布内容） |
+| [../CHANGELOG.md](../CHANGELOG.md) | **活跃** | 版本变更日志（完整版本历史；当前版本以最新正式条目与 csproj `Version` 为准，`[Unreleased]` 为待发布内容） |
+| [../tools/Build-ReleaseAssets.ps1](../tools/Build-ReleaseAssets.ps1) | **活跃** | 一键打包三条发布资产（含 PDB / 兼容壳 / 内嵌 OCR 排除） |
+| [../tools/Verify-ReleaseAssets.ps1](../tools/Verify-ReleaseAssets.ps1) | **活跃** | 发布资产校验（`-PublishShape` 校验 publish 目录形状，`-Version` 校验待发布资产） |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | **活跃** | 架构分层、配置规则与 full / lite / ocr 发布更新规范 |
 | [DEVELOPMENT-ROADMAP.md](DEVELOPMENT-ROADMAP.md) | **活跃** | 产品发展路线 R1–R4 与发布闸门 |
 | [import-manifest.example.json](import-manifest.example.json) | **活跃** | 导入清单契约样例 |

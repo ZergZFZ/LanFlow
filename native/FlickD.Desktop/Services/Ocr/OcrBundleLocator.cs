@@ -17,7 +17,9 @@ public sealed record OcrBundleLocation(
     System.Collections.Generic.IReadOnlyList<string> Problems);
 
 /// <summary>
-/// 定位 OCR bundle：优先用户目录（下载/导入），其次应用目录（full 包内置）。
+/// 定位 OCR bundle：优先用户目录（下载/导入），其次应用目录。
+/// 2.1.0 起 full 包不再内置 ocr/；保留应用目录查找只为让 2.0.x 老安装升级后
+/// 仍能使用其目录中已内置的组件，新安装一律走用户目录。
 /// Locate 内部对整个 bundle 逐文件 SHA-256（约 22MB），按 T 取字路径上曾重复执行
 /// 两次；这里按「目录 + 写入时间戳」缓存结果，安装/导入/卸载/引擎重置时失效。
 /// 只在取字路径调用，不违反 1.6.0「启动阶段不触碰 OCR 资源」原则。
