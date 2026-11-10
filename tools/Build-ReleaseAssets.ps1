@@ -58,23 +58,29 @@ foreach ($d in @($dist, $fullDir, $liteDir, $ocrDir)) {
 }
 
 Write-Host '[2/7] publish full (win-x64)'
-& dotnet publish $project -c $Configuration -p:PublishProfile=win-x64 -o $fullDir --nologo
+& dotnet publish $project -c $Configuration -p:PublishProfile=win-x64 -p:DebugType=none -o $fullDir --nologo
 if ($LASTEXITCODE -ne 0) { throw "full publish 失败 (exit $LASTEXITCODE)" }
 
 Write-Host '[3/7] publish lite (win-x64-lite)'
-& dotnet publish $project -c $Configuration -p:PublishProfile=win-x64-lite -o $liteDir --nologo
+& dotnet publish $project -c $Configuration -p:PublishProfile=win-x64-lite -p:DebugType=none -o $liteDir --nologo
 if ($LASTEXITCODE -ne 0) { throw "lite publish 失败 (exit $LASTEXITCODE)" }
 
 Write-Host '[4/7] 清理 PDB / 兼容壳 / 内嵌 OCR'
 foreach ($dir in @($fullDir, $liteDir)) {
-    # Windows PowerShell 5.1 下 Remove-Item 无法绑定 Get-ChildItem 管道输出的 FileInfo，
-    # 必须显式取 FullName 再删（CI 只做语法/shape 校验，完整打包才暴露此问题）。
-    Get-ChildItem -LiteralPath $dir -Filter '*.pdb' -File -Recurse |
-        ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force }
+    # publish 已用 -p:DebugType=none 从源头不生成符号文件；这里只做兜底清理与硬断言。
+    # 使用 .NET API 而非 cmdlet 管道：旧脚本宿主下 Remove-Item 无法绑定 FileInfo，
+    # 且开发机的删除保护会对 cmdlet 删除误报 fail-closed（CI 只做语法/shape 校验，
+    # 完整打包才暴露这两点）。
+    foreach ($pdb in [System.IO.Directory]::GetFiles($dir, '*.pdb', [System.IO.SearchOption]::AllDirectories)) {
+        [System.IO.File]::Delete($pdb)
+    }
     $legacy = Join-Path $dir 'LanFlow.exe'
-    if (Test-Path -LiteralPath $legacy) { Remove-Item -LiteralPath $legacy -Force }
+    if ([System.IO.File]::Exists($legacy)) { [System.IO.File]::Delete($legacy) }
     $embedded = Join-Path $dir 'ocr'
-    if (Test-Path -LiteralPath $embedded) { Remove-Item -LiteralPath $embedded -Recurse -Force }
+    if ([System.IO.Directory]::Exists($embedded)) { [System.IO.Directory]::Delete($embedded, $true) }
+    if ([System.IO.Directory]::GetFiles($dir, '*.pdb', [System.IO.SearchOption]::AllDirectories).Count -gt 0) {
+        throw "publish 目录仍含 PDB：$dir；请检查 publish profile 是否禁用了调试符号"
+    }
 }
 
 & (Join-Path $PSScriptRoot 'Verify-ReleaseAssets.ps1') -PublishShape -FullDir $fullDir -LiteDir $liteDir

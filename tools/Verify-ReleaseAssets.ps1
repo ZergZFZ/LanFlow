@@ -105,17 +105,25 @@ try {
     try { $manifest = $reader.ReadToEnd() | ConvertFrom-Json } finally { $reader.Dispose() }
 
     Assert-Check ($manifest.files.Count -gt 0) "OCR manifest 列出 $($manifest.files.Count) 个文件"
+    # 旧脚本宿主下 ZipArchive.GetEntry 对带 '/' 的条目名匹配不稳定（会把全部条目误判为缺失）；
+    # 改为按 FullName 建索引并统一路径分隔符，逐文件校验仍按 manifest 的 sha256/size 做硬比对。
+    $entryMap = @{}
+    foreach ($entry in $ocrArchive.Entries) {
+        $entryMap[([string]$entry.FullName).Replace('\', '/')] = $entry
+    }
     $sha = [System.Security.Cryptography.SHA256]::Create()
     $bad = @()
     foreach ($f in $manifest.files) {
-        if (-not ($f.path -match '^(runtime|models|vcredist)/')) { $bad += "$($f.path):前缀非法"; continue }
-        $e = $ocrArchive.GetEntry($f.path)
-        if ($null -eq $e) { $bad += "$($f.path):缺少"; continue }
+        $path = [string]$f.path
+        if (-not ($path -match '^(runtime|models|vcredist)/')) { $bad += "$($path):前缀非法"; continue }
+        $key = $path.Replace('\', '/')
+        $e = $entryMap[$key]
+        if ($null -eq $e) { $bad += "$($key):缺少（索引 $($entryMap.Count) 条）"; continue }
         $s = $e.Open()
         try {
             $h = [System.BitConverter]::ToString($sha.ComputeHash($s)).Replace('-', '').ToLowerInvariant()
-            if ($h -ne $f.sha256.ToLowerInvariant()) { $bad += "$($f.path):哈希不符" }
-            if ($e.Length -ne $f.size) { $bad += "$($f.path):大小不符" }
+            if ($h -ne $f.sha256.ToLowerInvariant()) { $bad += "$($key):哈希不符" }
+            if ($e.Length -ne $f.size) { $bad += "$($key):大小不符" }
         } finally { $s.Dispose() }
     }
     $sha.Dispose()
