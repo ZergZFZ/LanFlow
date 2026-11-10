@@ -45,7 +45,8 @@ public sealed class AnnotationVisualHost : FrameworkElement
         }
         if (Draft is not null)
         {
-            AnnotationRenderer.Draw(drawingContext, Draft, pixelsPerDip);
+            // 草稿态额外标记，供马赛克这类"无可见笔迹"的工具显示拖拽范围。
+            AnnotationRenderer.Draw(drawingContext, Draft, pixelsPerDip, isDraft: true);
         }
     }
 }
@@ -53,7 +54,7 @@ public sealed class AnnotationVisualHost : FrameworkElement
 /// <summary>把 AnnotationShape 绘制到 DrawingContext；屏幕预览与最终合成都调用这里。</summary>
 internal static class AnnotationRenderer
 {
-    public static void Draw(DrawingContext dc, AnnotationShape shape, double pixelsPerDip)
+    public static void Draw(DrawingContext dc, AnnotationShape shape, double pixelsPerDip, bool isDraft = false)
     {
         var brush = new SolidColorBrush(shape.Color);
         var pen = new Pen(brush, shape.StrokeWidth)
@@ -84,8 +85,16 @@ internal static class AnnotationRenderer
                 break;
 
             case AnnotationTool.Mosaic:
-                var fill = new SolidColorBrush(Color.FromArgb(0x22, shape.Color.R, shape.Color.G, shape.Color.B));
-                dc.DrawRectangle(fill, new Pen(brush, 1), shape.Bounds);
+                // 成品马赛克已由 MosaicLayer 在图层面完成像素化，这里不得再叠加任何
+                // 色块或彩色描边——否则会改变原图颜色。仅草稿态给一个中性虚线提示框。
+                if (isDraft)
+                {
+                    var hintPen = new Pen(new SolidColorBrush(Color.FromArgb(0xB0, 0xFF, 0xFF, 0xFF)), 1)
+                    {
+                        DashStyle = new DashStyle([4, 4], 0),
+                    };
+                    dc.DrawRectangle(null, hintPen, shape.Bounds);
+                }
                 break;
 
             case AnnotationTool.Number:

@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
@@ -86,6 +87,12 @@ public partial class ScreenshotCropWindow : Window
     private AnnotationShape? _draft;
     private TextBox? _textEditor;
     private Point _textAnchor;
+
+    /// <summary>工具条当前是否位于选区上方（决定调色板弹出方向）。</summary>
+    private bool _toolCardAbove;
+
+    /// <summary>放大镜是否已处于可见态，用于只在首次出现时播入场动画。</summary>
+    private bool _magnifierShown;
 
     private readonly Settings _settings;
     private bool _ocrBusy;
@@ -414,7 +421,8 @@ public partial class ScreenshotCropWindow : Window
             {
                 Text = $"{px} × {py}",
                 Foreground = Brushes.White,
-                FontSize = 11,
+                FontSize = 12,
+                FontWeight = FontWeights.Medium,
                 FontFamily = new FontFamily("Consolas"),
             },
         };
@@ -446,7 +454,8 @@ public partial class ScreenshotCropWindow : Window
 
         HintBar.Visibility = Visibility.Collapsed;
         MagnifierLayer.Visibility = Visibility.Collapsed;
-        EditFrame.Visibility = Visibility.Visible;
+        // 先布局到位再入场，避免动画首帧跳位；工具条从选区内侧方向浮入。
+        ShadowHost.Visibility = Visibility.Visible;
         ToolCard.Visibility = Visibility.Visible;
 
         UpdateEditFrame(selDip);
@@ -456,6 +465,18 @@ public partial class ScreenshotCropWindow : Window
         RenderHandles(selDip);
         SelectTool(AnnotationTool.Rect);
         PlaceToolCard(selDip);
+
+        // 编辑区：淡入 + 轻微缩放收敛，制造“聚焦”感。
+        ScreenshotMotion.ShowAnimated(ShadowHost, 0, ScreenshotMotion.EmphasisMs);
+
+        // 工具条：从选区外侧向内浮入（位置已由 PlaceToolCard 定好，仅动透明度）。
+        ToolCard.Opacity = 0;
+        ToolCard.RenderTransform = new TranslateTransform(0, 6);
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            ScreenshotMotion.FadeIn(ToolCard, 6, ScreenshotMotion.SlideMs, ScreenshotMotion.EaseOutBack);
+        }), DispatcherPriority.Render);
+
         AnnotationHost.InvalidateVisual();
         Focus();
     }
@@ -474,9 +495,11 @@ public partial class ScreenshotCropWindow : Window
 
         EditImage.Source = cropped;
         MosaicLayer.Source = null;
-        EditFrame.Margin = new Thickness(selDip.X, selDip.Y, 0, 0);
-        EditFrame.Width = selDip.Width;
-        EditFrame.Height = selDip.Height;
+        // 定位与尺寸挂在 ShadowHost（外层投影容器）上，EditFrame 跟随拉伸。
+        ShadowHost.Margin = new Thickness(selDip.X, selDip.Y, 0, 0);
+        ShadowHost.Width = selDip.Width;
+        ShadowHost.Height = selDip.Height;
+        EditFrameClip.Rect = new Rect(0, 0, selDip.Width, selDip.Height);
         EditRoot.Width = selDip.Width;
         EditRoot.Height = selDip.Height;
         AnnotationHost.Width = selDip.Width;
@@ -775,6 +798,88 @@ public partial class ScreenshotCropWindow : Window
         SelectTool(_tool);
     }
 
+    /// <summary>
+    /// 展开/收起调色板浮层。相比逐个循环，直接点选更符合“所见即所得”，
+    /// 也去掉了一次次点击猜当前是第几色的负担。
+    /// </summary>
+    private void TogglePaletteFlyout()
+    {
+        if (PaletteFlyout.Visibility == Visibility.Visible)
+        {
+            ClosePaletteFlyout();
+            return;
+        }
+
+        PaletteFlyout.BeginAnimation(UIElement.OpacityProperty, null);
+        BuildPaletteItems();
+        ToolLayer.UpdateLayout();
+
+        PaletteFlyout.Visibility = Visibility.Visible;
+        PaletteFlyout.UpdateLayout();
+
+        // 水平对齐到颜色按钮，垂直方向按工具条所在侧向外展开。
+        var cardLeft = Canvas.GetLeft(ToolCard);
+        var cardTop = Canvas.GetTop(ToolCard);
+        var cardW = ToolCard.ActualWidth > 0 ? ToolCard.ActualWidth : 458;
+        var cardH = ToolCard.ActualHeight > 0 ? ToolCard.ActualHeight : 82;
+        var flyW = PaletteFlyout.ActualWidth > 0 ? PaletteFlyout.ActualWidth : 260;
+        var flyH = PaletteFlyout.ActualHeight > 0 ? PaletteFlyout.ActualHeight : 54;
+
+        var x = cardLeft + ToolCard.ActualWidth / 2 - flyW / 2;
+        var y = _toolCardAbove ? cardTop - flyH - 8 : cardTop + cardH + 8;
+
+        x = Math.Clamp(x, 6, Math.Max(6, ActualWidth - flyW - 6));
+        if (y < 6) y = cardTop + cardH + 8;
+        if (y + flyH > ActualHeight - 6) y = cardTop - flyH - 8;
+        y = Math.Max(6, y);
+
+        Canvas.SetLeft(PaletteFlyout, x);
+        Canvas.SetTop(PaletteFlyout, y);
+
+        ScreenshotMotion.ShowAnimated(PaletteFlyout, _toolCardAbove ? 4 : -4, ScreenshotMotion.FadeMs);
+    }
+
+    private void ClosePaletteFlyout()
+    {
+        if (PaletteFlyout.Visibility != Visibility.Visible) return;
+        // 即时收起并取消动画，避免快速重复点击时旧的 Completed 回调误关新面板。
+        PaletteFlyout.BeginAnimation(UIElement.OpacityProperty, null);
+        PaletteFlyout.Visibility = Visibility.Collapsed;
+        PaletteFlyout.Opacity = 0;
+    }
+
+    private void BuildPaletteItems()
+    {
+        PaletteHost.Children.Clear();
+        for (var i = 0; i < Palette.Length; i++)
+        {
+            var index = i;
+            var color = Palette[i];
+            var swatch = new Border
+            {
+                Width = 26,
+                Height = 26,
+                Margin = new Thickness(3, 0, 3, 0),
+                CornerRadius = new CornerRadius(13),
+                Background = new SolidColorBrush(color),
+                BorderBrush = new SolidColorBrush(index == _colorIndex % Palette.Length
+                    ? Color.FromRgb(0x4C, 0x9A, 0xFF)
+                    : Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF)),
+                BorderThickness = new Thickness(index == _colorIndex % Palette.Length ? 2 : 1),
+                Cursor = Cursors.Hand,
+            };
+            swatch.MouseLeftButtonDown += (_, e) =>
+            {
+                e.Handled = true;
+                _colorIndex = index;
+                UpdateColorSwatch();
+                SelectTool(_tool);
+                ClosePaletteFlyout();
+            };
+            PaletteHost.Children.Add(swatch);
+        }
+    }
+
     private void CycleWidth()
     {
         _widthIndex = (_widthIndex + 1) % StrokeWidths.Length;
@@ -797,16 +902,42 @@ public partial class ScreenshotCropWindow : Window
 
         var x = selDip.X;
         var y = selDip.Bottom + gap;
+        var below = true;
         if (y + height > ActualHeight - 6)
         {
             y = selDip.Y - height - gap;
+            below = false;
         }
         if (y < 6) y = 6;
         if (x + width > ActualWidth - 6) x = ActualWidth - width - 6;
         if (x < 6) x = 6;
 
-        Canvas.SetLeft(ToolCard, x);
-        Canvas.SetTop(ToolCard, y);
+        // 首次落位直接定位；后续（拖动选区）用短动画跟随，避免工具条“瞬移”。
+        var currentLeft = Canvas.GetLeft(ToolCard);
+        var currentTop = Canvas.GetTop(ToolCard);
+        if (double.IsNaN(currentLeft) || double.IsNaN(currentTop))
+        {
+            Canvas.SetLeft(ToolCard, x);
+            Canvas.SetTop(ToolCard, y);
+        }
+        else
+        {
+            AnimateCanvasTo(ToolCard, x, y);
+        }
+
+        // 记录工具条相对选区的方向，调色板浮层据此决定弹出方向。
+        _toolCardAbove = !below;
+    }
+
+    /// <summary>工具条位置补间：短时长线性收敛，快速连续拖动时不累积延迟。</summary>
+    private static void AnimateCanvasTo(UIElement element, double x, double y)
+    {
+        var dur = new Duration(TimeSpan.FromMilliseconds(110));
+        var ease = ScreenshotMotion.EaseOut;
+        var ax = new DoubleAnimation(Canvas.GetLeft(element), x, dur) { EasingFunction = ease };
+        var ay = new DoubleAnimation(Canvas.GetTop(element), y, dur) { EasingFunction = ease };
+        element.BeginAnimation(Canvas.LeftProperty, ax, HandoffBehavior.SnapshotAndReplace);
+        element.BeginAnimation(Canvas.TopProperty, ay, HandoffBehavior.SnapshotAndReplace);
     }
 
     private void ExitAnnotateToSelect()
@@ -824,8 +955,15 @@ public partial class ScreenshotCropWindow : Window
         AnnotationHost.Shapes = _shapes;
         AnnotationHost.InvalidateVisual();
 
-        EditFrame.Visibility = Visibility.Collapsed;
+        // 退场：先淡出再收起，避免编辑区/工具条凭空消失。
+        ClosePaletteFlyout();
+        ScreenshotMotion.Reset(ToolCard);
+        Canvas.SetLeft(ToolCard, double.NaN);
+        Canvas.SetTop(ToolCard, double.NaN);
+        ShadowHost.Visibility = Visibility.Collapsed;
         ToolCard.Visibility = Visibility.Collapsed;
+        ScreenshotMotion.Reset(ShadowHost);
+
         HandleCanvas.Children.Clear();
         OverlayCanvas.Children.Clear();
         EditImage.Source = null;
@@ -853,7 +991,7 @@ public partial class ScreenshotCropWindow : Window
         }
         else if (index == 7)
         {
-            CycleColor();
+            TogglePaletteFlyout();
         }
         else if (index == 8)
         {
@@ -862,6 +1000,14 @@ public partial class ScreenshotCropWindow : Window
         else if (index == 9)
         {
             _ = RunOcrAsync();
+        }
+        else if (index == 10)
+        {
+            SaveToPicturesAndClose();
+        }
+        else if (index == 11)
+        {
+            CopyAndClose();
         }
         e.Handled = true;
     }
@@ -983,7 +1129,8 @@ public partial class ScreenshotCropWindow : Window
     {
         if (_phase != Phase.Select || FrozenImage.Source is not BitmapSource source)
         {
-            MagnifierLayer.Visibility = Visibility.Collapsed;
+            if (MagnifierLayer.Visibility == Visibility.Visible) MagnifierLayer.Visibility = Visibility.Collapsed;
+            _magnifierShown = false;
             return;
         }
 
@@ -1024,7 +1171,13 @@ public partial class ScreenshotCropWindow : Window
 
         Canvas.SetLeft(MagnifierCard, x);
         Canvas.SetTop(MagnifierCard, y);
-        MagnifierLayer.Visibility = Visibility.Visible;
+
+        // 首次出现才播入场动画；跟随鼠标移动时不重复淡入，否则会闪烁。
+        if (!_magnifierShown || MagnifierLayer.Visibility != Visibility.Visible)
+        {
+            _magnifierShown = true;
+            ScreenshotMotion.ShowAnimated(MagnifierLayer, 0, ScreenshotMotion.FadeMs);
+        }
     }
 
     // ---------- 合成与输出 ----------
@@ -1105,6 +1258,57 @@ public partial class ScreenshotCropWindow : Window
         Close();
     }
 
+    /// <summary>
+    /// 一键保存：直接写入「图片」文件夹（免对话框），文件名带时间戳。
+    /// S 键 / 工具条「保存」按钮走这里；Ctrl+S 仍为另存为对话框。
+    /// </summary>
+    private void SaveToPicturesAndClose()
+    {
+        try
+        {
+            var dir = Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
+            if (string.IsNullOrWhiteSpace(dir))
+            {
+                dir = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            }
+
+            System.IO.Directory.CreateDirectory(dir);
+            var image = Compose();
+            var stem = $"FlickD截图_{DateTime.Now:yyyyMMdd_HHmmss}";
+            string file;
+            System.IO.FileStream stream;
+            for (var suffix = 0; ; suffix++)
+            {
+                file = System.IO.Path.Combine(dir, $"{stem}{(suffix == 0 ? "" : $"_{suffix}")}.png");
+                try
+                {
+                    stream = new System.IO.FileStream(file, System.IO.FileMode.CreateNew, System.IO.FileAccess.Write);
+                    break;
+                }
+                catch (System.IO.IOException) when (System.IO.File.Exists(file))
+                {
+                    // 同一秒再次保存时，不覆盖已存在的截图。
+                }
+            }
+
+            using (stream)
+            {
+                var encoder = new PngBitmapEncoder();
+                encoder.Frames.Add(BitmapFrame.Create(image));
+                encoder.Save(stream);
+            }
+
+
+            ShowToast($"已保存 {System.IO.Path.GetFileName(file)}");
+            Close();
+        }
+        catch (Exception ex)
+        {
+            // 目录只读、磁盘满、占用等：给用户可见的失败提示，不静默丢图。
+            ShowToast($"保存失败：{ex.Message}");
+        }
+    }
+
     private void PinAndClose()
     {
         var image = Compose();
@@ -1135,7 +1339,9 @@ public partial class ScreenshotCropWindow : Window
 
         _ocrBusy = true;
         OcrButton.IsEnabled = false;
-        var hint = ToolHint.Text;
+
+        // 进度改用 toast：提示行已移除，进度信息不能再依赖工具条底部文字。
+        ShowToast(OcrEngineHost.Instance.IsLoaded ? "正在识别选区文字…" : "正在准备取字…");
 
         // 分阶段提示：首次取字需要加载 ONNX Runtime 与 det/rec 模型（1–3s），
         // 与推理阶段文案区分，避免"卡死"错觉（P2-4）。
@@ -1144,12 +1350,11 @@ public partial class ScreenshotCropWindow : Window
             Dispatcher.BeginInvoke(() =>
             {
                 if (!_ocrBusy) return;
-                ToolHint.Text = initializing ? "正在加载识别模型（首次约数秒）…" : "正在识别选区文字…";
+                ShowToast(initializing ? "正在加载识别模型（首次约数秒）…" : "正在识别选区文字…");
             });
         }
 
         OcrEngineHost.Instance.PhaseChanged += OnEnginePhase;
-        ToolHint.Text = OcrEngineHost.Instance.IsLoaded ? "正在识别选区文字…" : "正在准备取字…";
 
         try
         {
@@ -1188,7 +1393,6 @@ public partial class ScreenshotCropWindow : Window
         {
             OcrEngineHost.Instance.PhaseChanged -= OnEnginePhase;
             _ocrBusy = false;
-            ToolHint.Text = hint;
             OcrButton.IsEnabled = true;
         }
     }
@@ -1214,6 +1418,13 @@ public partial class ScreenshotCropWindow : Window
     /// </summary>
     private void HandleCancelGesture(bool cancelTextInput)
     {
+        // 调色板展开时，取消手势先收面板，不打断当前标注阶段。
+        if (PaletteFlyout.Visibility == Visibility.Visible)
+        {
+            ClosePaletteFlyout();
+            return;
+        }
+
         // 绘制/拖拽进行中：先终止当前手势，再按阶段决策。
         if (_isDrawing || _resizeHandle is not null)
         {
@@ -1321,6 +1532,12 @@ public partial class ScreenshotCropWindow : Window
             case Key.X:
                 e.Handled = true;
                 CycleWidth();
+                // 线宽没有常驻指示器：切换后用轻量提示给出即时反馈。
+                ShowToast($"线宽 {CurrentWidth:0.#}");
+                return;
+            case Key.S:
+                e.Handled = true;
+                SaveToPicturesAndClose();
                 return;
             case Key.D1:
             case Key.NumPad1:

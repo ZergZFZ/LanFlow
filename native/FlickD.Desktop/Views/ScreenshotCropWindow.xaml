@@ -11,6 +11,10 @@
         WindowStartupLocation="Manual"
         ResizeMode="NoResize"
         Focusable="True"
+        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextRenderingMode="ClearType"
+        TextOptions.TextHintingMode="Fixed"
+        RenderOptions.BitmapScalingMode="HighQuality"
         PreviewKeyDown="Window_PreviewKeyDown">
     <Window.Resources>
         <!-- 工具条卡片按钮：44x46，上图标 20x20、下中文小标题；悬停用白 8% 叠加，不覆盖激活药丸底色。 -->
@@ -50,11 +54,20 @@
             </Setter>
         </Style>
         <Style x:Key="ToolCaptionStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="10" />
-            <Setter Property="Opacity" Value="0.72" />
+            <Setter Property="FontFamily" Value="Microsoft YaHei UI" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="Medium" />
+            <Setter Property="Opacity" Value="0.88" />
             <Setter Property="HorizontalAlignment" Value="Center" />
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Margin" Value="0,2,0,0" />
+        </Style>
+
+        <!-- 输出类按钮（保存/复制）：强调色底，与工具按钮在视觉上分层，鼠标可快速定位 -->
+        <Style x:Key="AccentCardButtonStyle" TargetType="Button" BasedOn="{StaticResource ToolCardButtonStyle}">
+            <Setter Property="Background" Value="#2E4C9AFF" />
+            <Setter Property="BorderBrush" Value="#664C9AFF" />
+            <Setter Property="Foreground" Value="#FFFFFFFF" />
         </Style>
     </Window.Resources>
 
@@ -65,16 +78,28 @@
         <!-- 框选阶段：选区外的四块压暗蒙版 + 选区框 + 尺寸胶囊 -->
         <Canvas x:Name="OverlayCanvas" Background="Transparent" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" ClipToBounds="True" />
 
-        <!-- 标注工作区：裁剪图 → 马赛克层 → 标注矢量层（越靠下越先绘制） -->
-        <Border x:Name="EditFrame" Visibility="Collapsed" BorderThickness="0"
+        <!-- 标注工作区：裁剪图 → 马赛克层 → 标注矢量层（越靠下越先绘制）
+             投影由外层 ShadowHost 承担：EditFrame 自身 ClipToBounds 会裁掉自己的 Effect。 -->
+        <Border x:Name="ShadowHost" Visibility="Collapsed"
                 HorizontalAlignment="Left" VerticalAlignment="Top"
-                ClipToBounds="True">
-            <Grid x:Name="EditRoot" Background="Transparent" ClipToBounds="True">
-                <Image x:Name="EditImage" Stretch="Fill" />
-                <Image x:Name="MosaicLayer" Stretch="Fill" IsHitTestVisible="False" />
-                <local:AnnotationVisualHost x:Name="AnnotationHost" IsHitTestVisible="False" />
-                <Canvas x:Name="EditCanvas" Background="Transparent" />
-            </Grid>
+                Background="Transparent">
+            <Border.Effect>
+                <!-- 暗色蒙版上黑色投影不可见，改用与强调色同源的冷光晕，既区分层次又不抢主体 -->
+                <DropShadowEffect BlurRadius="28" ShadowDepth="0" Opacity="0.85" Color="#4C9AFF" />
+            </Border.Effect>
+            <Border x:Name="EditFrame" BorderThickness="1" BorderBrush="#4C9AFF"
+                    HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                    RenderOptions.EdgeMode="Aliased">
+                <Border.Clip>
+                    <RectangleGeometry x:Name="EditFrameClip" RadiusX="7" RadiusY="7" />
+                </Border.Clip>
+                <Grid x:Name="EditRoot" Background="Transparent" ClipToBounds="True">
+                    <Image x:Name="EditImage" Stretch="Fill" />
+                    <Image x:Name="MosaicLayer" Stretch="Fill" IsHitTestVisible="False" />
+                    <local:AnnotationVisualHost x:Name="AnnotationHost" IsHitTestVisible="False" />
+                    <Canvas x:Name="EditCanvas" Background="Transparent" />
+                </Grid>
+            </Border>
         </Border>
 
         <!-- 选区调整手柄层：仅在选中/拖动时交互，空白区域不挡下层 -->
@@ -91,6 +116,7 @@
                 </Border.Effect>
                 <StackPanel>
                     <StackPanel Orientation="Horizontal">
+                        <!-- ① 绘制：形状类放在最左（最高频，鼠标落点最近） -->
                         <Button x:Name="RectButton" Style="{StaticResource ToolCardButtonStyle}" Tag="0" Click="Tool_Click">
                             <StackPanel>
                                 <Viewbox Width="20" Height="20">
@@ -101,6 +127,18 @@
                                     </Canvas>
                                 </Viewbox>
                                 <TextBlock Text="矩形" Style="{StaticResource ToolCaptionStyle}" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="EllipseButton" Style="{StaticResource ToolCardButtonStyle}" Tag="6" Click="Tool_Click">
+                            <StackPanel>
+                                <Viewbox Width="20" Height="20">
+                                    <Canvas Width="20" Height="20">
+                                        <Path Data="M2.5,10 A7.5,5.5 0 1 0 17.5,10 A7.5,5.5 0 1 0 2.5,10 Z"
+                                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                              StrokeThickness="1.8" />
+                                    </Canvas>
+                                </Viewbox>
+                                <TextBlock Text="椭圆" Style="{StaticResource ToolCaptionStyle}" />
                             </StackPanel>
                         </Button>
                         <Button x:Name="ArrowButton" Style="{StaticResource ToolCardButtonStyle}" Tag="1" Click="Tool_Click">
@@ -132,6 +170,12 @@
                                 <TextBlock Text="画笔" Style="{StaticResource ToolCaptionStyle}" />
                             </StackPanel>
                         </Button>
+
+                        <Border Width="9" Height="30" VerticalAlignment="Center">
+                            <Rectangle Width="1" Fill="#1EFFFFFF" />
+                        </Border>
+
+                        <!-- ② 标记：马赛克/序号/文字 -->
                         <Button x:Name="MosaicButton" Style="{StaticResource ToolCardButtonStyle}" Tag="3" Click="Tool_Click">
                             <StackPanel>
                                 <Viewbox Width="20" Height="20">
@@ -172,22 +216,14 @@
                                 <TextBlock Text="文字" Style="{StaticResource ToolCaptionStyle}" />
                             </StackPanel>
                         </Button>
-                        <Button x:Name="EllipseButton" Style="{StaticResource ToolCardButtonStyle}" Tag="6" Click="Tool_Click">
-                            <StackPanel>
-                                <Viewbox Width="20" Height="20">
-                                    <Canvas Width="20" Height="20">
-                                        <Path Data="M2.5,10 A7.5,5.5 0 1 0 17.5,10 A7.5,5.5 0 1 0 2.5,10 Z"
-                                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                              StrokeThickness="1.8" />
-                                    </Canvas>
-                                </Viewbox>
-                                <TextBlock Text="椭圆" Style="{StaticResource ToolCaptionStyle}" />
-                            </StackPanel>
-                        </Button>
+
                         <Border Width="9" Height="30" VerticalAlignment="Center">
                             <Rectangle Width="1" Fill="#1EFFFFFF" />
                         </Border>
-                        <Button x:Name="ColorButton" Style="{StaticResource ToolCardButtonStyle}" Tag="7" Click="Tool_Click">
+
+                        <!-- ③ 属性与修正：颜色/撤销紧邻，画完立刻调 -->
+                        <Button x:Name="ColorButton" Style="{StaticResource ToolCardButtonStyle}" Tag="7" Click="Tool_Click"
+                                ToolTip="颜色（C 循环切换，点击展开调色板）">
                             <StackPanel>
                                 <Viewbox Width="20" Height="20">
                                     <Canvas Width="20" Height="20">
@@ -198,9 +234,6 @@
                                 <TextBlock Text="颜色" Style="{StaticResource ToolCaptionStyle}" />
                             </StackPanel>
                         </Button>
-                        <Border Width="9" Height="30" VerticalAlignment="Center">
-                            <Rectangle Width="1" Fill="#1EFFFFFF" />
-                        </Border>
                         <Button x:Name="UndoButton" Style="{StaticResource ToolCardButtonStyle}" Tag="8" Click="Tool_Click">
                             <StackPanel>
                                 <Viewbox Width="20" Height="20">
@@ -213,9 +246,12 @@
                                 <TextBlock Text="撤销" Style="{StaticResource ToolCaptionStyle}" />
                             </StackPanel>
                         </Button>
+
                         <Border Width="9" Height="30" VerticalAlignment="Center">
                             <Rectangle Width="1" Fill="#1EFFFFFF" />
                         </Border>
+
+                        <!-- ④ 取字 -->
                         <Button x:Name="OcrButton" Style="{StaticResource ToolCardButtonStyle}" Tag="9" Click="Tool_Click"
                                 ToolTip="取字（T）：识别选区文字">
                             <StackPanel>
@@ -229,13 +265,56 @@
                                 <TextBlock Text="取字" Style="{StaticResource ToolCaptionStyle}" />
                             </StackPanel>
                         </Button>
-                    </StackPanel>
 
-                    <Border Height="1" Background="#1EFFFFFF" Margin="4,4,4,0" />
-                    <TextBlock x:Name="ToolHint" Text="Enter 复制　P 贴图　T 取字　右键/Esc 返回　Ctrl+Z 撤销　Ctrl+Y 重做　X 线宽　C 颜色"
-                               FontSize="10.5" Foreground="#76FFFFFF" Margin="4,3,4,1"
-                               TextTrimming="CharacterEllipsis" />
+                        <Border Width="9" Height="30" VerticalAlignment="Center">
+                            <Rectangle Width="1" Fill="#1EFFFFFF" />
+                        </Border>
+
+                        <!-- ⑤ 输出：保存/复制固定在最右，强调色，收尾动作一次定位 -->
+                        <Button x:Name="SaveButton" Style="{StaticResource AccentCardButtonStyle}" Tag="10" Click="Tool_Click"
+                                ToolTip="保存（S）：一键存入图片文件夹；Ctrl+S 另存为">
+                            <StackPanel>
+                                <Viewbox Width="20" Height="20">
+                                    <Canvas Width="20" Height="20">
+                                        <Path Data="M4.5,3.5 H13.5 L16.5,6.5 V16.5 H4.5 Z"
+                                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                              StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                                        <Path Data="M7.5,3.5 V8.5 H12.5 V3.5 M7,16 V12.2 H13 V16"
+                                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                              StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                                    </Canvas>
+                                </Viewbox>
+                                <TextBlock Text="保存" Style="{StaticResource ToolCaptionStyle}" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="CopyButton" Style="{StaticResource AccentCardButtonStyle}" Tag="11" Click="Tool_Click"
+                                ToolTip="复制（Enter / Ctrl+C）：写入剪贴板并关闭">
+                            <StackPanel>
+                                <Viewbox Width="20" Height="20">
+                                    <Canvas Width="20" Height="20">
+                                        <Path Data="M6.5,3.5 H13.5 V12.5 H6.5 Z"
+                                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                              StrokeThickness="1.7" StrokeLineJoin="Round" />
+                                        <Path Data="M3.8,6.8 H3.5 V16.5 H10.5 V16.2"
+                                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                              StrokeThickness="1.7" StrokeLineJoin="Round" />
+                                    </Canvas>
+                                </Viewbox>
+                                <TextBlock Text="复制" Style="{StaticResource ToolCaptionStyle}" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
                 </StackPanel>
+            </Border>
+
+            <!-- 调色板浮层：点击「颜色」时从工具条上/下方展开，替代原来的循环切换 -->
+            <Border x:Name="PaletteFlyout" Visibility="Collapsed" Opacity="0"
+                    Background="#F31C1C22" BorderBrush="#28FFFFFF" BorderThickness="1"
+                    CornerRadius="10" Padding="8">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="14" ShadowDepth="3" Opacity="0.32" Color="Black" />
+                </Border.Effect>
+                <StackPanel x:Name="PaletteHost" Orientation="Horizontal" />
             </Border>
         </Canvas>
 
@@ -252,8 +331,9 @@
                         <Line X1="72" Y1="5" X2="72" Y2="83" Stroke="#D2F04438" StrokeThickness="1" />
                         <Line X1="5" Y1="44" X2="139" Y2="44" Stroke="#D2F04438" StrokeThickness="1" />
                     </Grid>
-                    <TextBlock x:Name="MagnifierText" Height="18" TextAlignment="Center" VerticalAlignment="Center"
-                               FontSize="10" Foreground="#E8FFFFFF" />
+                    <TextBlock x:Name="MagnifierText" Height="19" TextAlignment="Center" VerticalAlignment="Center"
+                               FontFamily="Consolas" FontSize="11" FontWeight="Medium"
+                               Foreground="#E8FFFFFF" />
                 </StackPanel>
             </Border>
         </Canvas>
