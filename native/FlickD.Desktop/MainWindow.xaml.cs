@@ -39,6 +39,7 @@ public partial class MainWindow : System.Windows.Window
     private readonly ThemeResourceUpdater _themeResourceUpdater = new();
     private readonly WindowAppearanceController _windowAppearanceController = new();
     private readonly AnimationPreferenceService _animationPreferenceService = new();
+    private readonly SystemThemeWatcher _systemThemeWatcher = new();
     private readonly ContentTransitionController _contentTransitionController = new();
     private readonly MainWindowSettingsCoordinator _settingsCoordinator;
     private readonly SettingsWindowPlacement _settingsPlacement;
@@ -138,6 +139,7 @@ public partial class MainWindow : System.Windows.Window
         _groupSwitchCoordinator.SelectedGroupId = _viewModel.SelectedGroup?.Id;
         _groupSwitchCoordinator.SwitchRequested += GroupSwitchCoordinator_SwitchRequested;
         _animationPreferenceService.PreferenceChanged += AnimationPreferenceService_PreferenceChanged;
+        _systemThemeWatcher.AppsLightThemeChanged += OnSystemAppsThemeChanged;
         DataContext = _viewModel;
         ((INotifyCollectionChanged)_viewModel.VisibleItems).CollectionChanged += VisibleItems_CollectionChanged;
         _activeLayoutMode = NormalizeLayoutMode(_viewModel.Settings.LayoutMode);
@@ -386,6 +388,8 @@ public partial class MainWindow : System.Windows.Window
         DetachVirtualizingPanel();
         _groupSwitchCoordinator.SwitchRequested -= GroupSwitchCoordinator_SwitchRequested;
         _animationPreferenceService.PreferenceChanged -= AnimationPreferenceService_PreferenceChanged;
+        _systemThemeWatcher.AppsLightThemeChanged -= OnSystemAppsThemeChanged;
+        _systemThemeWatcher.Dispose();
         _hotkeyRetryTimer?.Stop();
         _hotkeyRetryTimer = null;
         SystemEvents.SessionSwitch -= OnSessionSwitch;
@@ -915,6 +919,27 @@ public partial class MainWindow : System.Windows.Window
     {
         _groupSwitchCoordinator.UpdateIntentDelay(settings);
         _settingsCoordinator.Preview(settings);
+    }
+
+    // 跟随系统深浅色：仅当开关开启时，在浅色/深色内置皮肤间自动切换并落盘。
+    private void OnSystemAppsThemeChanged(bool isLight)
+    {
+        var settings = _viewModel.Settings;
+        if (!settings.FollowSystemTheme)
+        {
+            return;
+        }
+
+        var skinId = isLight ? ThemePresets.FluentLightId : ThemePresets.FluentDarkId;
+        var skin = SkinApplier.Resolve(skinId, settings.CustomThemes);
+        if (skin is null
+            || string.Equals(settings.ThemeProfileId, SkinApplier.ResolveSkinId(skin), StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        SkinApplier.Apply(settings, skin);
+        _settingsCoordinator.Apply(settings);
     }
 
     private void ApplyLayoutSettings(Settings settings)

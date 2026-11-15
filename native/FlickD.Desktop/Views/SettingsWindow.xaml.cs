@@ -101,9 +101,6 @@ public partial class SettingsWindow : Window
 
     private void LoadControls()
     {
-        ThemePresetCombo.SelectedIndex = Working.Theme == "light" ? 1 : Working.Theme == "custom" ? 2 : 0;
-        ThemeProfileBox.Text = Working.ThemeProfile;
-
         GridLayoutRadio.IsChecked = Working.LayoutMode == SettingsOptionValues.GridLayout;
         CardLayoutRadio.IsChecked = Working.LayoutMode == SettingsOptionValues.CardLayout;
         if (GridLayoutRadio.IsChecked != true && CardLayoutRadio.IsChecked != true)
@@ -132,7 +129,8 @@ public partial class SettingsWindow : Window
         GroupHoverDelaySlider.Value = Working.GroupHoverDelayMs;
         RefreshConfigLocationPanel();
 
-        LayeredTransparencyRadio.IsChecked = Working.TransparencyMode != SettingsOptionValues.TransparencyWholeWindow;
+        LayeredTransparencyRadio.IsChecked = Working.TransparencyMode == SettingsOptionValues.TransparencyLayered;
+        AcrylicTransparencyRadio.IsChecked = Working.TransparencyMode == SettingsOptionValues.TransparencyAcrylic;
         WholeWindowTransparencyRadio.IsChecked = Working.TransparencyMode == SettingsOptionValues.TransparencyWholeWindow;
         OpacitySlider.Value = _viewModel.CurrentOpacity;
 
@@ -152,8 +150,11 @@ public partial class SettingsWindow : Window
         RunAtStartupCheck.IsChecked = Working.StartWithWindows;
         OcrEnabledCheck.IsChecked = Working.OcrEnabled;
         OcrResultWindowCheck.IsChecked = Working.OcrShowResultWindow;
+        FollowSystemThemeCheck.IsChecked = Working.FollowSystemTheme;
         RefreshOcrStatus();
         LoadColorControls();
+        RefreshSkinList();
+        RefreshSkinHint();
         RefreshValueLabels();
         VersionText.Text = "v" + (System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.1.5");
     }
@@ -216,34 +217,6 @@ public partial class SettingsWindow : Window
         CategoryContentScrollViewer?.ScrollToTop();
     }
 
-    private void ThemePresetCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_isLoading || ThemePresetCombo.SelectedItem is not ComboBoxItem { Tag: string theme }) return;
-
-        _viewModel.Update(settings =>
-        {
-            settings.Theme = theme;
-            settings.ThemeProfile = theme == "light" ? "浅色" : theme == "dark" ? "深色" : "自定义";
-            settings.ThemeColors = theme == "light"
-                ? ThemeColors.Light()
-                : theme == "dark"
-                    ? ThemeColors.Dark()
-                    : settings.ThemeColors.Clone();
-        });
-
-        RunWhileLoading(() =>
-        {
-            ThemeProfileBox.Text = Working.ThemeProfile;
-            LoadColorControls();
-        });
-    }
-
-    private void ThemeProfileBox_TextChanged(object sender, TextChangedEventArgs e)
-    {
-        if (_isLoading || sender is not TextBox textBox) return;
-        _viewModel.Update(settings => settings.ThemeProfile = textBox.Text);
-    }
-
     private void ThemeColorChanged(object sender, TextChangedEventArgs e)
     {
         if (_isLoading || sender is not TextBox textBox) return;
@@ -251,18 +224,15 @@ public partial class SettingsWindow : Window
         _viewModel.Update(settings =>
         {
             SetThemeColor(settings.ThemeColors, textBox.Name, textBox.Text);
+            // 改色即脱离当前皮肤（已修改态），提示用户可另存为新皮肤。
+            settings.ThemeProfileId = "";
             if (!string.Equals(settings.Theme, "custom", StringComparison.Ordinal))
             {
                 settings.ThemeProfile = "自定义";
             }
             settings.Theme = "custom";
         });
-
-        RunWhileLoading(() =>
-        {
-            ThemePresetCombo.SelectedIndex = 2;
-            ThemeProfileBox.Text = Working.ThemeProfile;
-        });
+        RefreshSkinHint();
         RefreshColorPickerButtons();
     }
 
@@ -305,6 +275,215 @@ public partial class SettingsWindow : Window
             catch (FormatException)
             {
                 swatch.ClearValue(Border.BackgroundProperty);
+            }
+        }
+    }
+
+    // ---------- 皮肤 ----------
+
+    private void RefreshSkinList()
+    {
+        var selectedId = Working.ThemeProfileId;
+        var cards = new List<SkinCardViewModel>();
+        foreach (var preset in ThemePresets.All)
+        {
+            cards.Add(CreateSkinCard(preset, isBuiltIn: true, selectedId));
+        }
+        foreach (var custom in Working.CustomThemes)
+        {
+            cards.Add(CreateSkinCard(custom, isBuiltIn: false, selectedId));
+        }
+        SkinList.ItemsSource = cards;
+    }
+
+    private void RefreshSkinHint()
+    {
+        // ThemeProfileId 为空表示配色已脱离皮肤（改色未保存），提示可另存。
+        SkinModifiedHint.Visibility = string.IsNullOrWhiteSpace(Working.ThemeProfileId)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    private static SkinCardViewModel CreateSkinCard(ThemeProfile skin, bool isBuiltIn, string selectedId)
+    {
+        var id = SkinApplier.ResolveSkinId(skin);
+        return new SkinCardViewModel
+        {
+            SkinId = id,
+            Name = skin.Name,
+            Colors = skin.Colors,
+            MaterialBadge = MaterialBadge(skin.Material, skin.Opacity),
+            IsBuiltIn = isBuiltIn,
+            IsSelected = string.Equals(id, selectedId, StringComparison.Ordinal),
+        };
+    }
+
+    private static string MaterialBadge(string? material, double? opacity)
+    {
+        switch (material)
+        {
+            case "layered": return $"分层 {OpacityPercent(opacity, 1.0)}%";
+            case SettingsOptionValues.TransparencyAcrylic: return $"玻璃 {OpacityPercent(opacity, 0.68)}%";
+            case SettingsOptionValues.TransparencyWholeWindow: return $"整窗 {OpacityPercent(opacity, 0.85)}%";
+            default: return "不透明";
+        }
+    }
+
+    private static int OpacityPercent(double? opacity, double fallback) =>
+        (int)Math.Round((opacity ?? fallback) * 100);
+
+    private void SkinCard_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (_isLoading || sender is not FrameworkElement { Tag: SkinCardViewModel card }) return;
+        var skin = SkinApplier.Resolve(card.SkinId, Working.CustomThemes);
+        if (skin is null) return;
+
+        _viewModel.Update(settings => SkinApplier.Apply(settings, skin));
+        RunWhileLoading(() =>
+        {
+            LoadColorControls();
+            RefreshOpacityControls();
+            RefreshSkinList();
+        });
+        RefreshSkinHint();
+        e.Handled = true;
+    }
+
+    private void SkinDelete_Click(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        if (_isLoading || sender is not FrameworkElement { Tag: SkinCardViewModel card } || card.IsBuiltIn) return;
+
+        _viewModel.Update(settings =>
+        {
+            settings.CustomThemes.RemoveAll(t => string.Equals(t.Name, card.SkinId, StringComparison.Ordinal));
+            // 删除的是当前皮肤时回落到内置深色皮肤。
+            if (string.Equals(settings.ThemeProfileId, card.SkinId, StringComparison.Ordinal))
+            {
+                SkinApplier.Apply(settings, ThemePresets.FluentDark);
+            }
+        });
+        RunWhileLoading(() =>
+        {
+            LoadColorControls();
+            RefreshOpacityControls();
+            RefreshSkinList();
+        });
+        RefreshSkinHint();
+    }
+
+    private void SaveSkin_Click(object sender, RoutedEventArgs e)
+    {
+        SaveSkinErrorText.Visibility = Visibility.Collapsed;
+        SaveSkinNameBox.Text = Working.ThemeProfile is "自定义" or "自定义风格" ? "" : Working.ThemeProfile;
+        SaveSkinOverlay.Visibility = Visibility.Visible;
+        SaveSkinNameBox.Focus();
+        SaveSkinNameBox.SelectAll();
+    }
+
+    private void SaveSkinCancel_Click(object sender, RoutedEventArgs e) => CloseSaveSkinOverlay();
+
+    // 点击 scrim（对话框外的遮罩层本体）关闭；点对话框内部不关闭。
+    private void SaveSkinOverlay_Background(object sender, MouseButtonEventArgs e)
+    {
+        if (ReferenceEquals(e.OriginalSource, SaveSkinOverlay))
+        {
+            CloseSaveSkinOverlay();
+        }
+    }
+
+    private void SaveSkinNameBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            e.Handled = true;
+            ConfirmSaveSkin();
+        }
+        else if (e.Key == Key.Escape)
+        {
+            e.Handled = true;
+            CloseSaveSkinOverlay();
+        }
+    }
+
+    private void SaveSkinConfirm_Click(object sender, RoutedEventArgs e) => ConfirmSaveSkin();
+
+    private void ConfirmSaveSkin()
+    {
+        var name = SaveSkinNameBox.Text.Trim();
+        if (name.Length == 0)
+        {
+            SaveSkinErrorText.Text = "请输入皮肤名称";
+            SaveSkinErrorText.Visibility = Visibility.Visible;
+            return;
+        }
+
+        // 重名自动追加序号，避免自定义皮肤同名混淆。
+        var uniqueName = name;
+        var existingNames = new HashSet<string>(Working.CustomThemes.Select(t => t.Name), StringComparer.Ordinal);
+        var suffix = 2;
+        while (!existingNames.Add(uniqueName))
+        {
+            uniqueName = $"{name} {suffix++}";
+        }
+
+        // 分层 100% 等价于不透明，保存为 opaque 皮肤以便徽标可读。
+        var material = Working.TransparencyMode == SettingsOptionValues.TransparencyLayered
+                       && Math.Abs(_viewModel.CurrentOpacity - 1.0) < 0.001
+            ? "opaque"
+            : Working.TransparencyMode;
+        var skin = new ThemeProfile
+        {
+            Name = uniqueName,
+            Colors = Working.ThemeColors.Clone(),
+            Material = material,
+            Opacity = _viewModel.CurrentOpacity,
+        };
+
+        _viewModel.Update(settings =>
+        {
+            settings.CustomThemes.Add(skin);
+            settings.ThemeProfileId = SkinApplier.ResolveSkinId(skin);
+            settings.ThemeProfile = uniqueName;
+        });
+        CloseSaveSkinOverlay();
+        RefreshSkinList();
+        RefreshSkinHint();
+    }
+
+    private void CloseSaveSkinOverlay() => SaveSkinOverlay.Visibility = Visibility.Collapsed;
+
+    private sealed class SkinCardViewModel
+    {
+        public string SkinId { get; init; } = "";
+        public string Name { get; init; } = "";
+        public ThemeColors Colors { get; init; } = new();
+        public string MaterialBadge { get; init; } = "";
+        public bool IsBuiltIn { get; init; }
+        public bool IsSelected { get; init; }
+        public Visibility DeleteVisibility => IsBuiltIn ? Visibility.Collapsed : Visibility.Visible;
+
+        public System.Windows.Media.SolidColorBrush PanelBrush => ToBrush(Colors.Panel);
+        public System.Windows.Media.SolidColorBrush SurfaceBrush => ToBrush(Colors.Surface);
+        public System.Windows.Media.SolidColorBrush AccentBrush => ToBrush(Colors.Accent);
+        public System.Windows.Media.SolidColorBrush TextPrimaryBrush => ToBrush(Colors.TextPrimary);
+        public System.Windows.Media.SolidColorBrush HoverBrush => ToBrush(Colors.Hover);
+
+        private static System.Windows.Media.SolidColorBrush ToBrush(string? hex)
+        {
+            try
+            {
+                var brush = new System.Windows.Media.SolidColorBrush(
+                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex ?? "#808080"));
+                if (brush.CanFreeze)
+                {
+                    brush.Freeze();
+                }
+                return brush;
+            }
+            catch
+            {
+                return System.Windows.Media.Brushes.Gray;
             }
         }
     }
@@ -376,6 +555,27 @@ public partial class SettingsWindow : Window
                 case "startWithWindows": settings.StartWithWindows = value; break;
                 case "ocrEnabled": settings.OcrEnabled = value; break;
                 case "ocrShowResultWindow": settings.OcrShowResultWindow = value; break;
+                case "followSystemTheme":
+                    settings.FollowSystemTheme = value;
+                    if (value)
+                    {
+                        // 开启时立即按当前系统深浅色切换一次，让"跟随"即刻可见。
+                        var skinId = SystemThemeWatcher.IsAppsLightTheme()
+                            ? ThemePresets.FluentLightId
+                            : ThemePresets.FluentDarkId;
+                        var skin = SkinApplier.Resolve(skinId, settings.CustomThemes);
+                        if (skin is not null)
+                        {
+                            SkinApplier.Apply(settings, skin);
+                            RunWhileLoading(() =>
+                            {
+                                LoadColorControls();
+                                RefreshOpacityControls();
+                                RefreshSkinList();
+                            });
+                        }
+                    }
+                    break;
             }
         });
     }
