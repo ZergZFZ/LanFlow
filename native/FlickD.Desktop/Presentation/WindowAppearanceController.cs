@@ -108,6 +108,12 @@ public sealed class WindowAppearanceController
         surfaceRoot.Opacity = 1.0;
         contentRoot.Opacity = state.ContentOpacity;
 
+        var isAcrylic = string.Equals(
+            settings.TransparencyMode,
+            SettingsOptionValues.TransparencyAcrylic,
+            StringComparison.Ordinal);
+        UpdateAcrylic(window, isAcrylic, state.SurfaceAlpha);
+
         foreach (var key in LayeredSurfaceBrushKeys)
         {
             if (window.TryFindResource(key) is not SolidColorBrush source)
@@ -117,6 +123,30 @@ public sealed class WindowAppearanceController
 
             surfaceRoot.Resources[key] = CreateBrush(source.Color, state.SurfaceAlpha);
             contentRoot.Resources[key] = CreateBrush(source.Color, state.SurfaceAlpha);
+        }
+    }
+
+    // Acrylic 玻璃：在分层半透明之上叠加系统模糊。启用失败（远程桌面/系统不支持）时
+    // 静默降级为纯半透明——表面 alpha 覆写照常生效，只是没有模糊。
+    private bool _acrylicEnabled;
+
+    private void UpdateAcrylic(Window window, bool isAcrylic, byte surfaceAlpha)
+    {
+        if (isAcrylic)
+        {
+            if (_acrylicEnabled)
+            {
+                return;
+            }
+            if (window.TryFindResource("WindowBackgroundBrush") is SolidColorBrush panelBrush)
+            {
+                _acrylicEnabled = WindowCompositionHelper.TryEnableAcrylic(window, panelBrush.Color, surfaceAlpha);
+            }
+        }
+        else if (_acrylicEnabled)
+        {
+            WindowCompositionHelper.Disable(window);
+            _acrylicEnabled = false;
         }
     }
 

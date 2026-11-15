@@ -153,6 +153,34 @@ public sealed class ConfigStore : IConfigStore
         settings.ThemeColors ??= settings.Theme == "light" ? ThemeColors.Light() : ThemeColors.Dark();
         settings.CustomThemes ??= [];
 
+        // 皮肤标识归一：空缺或指向不存在的皮肤时，按旧字段推断（旧配置迁移路径）。
+        var knownSkinIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var preset in ThemePresets.All)
+        {
+            knownSkinIds.Add(preset.Id!);
+        }
+        foreach (var custom in settings.CustomThemes)
+        {
+            if (!string.IsNullOrWhiteSpace(custom.Id))
+            {
+                knownSkinIds.Add(custom.Id);
+            }
+            if (!string.IsNullOrWhiteSpace(custom.Name))
+            {
+                knownSkinIds.Add(custom.Name);
+            }
+        }
+        if (string.IsNullOrWhiteSpace(settings.ThemeProfileId) || !knownSkinIds.Contains(settings.ThemeProfileId))
+        {
+            var legacyCustom = settings.CustomThemes.FirstOrDefault(t =>
+                string.Equals(t.Name, settings.ThemeProfile, StringComparison.Ordinal));
+            settings.ThemeProfileId = legacyCustom is not null
+                ? SkinApplier.ResolveSkinId(legacyCustom)
+                : settings.Theme == "light"
+                    ? ThemePresets.FluentLightId
+                    : ThemePresets.FluentDarkId;
+        }
+
             settings.LayoutMode = settings.LayoutMode switch
             {
                 "tile" or "list" => SettingsOptionValues.GridLayout,
@@ -176,7 +204,8 @@ public sealed class ConfigStore : IConfigStore
                 : SettingsOptionValues.TransparencyLayered;
             if (isExistingConfig) settings.WholeWindowOpacity = settings.Opacity;
         }
-        else if (settings.TransparencyMode != SettingsOptionValues.TransparencyWholeWindow)
+        else if (settings.TransparencyMode is not (SettingsOptionValues.TransparencyWholeWindow
+                     or SettingsOptionValues.TransparencyAcrylic))
         {
             settings.TransparencyMode = SettingsOptionValues.TransparencyLayered;
         }

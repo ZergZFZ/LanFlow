@@ -121,6 +121,64 @@ public sealed class ConfigStoreTests : IDisposable
         Assert.Equal(SettingsOptionValues.DefaultGroupHoverDelayMs, groupHoverDelayMs);
     }
 
+    [Fact]
+    public void Load_LegacyConfigWithoutSkinIdInfersFromTheme()
+    {
+        File.WriteAllText(
+            Path.Combine(_tempDirectory, "config.json"),
+            "{ \"settings\": { \"theme\": \"light\", \"themeProfile\": \"浅色\" }, \"groups\": [] }");
+
+        var settings = new ConfigStore("Alt+Space", _tempDirectory).Load().Settings;
+
+        Assert.Equal(ThemePresets.FluentLightId, settings.ThemeProfileId);
+        Assert.False(settings.FollowSystemTheme);
+    }
+
+    [Fact]
+    public void Load_LegacyCustomThemeNameBecomesSkinId()
+    {
+        File.WriteAllText(Path.Combine(_tempDirectory, "config.json"), """
+            { "settings": {
+                "theme": "custom",
+                "themeProfile": "我的皮肤",
+                "customThemes": [ { "name": "我的皮肤", "colors": { "panel": "#101010" } } ]
+            }, "groups": [] }
+            """);
+
+        var settings = new ConfigStore("Alt+Space", _tempDirectory).Load().Settings;
+
+        Assert.Equal("我的皮肤", settings.ThemeProfileId);
+        Assert.Single(settings.CustomThemes);
+        Assert.Null(settings.CustomThemes[0].Id);
+        Assert.Null(settings.CustomThemes[0].Material);
+    }
+
+    [Fact]
+    public void Load_UnknownSkinIdFallsBackToBuiltInByTheme()
+    {
+        File.WriteAllText(
+            Path.Combine(_tempDirectory, "config.json"),
+            "{ \"settings\": { \"theme\": \"dark\", \"themeProfileId\": \"gone-skin\" }, \"groups\": [] }");
+
+        var settings = new ConfigStore("Alt+Space", _tempDirectory).Load().Settings;
+
+        Assert.Equal(ThemePresets.FluentDarkId, settings.ThemeProfileId);
+    }
+
+    [Fact]
+    public void Load_KeepsAcrylicTransparencyMode()
+    {
+        File.WriteAllText(
+            Path.Combine(_tempDirectory, "config.json"),
+            "{ \"settings\": { \"transparencyMode\": \"acrylic\", \"layeredOpacity\": 0.68 }, \"groups\": [] }");
+
+        var settings = new ConfigStore("Alt+Space", _tempDirectory).Load().Settings;
+
+        Assert.Equal(SettingsOptionValues.TransparencyAcrylic, settings.TransparencyMode);
+        Assert.Equal(0.68, settings.LayeredOpacity, 3);
+        Assert.Equal(0.68, settings.Opacity, 3);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_tempDirectory)) Directory.Delete(_tempDirectory, true);

@@ -4,12 +4,15 @@
 .DESCRIPTION
   Release 模式（-Version）：校验当前待发布版本（须与 csproj / CHANGELOG 一致）的版本一致性、
   三条资产、sidecar、full ZIP 根目录、OCR manifest 与 PE 版本；不适用于 2.0.x 历史资产形状。
+  -SkipOcr 仅跳过 OCR 资产与 manifest 相关校验（配合 Build-ReleaseAssets.ps1 -SkipOcrBundle
+  供 CI 使用；正式发版不得使用）。
   Shape 模式（-PublishShape）：只校验 publish 目录形状，供 CI 与 Build-ReleaseAssets.ps1 前置调用，
   不需要 OCR 素材与网络，把「无 PDB / 无兼容壳 / 无内嵌 OCR」变成硬闸门。
 #>
 [CmdletBinding(DefaultParameterSetName = 'Release')]
 param(
     [Parameter(ParameterSetName = 'Release', Mandatory = $true)][string]$Version,
+    [Parameter(ParameterSetName = 'Release')][switch]$SkipOcr,
     [Parameter(ParameterSetName = 'Shape', Mandatory = $true)][switch]$PublishShape,
     [Parameter(ParameterSetName = 'Shape', Mandatory = $true)][string]$FullDir,
     [Parameter(ParameterSetName = 'Shape', Mandatory = $true)][string]$LiteDir
@@ -65,11 +68,16 @@ $fullZip = Join-Path $dist "FlickD-$Version-full.zip"
 $liteExe = Join-Path $dist "FlickD-$Version-lite.exe"
 $ocrZip = Join-Path $ocrDir "FlickD-$Version-ocr.zip"
 
-foreach ($a in @($fullZip, $liteExe, $ocrZip)) {
+# -SkipOcr 只在 CI 冒烟打包（无本地 OCR 模型素材）时由 Build-ReleaseAssets.ps1 传入；
+# 正式发版走完整校验，OCR 资产缺失照样失败。
+$assets = @($fullZip, $liteExe)
+if (-not $SkipOcr) { $assets += $ocrZip }
+
+foreach ($a in $assets) {
     Assert-Check (Test-Path -LiteralPath $a) "资产存在: $(Split-Path -Path $a -Leaf)"
 }
 
-foreach ($a in @($fullZip, $liteExe, $ocrZip)) {
+foreach ($a in $assets) {
     $side = "$a.sha256"
     Assert-Check (Test-Path -LiteralPath $side) "sidecar 存在: $(Split-Path -Path $side -Leaf)"
     $expected = ((Get-Content -LiteralPath $side -Raw).Trim() -split '\s+')[0]
@@ -97,6 +105,7 @@ try {
     Assert-Check ($names.Count -gt 5) "full ZIP 含完整发布依赖（$($names.Count) 个条目）"
 } finally { $zip.Dispose() }
 
+if (-not $SkipOcr) {
 $ocrArchive = [System.IO.Compression.ZipFile]::OpenRead($ocrZip)
 try {
     $manifestEntry = $ocrArchive.GetEntry('manifest.json')
@@ -138,8 +147,13 @@ try {
     } finally { $sha2.Dispose() }
     Assert-Check ($contentHash -eq $manifest.contentHash.ToLowerInvariant()) 'OCR manifest contentHash 一致'
 } finally { $ocrArchive.Dispose() }
+}
 
 $fv = (Get-Item -LiteralPath $liteExe).VersionInfo.FileVersion
 Assert-Check ($fv -eq "$Version.0") "lite PE FileVersion 为 $Version.0（实际 $fv）"
 
-Write-Host "通过 $script:Checks 项校验；三条资产可用于发布。"
+if ($SkipOcr) {
+    Write-Host "通过 $script:Checks 项校验；full/lite 资产就绪（OCR 校验已跳过，仅限 CI 冒烟）。"
+} else {
+    Write-Host "通过 $script:Checks 项校验；三条资产可用于发布。"
+}

@@ -168,32 +168,86 @@
                     <StackPanel x:Name="AppearancePanel">
                         <Border Style="{StaticResource SettingsSectionStyle}">
                             <StackPanel>
-                                <TextBlock Text="主题方案" Style="{StaticResource SettingsSectionHeaderStyle}" />
-                                <Border Style="{StaticResource SettingsFieldRowStyle}">
+                                <TextBlock Text="皮肤" Style="{StaticResource SettingsSectionHeaderStyle}" />
+                                <TextBlock Margin="0,0,0,12"
+                                           Text="配色与材质的组合；切换即时预览，改色后可另存为新皮肤。"
+                                           Foreground="{DynamicResource SecondaryTextBrush}" FontSize="12" />
+                                <ItemsControl x:Name="SkinList" Focusable="False">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border x:Name="SkinCardBorder"
+                                                    Width="158"
+                                                    Margin="0,0,10,10"
+                                                    Padding="12,10"
+                                                    CornerRadius="8"
+                                                    Background="{DynamicResource WindowBackgroundBrush}"
+                                                    BorderBrush="{DynamicResource DividerBrush}"
+                                                    BorderThickness="1"
+                                                    Cursor="Hand"
+                                                    Tag="{Binding}"
+                                                    MouseLeftButtonDown="SkinCard_Click">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                                <Setter Property="BorderBrush" Value="{DynamicResource FocusBorderBrush}" />
+                                                                <Setter Property="BorderThickness" Value="2" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <StackPanel>
+                                                    <Grid>
+                                                        <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                                        <Button x:Name="SkinDeleteButton"
+                                                                HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                                Width="18" Height="18" Padding="0"
+                                                                FontSize="10" Content="✕"
+                                                                Foreground="{DynamicResource SecondaryTextBrush}"
+                                                                Background="Transparent" BorderThickness="0"
+                                                                Cursor="Hand"
+                                                                Visibility="{Binding DeleteVisibility}"
+                                                                Tag="{Binding}"
+                                                                MouseLeftButtonDown="SkinDelete_Click"
+                                                                ToolTip="删除此皮肤" />
+                                                    </Grid>
+                                                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                                        <Border Width="20" Height="14" CornerRadius="3,0,0,3" Background="{Binding PanelBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,1,0,1" />
+                                                        <Border Width="20" Height="14" Background="{Binding SurfaceBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,1,0,1" />
+                                                        <Border Width="20" Height="14" Background="{Binding AccentBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,1,0,1" />
+                                                        <Border Width="20" Height="14" Background="{Binding TextPrimaryBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,1,0,1" />
+                                                        <Border Width="20" Height="14" CornerRadius="0,3,3,0" Background="{Binding HoverBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,1,1,1" />
+                                                    </StackPanel>
+                                                    <TextBlock Margin="0,6,0,0" Text="{Binding MaterialBadge}" FontSize="10.5" Foreground="{DynamicResource SecondaryTextBrush}" />
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                    <Button x:Name="SaveSkinButton" Content="另存当前配色为新皮肤…" Click="SaveSkin_Click" />
+                                    <TextBlock x:Name="SkinModifiedHint"
+                                               Margin="10,0,0,0" VerticalAlignment="Center"
+                                               FontSize="12" Foreground="{DynamicResource WarningTextBrush}"
+                                               Visibility="Collapsed" Text="当前配色已修改，可另存为新皮肤" />
+                                </StackPanel>
+                                <Border Padding="0,14,0,0">
                                     <Grid>
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                         <StackPanel>
-                                            <TextBlock Text="主题" Style="{StaticResource SettingsFieldTitleStyle}" />
-                                            <TextBlock Text="使用深色、浅色或自定义配色。" Style="{StaticResource SettingsFieldDescriptionStyle}" />
+                                            <TextBlock Text="跟随系统深浅色" Style="{StaticResource SettingsFieldTitleStyle}" />
+                                            <TextBlock Text="开启后随 Windows 应用深浅色，在浅色/深色皮肤间自动切换。" Style="{StaticResource SettingsFieldDescriptionStyle}" />
                                         </StackPanel>
-                                        <ComboBox x:Name="ThemePresetCombo"
-                                                  Grid.Column="1"
-                                                  Style="{StaticResource SettingsComboBoxStyle}"
-                                                  SelectionChanged="ThemePresetCombo_SelectionChanged">
-                                            <ComboBoxItem Content="深色（默认）" Tag="dark" />
-                                            <ComboBoxItem Content="浅色" Tag="light" />
-                                            <ComboBoxItem Content="自定义" Tag="custom" />
-                                        </ComboBox>
-                                    </Grid>
-                                </Border>
-                                <Border Padding="0,12">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="220" /></Grid.ColumnDefinitions>
-                                        <StackPanel>
-                                            <TextBlock Text="主题配置名称" Style="{StaticResource SettingsFieldTitleStyle}" />
-                                            <TextBlock Text="用于标识当前自定义主题方案。" Style="{StaticResource SettingsFieldDescriptionStyle}" />
-                                        </StackPanel>
-                                        <TextBox x:Name="ThemeProfileBox" Grid.Column="1" TextChanged="ThemeProfileBox_TextChanged" />
+                                        <CheckBox x:Name="FollowSystemThemeCheck"
+                                                  Grid.Column="1" Tag="followSystemTheme"
+                                                  HorizontalAlignment="Right"
+                                                  Style="{StaticResource SettingsCheckBoxStyle}"
+                                                  Checked="BooleanSettingChanged" Unchecked="BooleanSettingChanged" />
                                     </Grid>
                                 </Border>
                             </StackPanel>
@@ -279,7 +333,7 @@
                         <Border Style="{StaticResource SettingsSectionStyle}">
                             <StackPanel>
                                 <TextBlock Text="透明模式" Style="{StaticResource SettingsSectionHeaderStyle}" />
-                                <Border Style="{StaticResource SettingsFieldRowStyle}"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><StackPanel><TextBlock Text="应用范围" Style="{StaticResource SettingsFieldTitleStyle}" /><TextBlock Text="分层模式只影响内容表面；整窗模式连同窗口一起透明" Style="{StaticResource SettingsFieldDescriptionStyle}" /></StackPanel><StackPanel Grid.Column="1" Orientation="Horizontal"><RadioButton x:Name="LayeredTransparencyRadio" GroupName="TransparencyMode" Tag="layered" Content="分层透明" Style="{StaticResource ChoiceChipStyle}" Checked="TransparencyMode_Changed" /><RadioButton x:Name="WholeWindowTransparencyRadio" GroupName="TransparencyMode" Tag="wholeWindow" Content="整窗透明" Style="{StaticResource ChoiceChipStyle}" Checked="TransparencyMode_Changed" /></StackPanel></Grid></Border>
+                                <Border Style="{StaticResource SettingsFieldRowStyle}"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><StackPanel><TextBlock Text="应用范围" Style="{StaticResource SettingsFieldTitleStyle}" /><TextBlock Text="分层模式只影响内容表面；玻璃模式叠加系统模糊（不支持时自动降级）；整窗模式连同窗口一起透明" Style="{StaticResource SettingsFieldDescriptionStyle}" /></StackPanel><StackPanel Grid.Column="1" Orientation="Horizontal"><RadioButton x:Name="LayeredTransparencyRadio" GroupName="TransparencyMode" Tag="layered" Content="分层透明" Style="{StaticResource ChoiceChipStyle}" Checked="TransparencyMode_Changed" /><RadioButton x:Name="AcrylicTransparencyRadio" GroupName="TransparencyMode" Tag="acrylic" Content="玻璃" Style="{StaticResource ChoiceChipStyle}" Checked="TransparencyMode_Changed" /><RadioButton x:Name="WholeWindowTransparencyRadio" GroupName="TransparencyMode" Tag="wholeWindow" Content="整窗透明" Style="{StaticResource ChoiceChipStyle}" Checked="TransparencyMode_Changed" /></StackPanel></Grid></Border>
                                 <Border Padding="0,12"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="250" /><ColumnDefinition Width="100" /></Grid.ColumnDefinitions><StackPanel><TextBlock Text="当前模式透明度" Style="{StaticResource SettingsFieldTitleStyle}" /><TextBlock Text="两个模式分别记忆数值；推荐 85%，最低 55%" Style="{StaticResource SettingsFieldDescriptionStyle}" /></StackPanel><Slider x:Name="OpacitySlider" Grid.Column="1" Tag="opacity" Minimum="0.55" Maximum="1" SmallChange="0.01" LargeChange="0.05" ValueChanged="OpacitySlider_ValueChanged" primitives:Thumb.DragCompleted="ContinuousSlider_DragCompleted" /><Grid Grid.Column="2" Margin="10,0,0,0" VerticalAlignment="Center"><Grid.ColumnDefinitions><ColumnDefinition Width="72" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBox x:Name="OpacityPercentBox" Width="72" Padding="8,0" HorizontalContentAlignment="Right" LostFocus="OpacityPercentBox_LostFocus" KeyDown="OpacityPercentBox_KeyDown" /><TextBlock Grid.Column="1" Margin="4,0,0,0" Text="%" VerticalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}" /></Grid></Grid></Border>
                             </StackPanel>
                         </Border>
@@ -468,5 +522,31 @@
                 </StackPanel>
             </Grid>
         </Border>
+
+        <Grid x:Name="SaveSkinOverlay"
+              Grid.RowSpan="2" Grid.ColumnSpan="2" Panel.ZIndex="10"
+              Background="{DynamicResource ModalScrimBrush}"
+              Visibility="Collapsed"
+              MouseLeftButtonDown="SaveSkinOverlay_Background">
+            <Border Width="360" Padding="22"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Background="{DynamicResource SurfaceBrush}"
+                    BorderBrush="{DynamicResource DividerBrush}"
+                    BorderThickness="1" CornerRadius="12">
+                <StackPanel>
+                    <TextBlock Text="另存为皮肤" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" />
+                    <TextBlock Margin="0,14,0,6" Text="皮肤名称" FontSize="12" Foreground="{DynamicResource SecondaryTextBrush}" />
+                    <TextBox x:Name="SaveSkinNameBox" Height="34" Padding="10,0" VerticalContentAlignment="Center"
+                             Background="{DynamicResource WindowBackgroundBrush}"
+                             BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1"
+                             Foreground="{DynamicResource PrimaryTextBrush}" KeyDown="SaveSkinNameBox_KeyDown" />
+                    <TextBlock x:Name="SaveSkinErrorText" Margin="0,8,0,0" FontSize="11.5" Foreground="{DynamicResource ErrorTextBrush}" Visibility="Collapsed" />
+                    <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" Margin="0,18,0,0">
+                        <Button MinWidth="68" Height="30" Margin="0,0,8,0" Content="取消" Click="SaveSkinCancel_Click" />
+                        <Button x:Name="SaveSkinConfirmButton" MinWidth="68" Height="30" Content="保存" Click="SaveSkinConfirm_Click" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
     </Grid>
 </Window>
