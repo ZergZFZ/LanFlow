@@ -6,6 +6,8 @@
   → 排除 PDB/兼容壳/内嵌 OCR → 压缩与复制 → 生成 OCR bundle
   → 生成 SHA-256 sidecar → 调用 Verify-ReleaseAssets.ps1 自检。
   2.1.0 起 full 包不再包含 LanFlow.exe 与 ocr/ 目录。
+  -SkipOcrBundle 跳过 OCR bundle 的生成与校验（CI 无 .build/ocr-assets 本地素材时用；
+  正式发版不得使用，三条资产缺一不可）。
 #>
 [CmdletBinding()]
 param(
@@ -90,13 +92,18 @@ Compress-Archive -Path (Join-Path $fullDir '*') -DestinationPath $fullZip -Force
 Copy-Item -LiteralPath (Join-Path $liteDir 'FlickD.exe') -Destination $liteExe -Force
 
 Write-Host '[6/7] OCR bundle'
+$assets = @($fullZip, $liteExe)
 if (-not $SkipOcrBundle) {
     & (Join-Path $PSScriptRoot 'Build-OcrBundle.ps1')
+    if (-not (Test-Path -LiteralPath $ocrZip)) { throw "缺少 OCR 资产: $ocrZip" }
+    $assets += $ocrZip
+} else {
+    # 仅限 CI（无本地 OCR 模型素材）或冒烟打包使用；正式发版必须包含 OCR 资产。
+    Write-Host '  跳过 OCR bundle（-SkipOcrBundle）：CI 无 .build/ocr-assets 素材，正式发版勿用本开关。'
 }
-if (-not (Test-Path -LiteralPath $ocrZip)) { throw "缺少 OCR 资产: $ocrZip" }
 
 Write-Host '[7/7] SHA-256 sidecar'
-foreach ($a in @($fullZip, $liteExe, $ocrZip)) {
+foreach ($a in $assets) {
     $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $a).Hash.ToLowerInvariant()
     $line = "$hash  $(Split-Path -Path $a -Leaf)"
     [System.IO.File]::WriteAllText("$a.sha256", $line + "`n", [System.Text.UTF8Encoding]::new($false))
@@ -104,6 +111,10 @@ foreach ($a in @($fullZip, $liteExe, $ocrZip)) {
 }
 
 if (-not $SkipVerify) {
-    & (Join-Path $PSScriptRoot 'Verify-ReleaseAssets.ps1') -Version $version
+    if ($SkipOcrBundle) {
+        & (Join-Path $PSScriptRoot 'Verify-ReleaseAssets.ps1') -Version $version -SkipOcr
+    } else {
+        & (Join-Path $PSScriptRoot 'Verify-ReleaseAssets.ps1') -Version $version
+    }
 }
 Write-Host "完成: $dist"

@@ -50,7 +50,7 @@ jobs:
         run: dotnet test native/FlickD.Desktop.Tests/FlickD.Desktop.Tests.csproj -c Release --no-restore
 
   release-scripts:
-    name: Release scripts (syntax + shape gate)
+    name: Release scripts (syntax + shape + full flow)
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -94,3 +94,13 @@ jobs:
             Write-Host "OK 反例被拦截: $($_.Exception.Message)"
           }
           if (-not $blocked) { throw '反例未被拦截：含 PDB 的发布目录竟然通过了校验' }
+
+      # 完整打包流程：真实 publish full/lite → 清理 → 压缩 → sidecar → -Version 全量自检。
+      # CI 没有 .build/ocr-assets 本地模型素材，OCR bundle 以 -SkipOcrBundle 跳过；
+      # 正式发版（本地）仍走完整三条资产流程，OCR 缺失照样失败。
+      - name: Full packaging flow (no OCR)
+        shell: pwsh
+        run: |
+          Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+          & ./tools/Build-ReleaseAssets.ps1 -SkipOcrBundle
+          Write-Host "OK 完整打包流程通过（不含 OCR bundle）"
