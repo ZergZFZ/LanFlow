@@ -125,6 +125,15 @@ public sealed class Settings
     [JsonPropertyName("customThemes")]
     public List<ThemeProfile> CustomThemes { get; set; } = [];
 
+    // 当前皮肤标识：内置皮肤用 ThemePresets 固定 Id，自定义皮肤用其名称。
+    // 默认为空，由 ConfigStore.Normalize 在加载/保存前按旧字段推断，避免"默认值"被误认为用户选择。
+    [JsonPropertyName("themeProfileId")]
+    public string ThemeProfileId { get; set; } = "";
+
+    // 跟随 Windows 深浅色：开启后在浅色/深色内置皮肤间自动切换。
+    [JsonPropertyName("followSystemTheme")]
+    public bool FollowSystemTheme { get; set; }
+
     [JsonPropertyName("opacity")]
     public double Opacity { get; set; } = 1.0;
 
@@ -223,11 +232,23 @@ public sealed class Settings
 
 public sealed class ThemeProfile
 {
+    // 皮肤标识：内置皮肤为 ThemePresets 固定 Id；自定义皮肤留空，以 Name 作为标识。
+    [JsonPropertyName("id")]
+    public string? Id { get; set; }
+
     [JsonPropertyName("name")]
     public string Name { get; set; } = "自定义风格";
 
     [JsonPropertyName("colors")]
     public ThemeColors Colors { get; set; } = ThemeColors.Dark();
+
+    // 材质档：opaque / layered / acrylic / wholeWindow（null 视为 opaque，兼容旧配置）。
+    [JsonPropertyName("material")]
+    public string? Material { get; set; }
+
+    // 材质浓度；null 时由 SkinApplier 按材质取默认值。
+    [JsonPropertyName("opacity")]
+    public double? Opacity { get; set; }
 }
 
 public sealed class ThemeColors

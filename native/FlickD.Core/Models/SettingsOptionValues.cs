@@ -10,6 +10,7 @@ public static class SettingsOptionValues
     public const string GroupSwitchHover = "hover";
     public const string TransparencyLayered = "layered";
     public const string TransparencyWholeWindow = "wholeWindow";
+    public const string TransparencyAcrylic = "acrylic";
     public const string AnimationSystem = "system";
     public const string AnimationOn = "on";
     public const string AnimationOff = "off";
